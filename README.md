@@ -98,3 +98,106 @@ graph TD
     linkStyle 5 stroke:#0056b3,stroke-width:2px;
     linkStyle 7 stroke:#0056b3,stroke-width:2px;
     linkStyle 9 stroke:#999,stroke-width:2px,stroke-dasharray: 5 5;
+```
+---
+
+## 🔄 Flujos de Trabajo por Fases
+
+El sistema se divide en tres flujos funcionales claros que definen la hoja de ruta del proyecto.
+
+* **MVP: Flujo de Sincronización de Contenidos**
+Este es el pipeline de ingesta de datos. Su único trabajo es mover el conocimiento desde Notion a la base de datos vectorial. (Todo en verde).
+
+```mermaid
+flowchart TD
+    %% --- Definiciones de Estilo ---
+    classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
+
+    %% --- Nodos ---
+    A("Notion API")
+    C("n8n Workflow")
+    D["API de FastAPI (Endpoint /sync)"]
+    E["LangChain (Procesador)"]
+    F["ChromaDB (Base de Datos Vectorial)"]
+    
+    %% --- Asignación de Clases ---
+    class A,C,D,E,F mvp
+
+    %% --- Flujo MVP (Corregido) ---
+    C -->|"1. 'Nodo Notion Trigger'<br>Pide docs"| A
+    A -->|2. Entrega páginas| C
+    C -->|3. Envía a procesar| D
+    D --> E
+    E -->|4. Trocea y vectoriza| F
+    F -->|5. Datos guardados| E
+    E --> D
+    D --> C
+```
+
+* **Fase 1 (Chatbot): Flujo de Consulta del Usuario (Q&A)**
+
+Este es el chatbot. Utiliza los datos creados por el MVP (ChromaDB en verde) y los componentes de IA (en azul) para responder preguntas.
+
+```mermaid
+flowchart TD
+    %% --- Definiciones de Estilo ---
+    classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
+    classDef phase1 fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
+
+    subgraph "Usuario"
+        A("Usuario")
+    end
+    
+    subgraph "Frontend"
+        B("React UI")
+    end
+    
+    subgraph "Backend (Tu API)"
+        C["API de FastAPI (askQuestion)"]
+        D["LangChain (Orquestador)"]
+        E["ChromaDB (Base de Datos Vectorial)"]
+        F["Ollama (LLM Local)"]
+    end
+    
+    %% --- Asignación de Clases ---
+    class A,B,C,D,F phase1
+    class E mvp
+
+    %% --- Flujo (Corregido) ---
+    A --> B
+    B --> C
+    C -->|1. Pregunta| D
+    D -->|2. ¿Contexto?| E
+    E -->|3. Chunks de Notion| D
+    D -->|"4. Prompt (Contexto + Pregunta)"| F
+    F -->|5. Respuesta generada| D
+    D -->|6. Respuesta final| C
+    C --> B
+    B --> A
+```
+
+* **Fase 2: Flujo de Notificación**
+
+Esta es una mejora futura. Se "engancha" al flujo del MVP (el n8n Workflow en verde) para añadir la funcionalidad de enviar emails (en gris discontinuo).
+
+
+```mermaid
+flowchart TD
+    %% --- Definiciones de Estilo ---
+    classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
+    classDef phase2 fill:#f5f5f5,stroke:#999,stroke-width:2px,stroke-dasharray: 5 5;
+
+    %% --- Nodos ---
+    B("Servidor de Email")
+    C("n8n Workflow")
+    
+    %% --- Asignación de Clases ---
+    class C mvp
+    class B phase2
+
+    %% --- Flujo Fase 2 (Corregido) ---
+    C -->|"Tras sincronizar (Fase 2)"<br>Envía email| B
+    
+    %% --- Estilo del Link (Fase 2) ---
+    linkStyle 0 stroke:#999,stroke-width:2px,stroke-dasharray: 5 5;
+```
