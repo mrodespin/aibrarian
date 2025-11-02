@@ -29,7 +29,9 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 
 ## 🏛️ Arquitectura del Sistema
 
-El proyecto sigue un patrón de **Arquitectura Hexagonal (Puertos y Adaptadores)**. El "Núcleo de la Aplicación" (la lógica de RAG y de negocio) no tiene conocimiento de las herramientas externas; simplemente se comunica a través de "Puertos" (interfaces). Los "Adaptadores" son las implementaciones concretas (FastAPI, Ollama, ChromaDB).
+El proyecto sigue un patrón de **Arquitectura Hexagonal (Puertos y Adaptadores)**. 
+El "Núcleo de la Aplicación" (la lógica de RAG y de negocio) no tiene conocimiento de las herramientas externas; simplemente se comunica a través de "Puertos" (interfaces). Los "Adaptadores" son las implementaciones concretas (FastAPI, Ollama, ChromaDB).
+
 
 ```mermaid
 graph TD
@@ -76,3 +78,4 @@ graph TD
     Port_Email --> Adapter_Email
     
     N8N -- "usa el 'Nodo Notion'" --> Adapter_Notion
+```
