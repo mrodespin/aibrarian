@@ -1,0 +1,64 @@
+# === Global / OS ===
+# Ignore operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+ROADMAP.md
+
+# === Local Environments / API Keys ===
+# VERY IMPORTANT! Ignore all environment variables and secrets.
+*.env
+.env
+.env.local
+.env.*.local
+# But DO include example files!
+!*.env.example
+
+# === IDEs ===
+# Ignore IDE configuration folders
+.vscode/
+.idea/
+*.sublime-workspace
+
+# === Python / Backend ('/api') ===
+# Virtual environments
+venv/
+env/
+*.venv
+.venv
+pip-freeze.txt
+
+# Compiled Python files and cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Python build and distribution folders
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Testing files
+.pytest_cache/
+.coverage
+htmlcov/
+
+# === JavaScript / Frontend ('/frontend') ===
+# Dependencies (VERY IMPORTANT!)
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-error.log
+
+# Build output (Create React App, Vite, etc.)
+# (Already covered by global 'build/' and 'dist/', but good to be explicit)
+# build/
+# dist/
+
+# === Project Tools ===
+# Ignore local database and n8n data
+# (Defined in your docker-compose.yml as a volume)
+n8n_data/

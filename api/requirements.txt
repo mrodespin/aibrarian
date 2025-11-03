@@ -1,0 +1,11 @@
+# /api/requirements.txt
+
+# --- Core API ---
+fastapi
+uvicorn[standard]
+python-dotenv
+
+# --- LangChain & RAG ---
+langchain
+langchain-ollama      # To connect to Ollama (Embeddings)
+chromadb-client     # To connect to ChromaDB
