@@ -217,3 +217,88 @@ Mejoras opcionales para automatizar sincronización y notificaciones. (Gris - No
 - Sincronización programada (cron jobs)
 
 Estas mejoras quedan documentadas como evolución natural del proyecto, pero no son necesarias para demostrar el valor del TFM.
+
+---
+
+## 📚 Documentación
+
+| Documento | Descripción |
+|-----------|-------------|
+| **[docs/STRUCTURE.md](docs/STRUCTURE.md)** | Arquitectura y estructura del proyecto |
+| **[docs/USAGE.md](docs/USAGE.md)** | API endpoints y ejemplos |
+| **[docs/PYTHON_GUIDE.md](docs/PYTHON_GUIDE.md)** | Guía de Python para JS devs |
+| **[.ai/context.md](.ai/context.md)** | Contexto para agentes IA |
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisitos
+
+1. **Python 3.11+**
+2. **Docker** (para ChromaDB)
+3. **Ollama** instalado localmente
+
+### Instalación
+
+```bash
+# 1. Clonar repositorio
+git clone <URL_DEL_REPO>
+cd tfm-bibliotecario-ia
+
+# 2. Instalar Ollama y descargar modelos
+brew install ollama  # macOS
+ollama pull llama3.2
+ollama pull nomic-embed-text
+
+# 3. Setup Python
+cd api
+python -m venv venv
+source venv/bin/activate  # macOS/Linux
+pip install -r requirements.txt
+
+# 4. Configurar variables de entorno
+cp .env.example .env
+# Editar .env con tus valores
+
+# 5. Iniciar ChromaDB
+cd ..
+docker-compose up -d chromadb
+
+# 6. Verificar setup
+cd api
+python verify_setup.py
+```
+
+### Uso Básico
+
+```bash
+# Terminal 1: Ollama
+ollama serve
+
+# Terminal 2: API
+cd api && source venv/bin/activate
+uvicorn app.main:app --reload
+
+# Terminal 3: Ingestar documentos
+python api/ingest_pdfs.py --directory data/
+
+# Terminal 4: Hacer consultas
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "¿De qué tratan los documentos?"}'
+```
+
+Ver [docs/USAGE.md](docs/USAGE.md) para documentación completa de la API.
+
+---
+
+## 📄 Licencia
+
+Este proyecto está bajo la licencia MIT. Ver [LICENSE](LICENSE) para más detalles.
+
+---
+
+**Proyecto:** TFM Bibliotecario-IA
+**Arquitectura:** Hexagonal (Puertos y Adaptadores)
+**Stack:** Python + FastAPI + LangChain + Ollama + ChromaDB
