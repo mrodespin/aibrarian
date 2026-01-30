@@ -29,84 +29,86 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 
 ## 🏛️ Arquitectura del Sistema
 
-El proyecto sigue un patrón de **Arquitectura Hexagonal (Puertos y Adaptadores)** y se desarrolla en tres fases claras:
+El proyecto sigue un patrón de **Arquitectura Hexagonal (Puertos y Adaptadores)** y se desarrolla en fases incrementales:
 
-* **MVP (Base de Datos):** El *pipeline* de ingesta y sincronización de datos. (Componentes en verde).
-* **Fase 1 (Chatbot):** La interfaz de usuario y la API de consulta. (Componentes en azul).
-* **Fase 2 (Futuro):** El sistema de notificaciones. (Componentes en gris discontinuo).
+* **MVP (Verde):** Pipeline de ingesta de PDFs locales - Garantiza funcionalidad básica del TFM
+* **Fase 1 (Azul):** Sistema RAG completo para consultas - El chatbot IA
+* **Extensión (Naranja):** Integración con Notion API - Valor añadido y diferenciación
+* **Futuro (Gris):** Automatización con n8n y notificaciones - Mejoras opcionales
 
 ```mermaid
 graph TD
     %% --- Definiciones de Estilo ---
     classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
     classDef phase1 fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
-    classDef phase2 fill:#f5f5f5,stroke:#999,stroke-width:2px,stroke-dasharray: 5 5;
+    classDef extension fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
+    classDef future fill:#f5f5f5,stroke:#999,stroke-width:2px,stroke-dasharray: 5 5;
 
-    %% --- Nodos de Entrada ---
-    subgraph "Adaptadores de Entrada (Driving)"
-        direction LR
-        UI("Interfaz Web")
-        N8N("Workflow n8n<br><i>Disparador: Notion actualizado</i>")
-    end
-
-    %% --- Nodos del Nucleo ---
-    subgraph "Núcleo de la Aplicación (Hexágono)"
-        direction TB
-        Port_API["Puerto: API REST<br>(askQuestion)"]
-        Port_Sync["Puerto: Sincronización<br>(syncDocuments)"]
-        CoreLogic["Lógica de Negocio<br>- Orquestación RAG<br>- Gestión de Chat<br>- Procesamiento de Documentos"]
-        Port_LLM["Puerto: Generador LLM"]
-        Port_DB["Puerto: Base de Datos Vectorial"]
-        Port_Email["Puerto: Notificador"]
-    end
-    
-    %% --- Nodos de Salida ---
-    subgraph "Adaptadores de Salida (Driven / Servicios)"
-        direction LR
-        Adapter_LLM("Ollama")
-        Adapter_DB("ChromaDB")
-        Adapter_Email("Servicio Email")
+    %% --- Fuentes de Datos ---
+    subgraph "Fuentes de Documentos"
+        PDFs["PDFs Locales<br>/data/*.pdf"]
+        NotionAPI["Notion API<br>Páginas y Bases de Datos"]
     end
 
-    %% --- Nodos Externos (n8n) ---
-    subgraph "Servicios Externos (Usados por n8n)"
-        Adapter_Notion("API de Notion")
+    %% --- Adaptadores de Entrada ---
+    subgraph "Capa de Presentación"
+        CLI["Scripts CLI<br>ingest_pdfs.py<br>ingest_notion.py"]
+        API["FastAPI REST<br>/sync, /ask"]
+        UI["Frontend Web<br>(React)"]
+        N8N["n8n Workflows<br>(Futuro)"]
     end
+
+    %% --- Núcleo Hexagonal ---
+    subgraph "Núcleo de Negocio (Hexágono)"
+        SyncService["SyncService<br>Pipeline de Ingesta"]
+        RAGService["RAGService<br>Consultas Q&A"]
+        Ports["Puertos<br>DocumentProcessor<br>LLM<br>VectorDB"]
+    end
+
+    %% --- Adaptadores de Salida ---
+    subgraph "Adaptadores Externos"
+        PDFAdapter["PDFProcessor<br>PyPDFLoader"]
+        NotionAdapter["NotionProcessor<br>Notion Client"]
+        OllamaAdapter["Ollama<br>LLM + Embeddings"]
+        ChromaAdapter["ChromaDB<br>Vector Store"]
+    end
+
+    %% --- Conexiones MVP (Verde) ---
+    PDFs --> CLI
+    CLI --> API
+    API --> SyncService
+    SyncService --> Ports
+    Ports --> PDFAdapter
+    Ports --> OllamaAdapter
+    Ports --> ChromaAdapter
+
+    %% --- Conexiones Fase 1 (Azul) ---
+    UI --> API
+    API --> RAGService
+    RAGService --> Ports
+
+    %% --- Conexiones Extensión (Naranja) ---
+    NotionAPI --> API
+    Ports --> NotionAdapter
+
+    %% --- Conexiones Futuro (Gris) ---
+    N8N -.-> API
 
     %% --- Asignación de Clases ---
-    class N8N,Port_Sync,CoreLogic,Port_DB,Adapter_DB,Adapter_Notion mvp
-    class UI,Port_API,Port_LLM,Adapter_LLM phase1
-    class Port_Email,Adapter_Email phase2
-
-    %% --- Conexiones ---
-    Port_API --> CoreLogic
-    Port_Sync --> CoreLogic
-    CoreLogic --> Port_LLM
-    CoreLogic --> Port_DB
-    CoreLogic --> Port_Email      
-    UI --> Port_API
-    N8N --> Port_Sync
-    Port_LLM --> Adapter_LLM
-    Port_DB --> Adapter_DB
-    Port_Email --> Adapter_Email
-    N8N -- "usa el 'Nodo Notion'" --> Adapter_Notion
-
-    %% --- Estilos de Links (Fases 1 y 2) ---
-    linkStyle 0 stroke:#0056b3,stroke-width:2px;
-    linkStyle 2 stroke:#0056b3,stroke-width:2px;
-    linkStyle 4 stroke:#999,stroke-width:2px,stroke-dasharray: 5 5;
-    linkStyle 5 stroke:#0056b3,stroke-width:2px;
-    linkStyle 7 stroke:#0056b3,stroke-width:2px;
-    linkStyle 9 stroke:#999,stroke-width:2px,stroke-dasharray: 5 5;
+    class PDFs,CLI,SyncService,PDFAdapter,ChromaAdapter mvp
+    class UI,RAGService,OllamaAdapter phase1
+    class NotionAPI,NotionAdapter extension
+    class N8N future
+    class API,Ports mvp
 ```
 ---
 
 ## 🔄 Flujos de Trabajo por Fases
 
-El sistema se divide en tres flujos funcionales claros que definen la hoja de ruta del proyecto.
+El sistema implementa flujos de ingesta y consulta que demuestran la arquitectura hexagonal en acción.
 
-* **MVP: Flujo de Sincronización de Contenidos**
-Este es el pipeline de ingesta de datos. Su único trabajo es mover el conocimiento desde Notion a la base de datos vectorial. (Todo en verde).
+### **MVP: Ingesta de PDFs Locales**
+Pipeline de ingesta simple y robusto. Garantiza funcionalidad core del sistema sin dependencias externas. (Verde).
 
 ```mermaid
 flowchart TD
@@ -114,29 +116,59 @@ flowchart TD
     classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
 
     %% --- Nodos ---
-    A("Notion API")
-    C("n8n Workflow")
-    D["API de FastAPI (Endpoint /sync)"]
-    E["LangChain (Procesador)"]
-    F["ChromaDB (Base de Datos Vectorial)"]
-    
-    %% --- Asignación de Clases ---
-    class A,C,D,E,F mvp
+    A["PDFs en /data"]
+    B["Script CLI / API<br>ingest_pdfs.py<br>POST /sync"]
+    C["SyncService<br>Orquestación"]
+    D["PyPDFLoader<br>Carga y extracción"]
+    E["RecursiveTextSplitter<br>División en chunks"]
+    F["Ollama<br>Generación de embeddings"]
+    G["ChromaDB<br>Almacenamiento vectorial"]
 
-    %% --- Flujo MVP (Corregido) ---
-    C -->|"1. 'Nodo Notion Trigger'<br>Pide docs"| A
-    A -->|2. Entrega páginas| C
-    C -->|3. Envía a procesar| D
-    D --> E
-    E -->|4. Trocea y vectoriza| F
-    F -->|5. Datos guardados| E
-    E --> D
-    D --> C
+    %% --- Asignación de Clases ---
+    class A,B,C,D,E,F,G mvp
+
+    %% --- Flujo MVP ---
+    A -->|"1. Lee archivos"| B
+    B -->|"2. Inicia pipeline"| C
+    C -->|"3. Procesa PDF"| D
+    D -->|"4. Divide texto"| E
+    E -->|"5. Vectoriza chunks"| F
+    F -->|"6. Almacena vectores"| G
 ```
 
-* **Fase 1 (Chatbot): Flujo de Consulta del Usuario (Q&A)**
+### **Extensión: Integración con Notion**
+Mismo pipeline, diferente adaptador. Demuestra la flexibilidad de la arquitectura hexagonal. (Naranja).
 
-Este es el chatbot. Utiliza los datos creados por el MVP (ChromaDB en verde) y los componentes de IA (en azul) para responder preguntas.
+```mermaid
+flowchart TD
+    %% --- Definiciones de Estilo ---
+    classDef extension fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
+    classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
+
+    %% --- Nodos ---
+    A["Notion Pages"]
+    B["Script CLI / API<br>ingest_notion.py<br>POST /sync/notion"]
+    C["SyncService<br>(Misma lógica)"]
+    D["NotionProcessor<br>Extrae contenido"]
+    E["RecursiveTextSplitter<br>(Mismo proceso)"]
+    F["Ollama<br>(Mismos embeddings)"]
+    G["ChromaDB<br>(Mismo storage)"]
+
+    %% --- Asignación de Clases ---
+    class A,B,D extension
+    class C,E,F,G mvp
+
+    %% --- Flujo Notion ---
+    A -->|"1. API call"| B
+    B -->|"2. Inicia pipeline"| C
+    C -->|"3. Procesa página"| D
+    D -->|"4. Divide texto"| E
+    E -->|"5. Vectoriza chunks"| F
+    F -->|"6. Almacena vectores"| G
+```
+
+### **Fase 1: Sistema RAG (Chatbot)**
+El chatbot inteligente que responde preguntas usando la base de conocimientos indexada. (Azul).
 
 ```mermaid
 flowchart TD
@@ -144,60 +176,44 @@ flowchart TD
     classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
     classDef phase1 fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
 
-    subgraph "Usuario"
-        A("Usuario")
-    end
-    
-    subgraph "Frontend"
-        B("React UI")
-    end
-    
-    subgraph "Backend (Tu API)"
-        C["API de FastAPI (askQuestion)"]
-        D["LangChain (Orquestador)"]
-        E["ChromaDB (Base de Datos Vectorial)"]
-        F["Ollama (LLM Local)"]
-    end
-    
-    %% --- Asignación de Clases ---
-    class A,B,C,D,F phase1
-    class E mvp
+    %% --- Nodos ---
+    A["Usuario<br>Hace pregunta"]
+    B["Frontend Web<br>Interfaz chat"]
+    C["API FastAPI<br>POST /ask"]
+    D["RAGService<br>Orquestador"]
+    E["Ollama Embeddings<br>Vectoriza pregunta"]
+    F["ChromaDB<br>Búsqueda similaridad"]
+    G["RAGService<br>Construye prompt"]
+    H["Ollama LLM<br>Genera respuesta"]
+    I["Respuesta + Fuentes<br>al usuario"]
 
-    %% --- Flujo (Corregido) ---
+    %% --- Asignación de Clases ---
+    class A,B,C,D,E,G,H,I phase1
+    class F mvp
+
+    %% --- Flujo Fase 1 ---
     A --> B
     B --> C
-    C -->|1. Pregunta| D
-    D -->|2. ¿Contexto?| E
-    E -->|3. Chunks de Notion| D
-    D -->|"4. Prompt (Contexto + Pregunta)"| F
-    F -->|5. Respuesta generada| D
-    D -->|6. Respuesta final| C
+    C --> D
+    D -->|"1. Embedding query"| E
+    E -->|"2. Vector pregunta"| D
+    D -->|"3. Busca contexto"| F
+    F -->|"4. Top-K chunks<br>(PDFs/Notion)"| D
+    D -->|"5. Prompt con contexto"| G
+    G -->|"6. Genera respuesta"| H
+    H -->|"7. Respuesta + fuentes"| D
+    D --> C
     C --> B
-    B --> A
+    B --> I
 ```
 
-* **Fase 2: Flujo de Notificación**
+### **Futuro: Automatización con n8n**
+Mejoras opcionales para automatizar sincronización y notificaciones. (Gris - No implementado).
 
-Esta es una mejora futura. Se "engancha" al flujo del MVP (el n8n Workflow en verde) para añadir la funcionalidad de enviar emails (en gris discontinuo).
+**Posibles extensiones:**
+- Workflow n8n que detecte cambios en Notion y sincronice automáticamente
+- Notificaciones por email cuando se añaden nuevos documentos
+- Webhooks para integración con otros sistemas
+- Sincronización programada (cron jobs)
 
-
-```mermaid
-flowchart TD
-    %% --- Definiciones de Estilo ---
-    classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
-    classDef phase2 fill:#f5f5f5,stroke:#999,stroke-width:2px,stroke-dasharray: 5 5;
-
-    %% --- Nodos ---
-    B("Servidor de Email")
-    C("n8n Workflow")
-    
-    %% --- Asignación de Clases ---
-    class C mvp
-    class B phase2
-
-    %% --- Flujo Fase 2 (Corregido) ---
-    C -->|"Tras sincronizar (Fase 2)"<br>Envía email| B
-    
-    %% --- Estilo del Link (Fase 2) ---
-    linkStyle 0 stroke:#999,stroke-width:2px,stroke-dasharray: 5 5;
-```
+Estas mejoras quedan documentadas como evolución natural del proyecto, pero no son necesarias para demostrar el valor del TFM.
