@@ -3,7 +3,6 @@
 .DS_Store
 Thumbs.db
 desktop.ini
-ROADMAP.md
 
 # === Local Environments / API Keys ===
 # VERY IMPORTANT! Ignore all environment variables and secrets.
@@ -19,6 +18,10 @@ ROADMAP.md
 .vscode/
 .idea/
 *.sublime-workspace
+
+# === AI Tools ===
+# Claude Code local settings (not project context)
+.claude/
 
 # === Python / Backend ('/api') ===
 # Virtual environments
@@ -58,7 +61,13 @@ yarn-error.log
 # build/
 # dist/
 
-# === Project Tools ===
-# Ignore local database and n8n data
-# (Defined in your docker-compose.yml as a volume)
-n8n_data/
+# === Project Specific ===
+# Data files (PDFs, generated files)
+# Keep README.md and scripts, ignore actual documents
+data/*.pdf
+data/*.txt
+!data/README.md
+!data/create_test_pdf.py
+
+# ChromaDB local data (if running outside Docker)
+chroma_data/

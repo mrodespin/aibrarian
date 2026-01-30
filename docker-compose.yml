@@ -23,7 +23,7 @@ services:
   # Service 2: The Vector Database (ChromaDB)
   # --------------------------------------------------------------------
   chromadb:
-    image: chromadb/chroma
+    image: chromadb/chroma:0.5.20
     ports:
       - "8001:8000"
     volumes:
