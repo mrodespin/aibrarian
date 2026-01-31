@@ -1,14 +1,51 @@
 # /api/app/core/services/rag_service.py
-
 """
-RAG (Retrieval-Augmented Generation) service for answering questions (Phase 1).
-Orchestrates: query -> retrieve context -> generate answer.
+Servicio RAG (Retrieval-Augmented Generation) - TFM Bibliotecario-IA
+
+Este servicio es el CORAZÓN del sistema. Implementa el patrón RAG completo:
+recibe una pregunta del usuario y devuelve una respuesta basada en documentos.
+
+¿Qué es RAG?
+- Retrieval-Augmented Generation = Generación Aumentada por Recuperación
+- Combina búsqueda vectorial (ChromaDB) con generación de texto (LLM)
+- El LLM NO inventa respuestas: las basa en chunks reales de los documentos
+
+¿Diferencia con SyncService?
+- SyncService: Datos → ChromaDB (pipeline de INGESTA)
+- RAGService:  ChromaDB → Respuesta (pipeline de CONSULTA)
+
+Pipeline RAG completo:
+    Pregunta → Embedding → Búsqueda → Contexto → LLM → Respuesta
+
+Solo necesita 2 puertos (no el DocumentProcessor, pues no procesa docs):
+- LLMPort: Para generar embeddings y respuestas
+- VectorDBPort: Para buscar chunks relevantes
+
+Equivalente en TypeScript:
+    class RAGService {
+        constructor(
+            private llm: LLMPort,
+            private vectorDb: VectorDBPort
+        ) {}
+
+        async askQuestion(query: Query): Promise<QueryResult> { ... }
+        private buildContext(docs: SourceDocument[]): string { ... }
+        async getCollectionInfo(): Promise<Record<string, any>> { ... }
+    }
+
+Endpoints que usan este servicio:
+- POST /query → ask_question()
+- GET /info  → get_collection_info()
 """
 
+# ============================================================================
+# IMPORTS
+# ============================================================================
 import logging
 import time
 from typing import Optional
 
+# Solo importamos LLM y VectorDB (no necesitamos DocumentProcessor)
 from app.core.ports.llm_port import LLMPort
 from app.core.ports.vector_db_port import VectorDBPort
 from app.core.domain.models import Query, QueryResult, SourceDocument
@@ -18,8 +55,23 @@ from app.config.settings import settings
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# SERVICIO RAG
+# ============================================================================
 class RAGService:
-    """Service for answering questions using RAG pipeline."""
+    """
+    Servicio para responder preguntas usando el pipeline RAG.
+
+    Este es el servicio principal que los usuarios interactúan indirectamente.
+    Cuando alguien hace una pregunta por la API, este servicio:
+    1. Busca información relevante en ChromaDB
+    2. Construye un contexto con esa información
+    3. Le pide al LLM que responda basándose en ese contexto
+
+    Ventaja del patrón RAG vs un LLM solo:
+    - Sin RAG: El LLM responde con su conocimiento general (puede inventar)
+    - Con RAG: El LLM responde basándose en TUS documentos (más preciso)
+    """
 
     def __init__(
         self,
@@ -27,11 +79,15 @@ class RAGService:
         vector_db: VectorDBPort
     ):
         """
-        Initialize RAG service with required dependencies.
+        Inicializa el servicio RAG con las dependencias requeridas.
+
+        Solo necesita 2 puertos (a diferencia de SyncService que necesita 3):
+        - LLM: Para vectorizar la pregunta y generar la respuesta
+        - VectorDB: Para buscar chunks relevantes
 
         Args:
-            llm: LLM adapter for generating responses and embeddings
-            vector_db: Vector database adapter for retrieving context
+            llm: Adaptador del modelo de lenguaje (Ollama)
+            vector_db: Adaptador de base de datos vectorial (ChromaDB)
         """
         self.llm = llm
         self.vector_db = vector_db
@@ -42,39 +98,67 @@ class RAGService:
         collection_name: Optional[str] = None
     ) -> QueryResult:
         """
-        Answer a question using RAG pipeline.
+        Responde una pregunta usando el pipeline RAG completo.
+
+        ESTE ES EL MÉTODO PRINCIPAL DEL SISTEMA.
+        Es el que se invoca cuando un usuario hace una pregunta.
 
         Pipeline:
-        1. Generate embedding for the question
-        2. Retrieve relevant context from vector database
-        3. Build prompt with context
-        4. Generate answer using LLM
-        5. Return answer with source documents
+            ① Vectorizar pregunta      → generate_embedding()
+            ② Buscar contexto relevante → similarity_search()
+            ③ Construir contexto        → _build_context()
+            ④ Generar respuesta         → generate_response()
+            ⑤ Devolver resultado        → QueryResult
 
         Args:
-            query: User query
-            collection_name: Optional collection name (defaults to config)
+            query: Objeto Query con:
+                   - question: la pregunta del usuario
+                   - max_results: máximo de chunks a recuperar
+                   - session_id: ID de sesión (para futuro historial)
+            collection_name: Colección de ChromaDB (opcional)
 
         Returns:
-            QueryResult with answer and sources
+            QueryResult con:
+                - answer: respuesta generada por el LLM
+                - source_documents: chunks que se usaron como contexto
+                - processing_time: tiempo total de la operación
+
+        Ejemplo:
+            query = Query(question="¿Qué es Docker?", max_results=3)
+            result = await rag_service.ask_question(query)
+            print(result.answer)  # "Docker es una plataforma..."
+            print(len(result.source_documents))  # 3 fuentes usadas
         """
         start_time = time.time()
         collection = collection_name or settings.chromadb_collection_name
 
         try:
+            # Truncamos la pregunta a 50 chars solo para el log
+            # [:50] es slicing en Python (como substring en JS)
             logger.info(f"Processing question: {query.question[:50]}...")
 
-            # Step 1: Generate embedding for the question
+            # ================================================================
+            # PASO 1: Vectorizar la pregunta del usuario
+            # ================================================================
+            # La pregunta se convierte en un vector numérico
+            # Este vector se usará para buscar chunks similares
             query_embedding = await self.llm.generate_embedding(query.question)
             logger.debug(f"Generated query embedding of dimension: {len(query_embedding)}")
 
-            # Step 2: Retrieve relevant context
+            # ================================================================
+            # PASO 2: Buscar contexto relevante en ChromaDB
+            # ================================================================
+            # similarity_search compara el vector de la pregunta
+            # con los vectores de los chunks almacenados
+            # Devuelve los top_k chunks más similares
             source_documents = await self.vector_db.similarity_search(
                 query_embedding=query_embedding,
                 collection_name=collection,
-                top_k=query.max_results
+                top_k=query.max_results  # Ej: 3 chunks más relevantes
             )
 
+            # Si no hay resultados relevantes, no llamamos al LLM
+            # Ahorra recursos y evita que invente una respuesta
             if not source_documents:
                 logger.warning("No relevant context found in database")
                 return QueryResult(
@@ -87,20 +171,35 @@ class RAGService:
 
             logger.info(f"Retrieved {len(source_documents)} relevant documents")
 
-            # Step 3: Build context from retrieved documents
+            # ================================================================
+            # PASO 3: Construir el contexto a partir de los chunks
+            # ================================================================
+            # Convierte la lista de SourceDocuments en un texto formateado
+            # que se inyectará al LLM como contexto
             context = self._build_context(source_documents)
 
-            # Step 4: Generate answer using LLM with context
+            # ================================================================
+            # PASO 4: Generar respuesta usando el LLM con contexto
+            # ================================================================
+            # El LLM recibe:
+            # - prompt: la pregunta original del usuario
+            # - context: los chunks relevantes formateados
+            # El LLM debe basar su respuesta SOLO en ese contexto
             answer = await self.llm.generate_response(
                 prompt=query.question,
                 context=context,
-                temperature=settings.llm_temperature,
-                max_tokens=settings.llm_max_tokens
+                temperature=settings.llm_temperature,   # Ej: 0.3 para precisión
+                max_tokens=settings.llm_max_tokens       # Límite de respuesta
             )
 
             processing_time = time.time() - start_time
             logger.info(f"Generated answer in {processing_time:.2f}s")
 
+            # ================================================================
+            # PASO 5: Devolver resultado con respuesta y fuentes
+            # ================================================================
+            # El QueryResult incluye source_documents para que el frontend
+            # pueda mostrar "esta respuesta se basó en estas fuentes"
             return QueryResult(
                 question=query.question,
                 answer=answer,
@@ -110,6 +209,8 @@ class RAGService:
             )
 
         except Exception as e:
+            # En caso de error, devolvemos un QueryResult con mensaje
+            # en español al usuario (no lanzamos la excepción)
             error_msg = f"Failed to process question: {str(e)}"
             logger.error(error_msg, exc_info=True)
 
@@ -123,22 +224,48 @@ class RAGService:
 
     def _build_context(self, source_documents: list[SourceDocument]) -> str:
         """
-        Build context string from retrieved documents.
+        Construye el texto de contexto a partir de los chunks recuperados.
+
+        MÉTODO PRIVADO (el guión bajo _ indica que es solo para uso interno).
+        No se llama desde fuera de la clase.
+
+        ¿Qué hace?
+        Toma los chunks relevantes de ChromaDB y los formatea en un texto
+        que el LLM puede entender como contexto para basar su respuesta.
+
+        Ejemplo de salida:
+            [Fuente 1]
+            Docker es una plataforma de contenedores que permite...
+
+            ---
+
+            [Fuente 2]
+            Los contenedores se diferecian de las VMs porque...
+
+        ¿Por qué numerar las fuentes?
+        - Permite al LLM referenciar fuentes específicas
+        - El frontend puede mostrar "según la fuente 1..."
+        - Facilita la trazabilidad de la respuesta
 
         Args:
-            source_documents: List of relevant source documents
+            source_documents: Lista de chunks relevantes recuperados
 
         Returns:
-            Formatted context string
+            str: Texto formateado con todas las fuentes
         """
         context_parts = []
 
+        # enumerate(lista, 1) itera con índice empezando desde 1
+        # Equivalente JS: source_documents.forEach((doc, i) => ...)
+        # pero i empieza en 1 en lugar de 0
         for i, doc in enumerate(source_documents, 1):
-            # Format each source document
+            # Formato: [Fuente N] + contenido del chunk
             context_part = f"[Fuente {i}]\n{doc.chunk_content}"
             context_parts.append(context_part)
 
-        # Join all parts with separators
+        # join() une todos los parts con un separador visual
+        # "\n\n---\n\n" = línea en blanco + guiones + línea en blanco
+        # Equivalente JS: context_parts.join("\n\n---\n\n")
         context = "\n\n---\n\n".join(context_parts)
 
         logger.debug(f"Built context with {len(source_documents)} sources")
@@ -149,25 +276,42 @@ class RAGService:
         collection_name: Optional[str] = None
     ) -> dict:
         """
-        Get information about the vector database collection.
+        Obtiene información sobre la colección de la base de datos vectorial.
+
+        Método auxiliar para endpoints de info/estado de la API.
+        Devuelve estadísticas de ChromaDB + info del modelo LLM.
 
         Args:
-            collection_name: Optional collection name
+            collection_name: Colección a consultar (opcional)
 
         Returns:
-            Dictionary with collection stats
+            dict con:
+                - collection: nombre de la colección
+                - stats: estadísticas (total chunks, documentos, etc.)
+                - model_info: info del modelo LLM activo
+
+        Ejemplo de retorno:
+            {
+                "collection": "tech_docs",
+                "stats": {"total_chunks": 1500, "unique_documents": 12},
+                "model_info": {"model_name": "llama3.2", "provider": "ollama"}
+            }
         """
         collection = collection_name or settings.chromadb_collection_name
 
         try:
+            # Obtiene estadísticas de ChromaDB
             stats = await self.vector_db.get_collection_stats(collection)
             return {
                 "collection": collection,
                 "stats": stats,
+                # get_model_info() no es async, retorna info cacheada
                 "model_info": self.llm.get_model_info()
             }
 
         except Exception as e:
+            # En caso de error, devolvemos estructura válida con el error
+            # Así el frontend no falla al parsear la respuesta
             logger.error(f"Failed to get collection info: {e}")
             return {
                 "collection": collection,

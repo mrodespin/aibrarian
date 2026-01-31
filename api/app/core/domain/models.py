@@ -1,71 +1,181 @@
 # /api/app/core/domain/models.py
-
 """
-Domain models for the Bibliotecario-IA project.
-These models represent the core business entities.
+Modelos del Dominio - TFM Bibliotecario-IA
+
+Este archivo define las estructuras de datos (entidades) del proyecto.
+En arquitectura hexagonal, el dominio es el núcleo que NO depende de nada externo.
+
+Usamos Pydantic para:
+- Validación automática de datos
+- Serialización JSON
+- Documentación automática en Swagger/OpenAPI
+
+Equivalente en TypeScript: interfaces + Zod para validación
 """
 
-from typing import List, Optional, Dict, Any
-from datetime import datetime
-from pydantic import BaseModel, Field
-from enum import Enum
+# ============================================================================
+# IMPORTS
+# ============================================================================
+from typing import List, Optional, Dict, Any  # Tipos de Python (como TypeScript types)
+from datetime import datetime                  # Para manejar fechas y timestamps
+from pydantic import BaseModel, Field          # Pydantic: validación de schemas (como Zod en JS)
+from enum import Enum                          # Para crear enumeraciones (tipos fijos)
 
 
+# ============================================================================
+# ENUMERACIONES
+# ============================================================================
 class DocumentSource(str, Enum):
-    """Source type of the document."""
-    PDF = "pdf"
-    NOTION = "notion"
-    TEXT = "text"
+    """
+    Tipos de fuentes de documentos soportadas.
+
+    Hereda de (str, Enum) para que los valores sean strings serializables.
+
+    Equivalente TypeScript:
+        enum DocumentSource {
+            PDF = "pdf",
+            NOTION = "notion",
+            TEXT = "text"
+        }
+    """
+    PDF = "pdf"        # Documentos PDF locales
+    NOTION = "notion"  # Páginas de Notion
+    TEXT = "text"      # Texto plano
 
 
+# ============================================================================
+# ENTIDADES PRINCIPALES
+# ============================================================================
 class Document(BaseModel):
-    """Represents a source document."""
-    id: str = Field(..., description="Unique identifier for the document")
-    source: DocumentSource = Field(..., description="Source type of the document")
-    content: str = Field(..., description="Full text content of the document")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
-    created_at: datetime = Field(default_factory=datetime.now, description="Creation timestamp")
+    """
+    Representa un documento completo (PDF o página de Notion).
+
+    Esta es la entidad principal que se carga desde las fuentes.
+    Un Document se divide en múltiples Chunks para el procesamiento RAG.
+
+    Atributos:
+        id: Identificador único (generado con UUID)
+        source: Tipo de fuente (pdf, notion, text)
+        content: Texto completo extraído del documento
+        metadata: Información adicional (nombre archivo, páginas, URL, etc.)
+        created_at: Fecha de creación/ingesta
+
+    Equivalente TypeScript:
+        interface Document {
+            id: string;
+            source: DocumentSource;
+            content: string;
+            metadata?: Record<string, any>;
+            created_at?: Date;
+        }
+    """
+    # Field(...) = campo obligatorio (el ... significa "required")
+    # Field(default=X) = campo opcional con valor por defecto
+
+    id: str = Field(..., description="Identificador único del documento")
+    source: DocumentSource = Field(..., description="Tipo de fuente (pdf, notion, text)")
+    content: str = Field(..., description="Contenido textual completo del documento")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,  # default_factory=dict crea un {} nuevo para cada instancia
+        description="Metadatos adicionales (filename, page_count, url, etc.)"
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.now,  # Se genera automáticamente al crear
+        description="Timestamp de creación"
+    )
 
     class Config:
+        """Configuración de Pydantic para este modelo."""
         json_schema_extra = {
             "example": {
                 "id": "doc_123",
                 "source": "pdf",
-                "content": "This is the content of the document...",
-                "metadata": {"filename": "example.pdf", "page_count": 10}
+                "content": "Este es el contenido del documento...",
+                "metadata": {"filename": "manual.pdf", "page_count": 10}
             }
         }
 
 
 class Chunk(BaseModel):
-    """Represents a processed text chunk from a document."""
-    id: str = Field(..., description="Unique identifier for the chunk")
-    document_id: str = Field(..., description="Reference to the source document")
-    content: str = Field(..., description="Text content of the chunk")
-    embedding: Optional[List[float]] = Field(None, description="Vector embedding of the chunk")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Chunk metadata (page, position, etc.)")
+    """
+    Representa un fragmento de texto de un documento.
+
+    ¿Por qué dividir en chunks?
+    - Los LLMs tienen límite de contexto (tokens)
+    - La búsqueda vectorial funciona mejor con textos cortos
+    - Permite encontrar secciones específicas relevantes
+
+    Típicamente un chunk tiene 500-1000 caracteres con overlap de 100-200.
+
+    Atributos:
+        id: Identificador único del chunk (ej: "doc_123_chunk_0")
+        document_id: Referencia al documento padre
+        content: Texto del fragmento
+        embedding: Vector numérico que representa el "significado" del texto
+                   (lista de ~768 floats generados por el modelo de embeddings)
+        metadata: Info adicional (número de página, posición, etc.)
+    """
+    id: str = Field(..., description="Identificador único del chunk")
+    document_id: str = Field(..., description="ID del documento padre (foreign key)")
+    content: str = Field(..., description="Texto del fragmento")
+    embedding: Optional[List[float]] = Field(
+        None,  # None = puede ser null/undefined
+        description="Vector embedding (lista de ~768 floats). Se genera con el modelo de embeddings."
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Metadatos del chunk (page, position, source_file, etc.)"
+    )
 
     class Config:
         json_schema_extra = {
             "example": {
                 "id": "chunk_456",
                 "document_id": "doc_123",
-                "content": "This is a text chunk...",
+                "content": "Este es un fragmento de texto del documento...",
                 "metadata": {"page": 1, "position": 0}
             }
         }
 
 
+# ============================================================================
+# MODELOS DE CONSULTA (INPUT/OUTPUT DEL SISTEMA RAG)
+# ============================================================================
 class Query(BaseModel):
-    """Represents a user query for the RAG system."""
-    question: str = Field(..., min_length=1, description="The user's question")
-    session_id: Optional[str] = Field(None, description="Optional session identifier for conversation tracking")
-    max_results: int = Field(default=4, ge=1, le=10, description="Maximum number of context chunks to retrieve")
+    """
+    Representa una consulta/pregunta del usuario al sistema RAG.
+
+    Este es el INPUT del endpoint POST /ask.
+
+    Atributos:
+        question: La pregunta en lenguaje natural
+        session_id: (Opcional) Para mantener contexto entre preguntas
+        max_results: Cuántos chunks de contexto recuperar (default: 4)
+
+    Validaciones:
+        - question: mínimo 1 carácter (no puede estar vacía)
+        - max_results: entre 1 y 10 (ge=greater or equal, le=less or equal)
+    """
+    question: str = Field(
+        ...,
+        min_length=1,  # Validación: no puede estar vacía
+        description="Pregunta del usuario en lenguaje natural"
+    )
+    session_id: Optional[str] = Field(
+        None,
+        description="ID de sesión para conversaciones con contexto (futuro)"
+    )
+    max_results: int = Field(
+        default=4,
+        ge=1,   # ge = greater or equal (>=)
+        le=10,  # le = less or equal (<=)
+        description="Número máximo de chunks de contexto a recuperar"
+    )
 
     class Config:
         json_schema_extra = {
             "example": {
-                "question": "What is the main topic of the document?",
+                "question": "¿Cuál es el tema principal del documento?",
                 "session_id": "session_789",
                 "max_results": 4
             }
@@ -73,42 +183,98 @@ class Query(BaseModel):
 
 
 class SourceDocument(BaseModel):
-    """Represents a source document snippet used as context."""
-    document_id: str = Field(..., description="Document identifier")
-    chunk_content: str = Field(..., description="The relevant text chunk")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Source metadata")
-    relevance_score: Optional[float] = Field(None, description="Similarity/relevance score")
+    """
+    Representa una fuente usada para generar una respuesta.
+
+    Cuando el sistema responde una pregunta, incluye las fuentes
+    de donde extrajo la información (para transparencia y verificación).
+
+    Atributos:
+        document_id: ID del documento original
+        chunk_content: El texto del chunk que se usó como contexto
+        metadata: Info del documento (filename, page, etc.)
+        relevance_score: Puntuación de similitud (0-1, mayor = más relevante)
+    """
+    document_id: str = Field(..., description="ID del documento fuente")
+    chunk_content: str = Field(..., description="Texto del chunk usado como contexto")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Metadatos de la fuente (filename, page, url, etc.)"
+    )
+    relevance_score: Optional[float] = Field(
+        None,
+        description="Score de relevancia/similitud (0.0 a 1.0)"
+    )
 
 
 class QueryResult(BaseModel):
-    """Represents the result of a RAG query."""
-    question: str = Field(..., description="The original question")
-    answer: str = Field(..., description="Generated answer from the LLM")
-    source_documents: List[SourceDocument] = Field(default_factory=list, description="Context sources used")
-    session_id: Optional[str] = Field(None, description="Session identifier")
-    processing_time: Optional[float] = Field(None, description="Processing time in seconds")
+    """
+    Resultado completo de una consulta RAG.
+
+    Este es el OUTPUT del endpoint POST /ask.
+    Incluye la respuesta generada Y las fuentes utilizadas.
+
+    Atributos:
+        question: La pregunta original (eco)
+        answer: Respuesta generada por el LLM
+        source_documents: Lista de fuentes usadas para generar la respuesta
+        session_id: ID de sesión (si se proporcionó)
+        processing_time: Tiempo de procesamiento en segundos
+    """
+    question: str = Field(..., description="Pregunta original")
+    answer: str = Field(..., description="Respuesta generada por el LLM")
+    source_documents: List[SourceDocument] = Field(
+        default_factory=list,
+        description="Fuentes usadas para generar la respuesta"
+    )
+    session_id: Optional[str] = Field(None, description="ID de sesión")
+    processing_time: Optional[float] = Field(
+        None,
+        description="Tiempo de procesamiento en segundos"
+    )
 
     class Config:
         json_schema_extra = {
             "example": {
-                "question": "What is RAG?",
-                "answer": "RAG stands for Retrieval-Augmented Generation...",
+                "question": "¿Qué es RAG?",
+                "answer": "RAG (Retrieval-Augmented Generation) es una técnica que...",
                 "source_documents": [
                     {
                         "document_id": "doc_123",
-                        "chunk_content": "RAG is a technique...",
+                        "chunk_content": "RAG es una técnica de IA que...",
                         "metadata": {"page": 1},
                         "relevance_score": 0.95
                     }
-                ]
+                ],
+                "processing_time": 1.23
             }
         }
 
 
+# ============================================================================
+# MODELOS DE SINCRONIZACIÓN/INGESTA
+# ============================================================================
 class SyncResult(BaseModel):
-    """Result of a document synchronization/ingestion operation."""
-    document_id: str = Field(..., description="Processed document ID")
-    chunks_created: int = Field(..., description="Number of chunks created")
-    success: bool = Field(..., description="Whether the operation succeeded")
-    message: Optional[str] = Field(None, description="Additional information or error message")
-    processing_time: Optional[float] = Field(None, description="Processing time in seconds")
+    """
+    Resultado de una operación de sincronización/ingesta de documentos.
+
+    Este es el OUTPUT de los endpoints POST /sync y POST /sync/notion.
+
+    Atributos:
+        document_id: ID del documento procesado
+        chunks_created: Número de chunks generados
+        success: Si la operación fue exitosa
+        message: Mensaje informativo o de error
+        processing_time: Tiempo de procesamiento en segundos
+    """
+    document_id: str = Field(..., description="ID del documento procesado")
+    chunks_created: int = Field(..., description="Número de chunks creados")
+    success: bool = Field(..., description="Si la operación fue exitosa")
+    message: Optional[str] = Field(
+        None,
+        description="Mensaje informativo o de error"
+    )
+    processing_time: Optional[float] = Field(
+        None,
+        description="Tiempo de procesamiento en segundos"
+    )

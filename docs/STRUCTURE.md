@@ -25,7 +25,6 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   │   │       └── rag_service.py       # Sistema RAG (consultas)
 │   │   │
 │   │   ├── /adapters/              # Adaptadores (implementaciones)
-│   │   │   ├── /inbound/           # Adaptadores de entrada (futuros)
 │   │   │   └── /outbound/          # Adaptadores de salida
 │   │   │       ├── chromadb_adapter.py
 │   │   │       ├── ollama_adapter.py
@@ -37,36 +36,34 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   │
 │   ├── ingest_pdfs.py              # Script CLI para ingestar PDFs
 │   ├── ingest_notion.py            # Script CLI para ingestar Notion
+│   ├── verify_setup.py             # Script de verificación del entorno
 │   ├── requirements.txt            # Dependencias Python
 │   ├── .env.example                # Template de variables de entorno
 │   └── Dockerfile                  # Imagen Docker para la API
 │
 ├── /data/                          # Directorio para PDFs locales (MVP)
 │   ├── README.md                   # Instrucciones de uso
+│   ├── create_test_pdf.py          # Script para generar PDFs de prueba
+│   ├── test_document.pdf           # PDF de ejemplo para testing
+│   ├── test_document.txt           # Texto fuente del PDF de ejemplo
 │   └── .gitkeep                    # Mantiene el directorio en Git
 │
 ├── /frontend/                      # Frontend React (Futuro - Fase 1)
-│   ├── /src/                       # Código fuente React
-│   ├── package.json                # Dependencias JavaScript
-│   └── Dockerfile                  # (Opcional) Imagen Docker
+│   └── .gitkeep                    # Placeholder hasta la implementación
 │
 ├── /.ai/                           # Contexto para Agentes IA (Universal)
-│   ├── README.md                   # Índice de documentos para IAs
-│   ├── project-context.md          # Contexto completo del TFM
-│   ├── python-guide.md             # Guía de Python para JS devs
-│   └── portability.md              # Guía de portabilidad
+│   ├── context.md                  # Contexto completo del proyecto (stack, arquitectura, comandos)
+│   └── evaluation.md               # Criterios de evaluación del TFM y estado de entrega
 │
 ├── /docs/                          # Documentación Técnica (Humanos)
-│   ├── README.md                   # Índice de documentación
-│   ├── USAGE.md                    # Documentación de API
-│   └── TESTING_GUIDE.md            # Guía de testing
+│   ├── STRUCTURE.md                # Este archivo - estructura y arquitectura
+│   └── USAGE.md                    # Documentación de API y uso
 │
 ├── docker-compose.yml              # Orquestación de servicios
 ├── .gitignore                      # Archivos ignorados por Git
 ├── LICENSE                         # Licencia MIT
 │
-├── README.md                       # Documentación principal del proyecto
-└── STRUCTURE.md                    # Este archivo - estructura del repo
+└── README.md                       # Documentación principal del proyecto
 ```
 
 ---
@@ -129,6 +126,14 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
   - Requiere NOTION_API_KEY configurado
   - Manejo de errores robusto
 
+- `verify_setup.py`: Script de verificación del entorno de desarrollo
+  - Comprueba versión de Python (3.11+)
+  - Valida dependencias Python instaladas
+  - Verifica que Ollama está corriendo y tiene los modelos necesarios
+  - Comprueba disponibilidad de Docker y ChromaDB
+  - Valida estructura del proyecto y directorio de datos
+  - Testea el health check de la API (si está activa)
+
 ---
 
 ### `/data` - Directorio de Documentos (MVP)
@@ -142,10 +147,15 @@ Este directorio es la fuente de datos del MVP. Los PDFs aquí son procesados por
 **Estructura:**
 ```
 /data/
-├── README.md          # Instrucciones de uso
-├── .gitkeep           # Mantiene directorio en Git
-└── *.pdf              # Tus documentos PDF
+├── README.md              # Instrucciones de uso
+├── create_test_pdf.py     # Script para generar test_document.pdf
+├── test_document.pdf      # PDF de ejemplo (generado por create_test_pdf.py)
+├── test_document.txt      # Texto fuente del PDF de ejemplo
+├── .gitkeep               # Mantiene directorio en Git
+└── *.pdf                  # Tus documentos PDF
 ```
+
+Los archivos `test_document.*` y `create_test_pdf.py` están destinados a testing del pipeline de ingesta sin necesidad de aportar PDFs externos.
 
 ---
 
@@ -202,6 +212,16 @@ La estructura del proyecto implementa **Arquitectura Hexagonal** (también conoc
 │    (ChromaDB, Ollama, PDF, Notion)                 │
 └─────────────────────────────────────────────────────┘
 ```
+
+### **Qué contiene cada capa:**
+
+| Capa | Directorio | Responsabilidad |
+|------|-----------|-----------------|
+| **Domain** | `core/domain/` | Entidades del dominio (`Document`, `Chunk`, `Query`). Estructuras de datos que representan los conceptos principales del sistema, independientes de cualquier infraestructura. |
+| **Ports** | `core/ports/` | Interfaces abstractas (contratos). Definen **cómo** hablar con el exterior sin implementar el **cómo**. |
+| **Services** | `core/services/` | Lógica de negocio (orquestación). `SyncService` coordina la ingesta, `RAGService` coordina las consultas. Conocen los puertos, pero no saben qué adaptador concreto hay detrás. |
+| **Adapters (outbound)** | `adapters/outbound/` | Implementaciones concretas de los puertos. Conectan la lógica de negocio con servicios externos (ChromaDB, Ollama, PDF, Notion). |
+| **Adapters (inbound)** | `main.py` + scripts CLI | Puntos de entrada al sistema. Las rutas de FastAPI (`main.py`) y los scripts CLI (`ingest_pdfs.py`, `ingest_notion.py`) actúan de adaptadores de entrada sin un directorio dedicado. |
 
 ### **Ventajas de esta Arquitectura:**
 
@@ -332,18 +352,15 @@ python ingest_notion.py --page PAGE_ID
 ## 📚 Documentación Adicional
 
 ### Para Humanos
-- **[README.md](README.md)**: Visión general y setup
-- **[STRUCTURE.md](STRUCTURE.md)**: Este archivo - estructura y arquitectura
-- **[docs/USAGE.md](docs/USAGE.md)**: API endpoints y uso
-- **[docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md)**: Guía de testing
-- **[data/README.md](data/README.md)**: Instrucciones para PDFs
-- **[api/.env.example](api/.env.example)**: Variables de entorno
+- **[README.md](../README.md)**: Visión general y setup
+- **[docs/STRUCTURE.md](STRUCTURE.md)**: Este archivo - estructura y arquitectura
+- **[docs/USAGE.md](USAGE.md)**: API endpoints y uso
+- **[data/README.md](../data/README.md)**: Instrucciones para PDFs
+- **[api/.env.example](../api/.env.example)**: Variables de entorno
 
 ### Para Agentes IA
-- **[.ai/README.md](.ai/README.md)**: Índice de contexto para IAs
-- **[.ai/project-context.md](.ai/project-context.md)**: Contexto completo del TFM
-- **[.ai/python-guide.md](.ai/python-guide.md)**: Guía de Python para JS devs
-- **[.ai/portability.md](.ai/portability.md)**: Guía de portabilidad
+- **[.ai/context.md](../.ai/context.md)**: Contexto completo del proyecto (stack, arquitectura, comandos)
+- **[.ai/evaluation.md](../.ai/evaluation.md)**: Criterios de evaluación del TFM y estado de entrega
 
 ---
 
