@@ -1,10 +1,39 @@
 # /docker-compose.yml
-
+# Orquesta los 4 servicios del proyecto Bibliotecario-IA.
+#
 # 'version' tag removed as it is obsolete.
 
 services:
   # --------------------------------------------------------------------
-  # Service 1: The API (FastAPI)
+  # Service 1: LLM local (Ollama)
+  # --------------------------------------------------------------------
+  # Ollama provee los modelos de LLM y embeddings.
+  # Los modelos se persisten en el volumen ollama_data para no
+  # tener que descarglos de nuevo al reiniciar.
+  #
+  # IMPORTANTE: al iniciar por primera vez se necesita hacer pull
+  # de los modelos:
+  #   docker exec ollama ollama pull llama3.2
+  #   docker exec ollama ollama pull nomic-embed-text
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  # --------------------------------------------------------------------
+  # Service 2: Vector Database (ChromaDB)
+  # --------------------------------------------------------------------
+  chromadb:
+    image: chromadb/chroma:0.5.20
+    ports:
+      - "8001:8000"     # Host 8001 → contenedor 8000 (evita conflicto con la API)
+    volumes:
+      - chroma_data:/chroma/chroma
+
+  # --------------------------------------------------------------------
+  # Service 3: The API (FastAPI)
   # --------------------------------------------------------------------
   api:
     build:
@@ -14,23 +43,23 @@ services:
       - "8000:8000"
     volumes:
       - ./api/app:/app/app
+      - ./data:/app/data    # Monta el directorio de PDFs dentro del contenedor
     env_file:
-      - ./.env # Passes environment variables (like NOTION_API_KEY)
+      - ./.env              # Variables generales (NOTION_API_KEY, etc.)
+    environment:
+      # Overrides de networking para Docker: dentro de la red de compose
+      # los servicios se comunican por nombre de contenedor, no localhost.
+      # Estos valores tienen prioridad sobre los de env_file.
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+      - DATA_DIRECTORY=/app/data
     depends_on:
+      - ollama
       - chromadb
 
   # --------------------------------------------------------------------
-  # Service 2: The Vector Database (ChromaDB)
-  # --------------------------------------------------------------------
-  chromadb:
-    image: chromadb/chroma:0.5.20
-    ports:
-      - "8001:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
-
-  # --------------------------------------------------------------------
-  # Service 3: The Automation (n8n)
+  # Service 4: Automation (n8n)
   # --------------------------------------------------------------------
   n8n:
     image: n8nio/n8n
@@ -40,7 +69,6 @@ services:
       - n8n_data:/home/node/.n8n
     environment:
       - GENERIC_TIMEZONE=Europe/Madrid
-      # --- FIX: Add this line to disable secure cookie ---
       - N8N_SECURE_COOKIE=false
     depends_on:
       - api
@@ -48,6 +76,8 @@ services:
 # --------------------------------------------------------------------
 # Named Volumes
 # --------------------------------------------------------------------
+# Persisten datos entre reinicios del contenedor.
 volumes:
-  chroma_data:
-  n8n_data:
+  ollama_data:    # Modelos descargados por Ollama (~4GB por modelo)
+  chroma_data:    # Base de datos vectorial
+  n8n_data:       # Configuración y workflows de n8n
