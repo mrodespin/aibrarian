@@ -214,6 +214,16 @@ La estructura del proyecto implementa **Arquitectura Hexagonal** (también conoc
 └─────────────────────────────────────────────────────┘
 ```
 
+### **Qué contiene cada capa:**
+
+| Capa | Directorio | Responsabilidad |
+|------|-----------|-----------------|
+| **Domain** | `core/domain/` | Entidades del dominio (`Document`, `Chunk`, `Query`). Estructuras de datos que representan los conceptos principales del sistema, independientes de cualquier infraestructura. |
+| **Ports** | `core/ports/` | Interfaces abstractas (contratos). Definen **cómo** hablar con el exterior sin implementar el **cómo**. |
+| **Services** | `core/services/` | Lógica de negocio (orquestación). `SyncService` coordina la ingesta, `RAGService` coordina las consultas. Conocen los puertos, pero no saben qué adaptador concreto hay detrás. |
+| **Adapters (outbound)** | `adapters/outbound/` | Implementaciones concretas de los puertos. Conectan la lógica de negocio con servicios externos (ChromaDB, Ollama, PDF, Notion). |
+| **Adapters (inbound)** | `adapters/inbound/` | Puntos de entrada al sistema. En este proyecto actúan de esto `main.py` (rutas FastAPI) y los scripts CLI, aunque el directorio está reservado para una futura refactorización. |
+
 ### **Ventajas de esta Arquitectura:**
 
 1. **Testabilidad**: Los servicios pueden probarse con mocks de los puertos
