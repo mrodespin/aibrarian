@@ -245,16 +245,23 @@ Para agregar soporte para Google Docs:
 
 ### `docker-compose.yml`
 
-Orquesta los servicios del proyecto:
+Orquesta los 4 servicios del proyecto:
+- **ollama**: LLM local (modelos llama3.2 y nomic-embed-text)
 - **chromadb**: Base de datos vectorial
-- **api** (futuro): API FastAPI en contenedor
-- **frontend** (futuro): UI React en contenedor
+- **api**: API FastAPI
+- **n8n**: Automatización de workflows
 
-**Uso actual:**
+**Uso:**
 ```bash
-# Solo ChromaDB (Ollama corre en host)
-docker-compose up -d chromadb
+# Iniciar todos los servicios
+docker-compose up -d
+
+# Primera vez: descargar modelos de Ollama
+docker exec ollama ollama pull llama3.2
+docker exec ollama ollama pull nomic-embed-text
 ```
+
+> **Nota sobre networking:** dentro de Docker los servicios se comunican por nombre de contenedor (`ollama`, `chromadb`). El `docker-compose.yml` sobreescribe automáticamente las URLs en el servicio `api` para usar estos nombres internos, así que no hace falta cambiar nada en `.env`.
 
 ### `.env` (no incluido - usar .env.example)
 
@@ -264,9 +271,9 @@ Variables de entorno para configuración:
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2
 
-# ChromaDB
+# ChromaDB (desarrollo local: puerto mapeado por docker-compose)
 CHROMADB_HOST=localhost
-CHROMADB_PORT=8000
+CHROMADB_PORT=8001
 
 # Notion (opcional)
 NOTION_API_KEY=secret_xxxxx
