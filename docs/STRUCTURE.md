@@ -25,7 +25,6 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   │   │       └── rag_service.py       # Sistema RAG (consultas)
 │   │   │
 │   │   ├── /adapters/              # Adaptadores (implementaciones)
-│   │   │   ├── /inbound/           # Adaptadores de entrada (futuros)
 │   │   │   └── /outbound/          # Adaptadores de salida
 │   │   │       ├── chromadb_adapter.py
 │   │   │       ├── ollama_adapter.py
@@ -222,7 +221,7 @@ La estructura del proyecto implementa **Arquitectura Hexagonal** (también conoc
 | **Ports** | `core/ports/` | Interfaces abstractas (contratos). Definen **cómo** hablar con el exterior sin implementar el **cómo**. |
 | **Services** | `core/services/` | Lógica de negocio (orquestación). `SyncService` coordina la ingesta, `RAGService` coordina las consultas. Conocen los puertos, pero no saben qué adaptador concreto hay detrás. |
 | **Adapters (outbound)** | `adapters/outbound/` | Implementaciones concretas de los puertos. Conectan la lógica de negocio con servicios externos (ChromaDB, Ollama, PDF, Notion). |
-| **Adapters (inbound)** | `adapters/inbound/` | Puntos de entrada al sistema. En este proyecto actúan de esto `main.py` (rutas FastAPI) y los scripts CLI, aunque el directorio está reservado para una futura refactorización. |
+| **Adapters (inbound)** | `main.py` + scripts CLI | Puntos de entrada al sistema. Las rutas de FastAPI (`main.py`) y los scripts CLI (`ingest_pdfs.py`, `ingest_notion.py`) actúan de adaptadores de entrada sin un directorio dedicado. |
 
 ### **Ventajas de esta Arquitectura:**
 
