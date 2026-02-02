@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# /data/create_test_pdf.py
+# /scripts/generate_test_pdf.py
 """
 Script de Generación de PDF de Prueba - TFM Bibliotecario-IA
 
@@ -20,8 +20,9 @@ Librería usada: reportlab
     - Spacer: espacio en blanco vertical entre elementos
 
 Uso:
-    cd data
-    python create_test_pdf.py
+    python scripts/generate_test_pdf.py
+    # o desde scripts/
+    cd scripts && python generate_test_pdf.py
 
 Genera:
     data/test_document.pdf
@@ -36,14 +37,16 @@ from reportlab.lib.pagesizes import letter                              # Tamañ
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle   # Estilos predefinidos
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer    # Flowables
 from reportlab.lib.units import inch                                   # Unidad de medida: pulgadas
+from pathlib import Path                                               # Para construir rutas
 
 # ============================================================================
 # CONFIGURACIÓN DEL PDF
 # ============================================================================
 # SimpleDocTemplate es la plantilla de alto nivel de reportlab.
 # Maneja automáticamente márgenes, paginación y layout.
-pdf_path = "test_document.pdf"
-doc = SimpleDocTemplate(pdf_path, pagesize=letter)
+# El PDF se genera en ../data/ (desde scripts/ → root/data/)
+pdf_path = Path(__file__).parent.parent / "data" / "test_document.pdf"
+doc = SimpleDocTemplate(str(pdf_path), pagesize=letter)
 
 # Lista de flowables: estos objetos se apilan verticalmente en el PDF.
 # El orden en esta lista = el orden en la página.

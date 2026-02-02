@@ -312,37 +312,84 @@ curl -X DELETE "http://localhost:8000/documents/pdf_a1b2c3d4"
 
 ## 🛠️ Scripts CLI
 
-Además de la API, el proyecto incluye scripts de línea de comandos para ingesta:
+Además de la API, el proyecto incluye scripts de automatización en el directorio `scripts/`:
 
-### Script de Ingesta de PDFs
+### 1. `setup.py` - Instalación Automática
 
-```bash
-cd api
-
-# Procesar todos los PDFs en ./data
-python ingest_pdfs.py
-
-# Procesar PDFs de un directorio específico
-python ingest_pdfs.py /ruta/a/pdfs
-
-# Procesar un PDF individual
-python ingest_pdfs.py --file documento.pdf
-```
-
-### Script de Ingesta de Notion
+Instala y configura todo el entorno de desarrollo interactivamente.
 
 ```bash
-cd api
-
-# Procesar una página individual
-python ingest_notion.py --page PAGE_ID
-
-# Procesar base de datos completa
-python ingest_notion.py --database DATABASE_ID
-
-# Limitar número de páginas
-python ingest_notion.py --database DATABASE_ID --max 10
+python3 setup.py
 ```
+
+**Qué hace:** Verifica OS, instala Homebrew/Ollama/Docker, configura Python/venv, crea .env, ejecuta verify_setup.py.
+
+---
+
+### 2. `verify_setup.py` - Verificación del Entorno
+
+Verifica que todos los servicios estén correctamente instalados (8 checks: Python, dependencias, Ollama, Docker, ChromaDB, estructura, data, API).
+
+```bash
+python scripts/verify_setup.py
+```
+
+**Salida:** Reporte coloreado con ✅ éxito, ❌ error, ⚠️ advertencia.
+
+---
+
+### 3. `ingest_pdfs.py` - Ingesta de PDFs
+
+Procesa PDFs y los ingesta en ChromaDB. Alternativa CLI a los endpoints `/sync` de la API.
+
+```bash
+# Procesar todos los PDFs en /data
+python scripts/ingest_pdfs.py
+
+# Procesar un directorio específico
+python scripts/ingest_pdfs.py /ruta/a/pdfs
+
+# Procesar un archivo específico
+python scripts/ingest_pdfs.py --file documento.pdf
+
+# Usar colección diferente
+python scripts/ingest_pdfs.py --collection mi_coleccion
+```
+
+**Prerequisito:** `source api/venv/bin/activate` (necesita dependencias de FastAPI/LangChain)
+
+---
+
+### 4. `ingest_notion.py` - Ingesta de Notion
+
+Ingesta contenido de Notion. Alternativa CLI a `/sync/notion`.
+
+```bash
+# Página individual
+python scripts/ingest_notion.py --page PAGE_ID
+
+# Base de datos completa
+python scripts/ingest_notion.py --database DATABASE_ID
+
+# Limitar páginas
+python scripts/ingest_notion.py --database DATABASE_ID --max 10
+```
+
+**Prerequisito:**
+- `NOTION_API_KEY` en `api/.env`
+- `source api/venv/bin/activate`
+
+---
+
+### 5. `generate_test_pdf.py` - Genera PDF de Prueba
+
+Genera `data/test_document.pdf` con contenido sobre el proyecto para testing.
+
+```bash
+python scripts/generate_test_pdf.py
+```
+
+**Output:** `data/test_document.pdf` (~2 páginas)
 
 ---
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# /api/ingest_notion.py
+# /scripts/ingest_notion.py
 """
 Script CLI de Ingesta de Notion - TFM Bibliotecario-IA
 
@@ -40,7 +40,8 @@ import argparse
 # ============================================================================
 # Mismo patrón que en ingest_pdfs.py: añade api/ al path para que
 # Python encuentre el paquete "app" al ejecutar el script directamente.
-sys.path.insert(0, str(Path(__file__).parent))
+# El script está en scripts/, así que necesitamos subir al root y luego api/
+sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
 
 from app.config.settings import settings
 from app.core.services.sync_service import SyncService
