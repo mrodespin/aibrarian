@@ -50,18 +50,9 @@ async def test_full_rag_pipeline():
     from app.config.settings import settings
 
     # Arrange: Inicializar servicios reales
-    ollama = OllamaAdapter(
-        base_url=settings.ollama_base_url,
-        model=settings.ollama_model,
-        embedding_model=settings.ollama_embedding_model
-    )
-
-    chromadb = ChromaDBAdapter(
-        host=settings.chromadb_host,
-        port=settings.chromadb_port,
-        collection_name="test_integration_collection"  # Colección de test
-    )
-
+    # Los adaptadores usan lazy initialization y obtienen configuración de settings
+    ollama = OllamaAdapter()
+    chromadb = ChromaDBAdapter()
     pdf_processor = PDFProcessorAdapter()
 
     sync_service = SyncService(
@@ -132,18 +123,9 @@ async def test_rag_with_empty_database():
     from app.config.settings import settings
 
     # Arrange: RAG con colección vacía
-    ollama = OllamaAdapter(
-        base_url=settings.ollama_base_url,
-        model=settings.ollama_model,
-        embedding_model=settings.ollama_embedding_model
-    )
-
-    # Usar colección diferente para no interferir con otros tests
-    chromadb = ChromaDBAdapter(
-        host=settings.chromadb_host,
-        port=settings.chromadb_port,
-        collection_name="test_empty_collection"
-    )
+    # Los adaptadores usan lazy initialization y obtienen configuración de settings
+    ollama = OllamaAdapter()
+    chromadb = ChromaDBAdapter()
 
     rag_service = RAGService(llm=ollama, vector_db=chromadb)
 
@@ -173,12 +155,8 @@ async def test_ollama_connectivity():
     from app.adapters.outbound.ollama_adapter import OllamaAdapter
     from app.config.settings import settings
 
-    # Arrange
-    ollama = OllamaAdapter(
-        base_url=settings.ollama_base_url,
-        model=settings.ollama_model,
-        embedding_model=settings.ollama_embedding_model
-    )
+    # Arrange: El adaptador usa lazy initialization
+    ollama = OllamaAdapter()
 
     # Act: Generar embedding simple
     try:
@@ -204,16 +182,12 @@ async def test_chromadb_connectivity():
     from app.adapters.outbound.chromadb_adapter import ChromaDBAdapter
     from app.config.settings import settings
 
-    # Arrange
-    chromadb = ChromaDBAdapter(
-        host=settings.chromadb_host,
-        port=settings.chromadb_port,
-        collection_name="test_connectivity_check"
-    )
+    # Arrange: El adaptador usa lazy initialization
+    chromadb = ChromaDBAdapter()
 
-    # Act: Obtener estadísticas
+    # Act: Obtener estadísticas de la colección por defecto
     try:
-        stats = await chromadb.get_stats()
+        stats = await chromadb.get_collection_stats()
     except Exception as e:
         pytest.fail(f"ChromaDB no está disponible: {e}")
 
