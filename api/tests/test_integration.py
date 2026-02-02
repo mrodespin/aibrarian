@@ -95,7 +95,9 @@ async def test_full_rag_pipeline():
 
     # Act: Paso 3 - Hacer una query
     try:
-        response = await rag_service.query("¿De qué trata este documento?")
+        from app.core.domain.models import Query
+        query = Query(question="¿De qué trata este documento?")
+        response = await rag_service.ask_question(query)
     except Exception as e:
         pytest.fail(f"Falló la query: {e}")
 
@@ -103,7 +105,7 @@ async def test_full_rag_pipeline():
     assert response is not None
     assert response.answer is not None
     assert len(response.answer) > 0
-    assert len(response.sources) > 0
+    assert len(response.source_documents) > 0
 
     # Verificar que la respuesta menciona conceptos del documento
     # (el test_document.pdf habla de RAG, Bibliotecario-IA, etc.)
@@ -112,7 +114,7 @@ async def test_full_rag_pipeline():
 
     print(f"\n✅ Test E2E exitoso!")
     print(f"📝 Respuesta: {response.answer[:100]}...")
-    print(f"📚 Fuentes: {len(response.sources)} chunks")
+    print(f"📚 Fuentes: {len(response.source_documents)} chunks")
 
 
 @pytest.mark.integration
@@ -147,7 +149,9 @@ async def test_rag_with_empty_database():
 
     # Act: Query sin documentos
     try:
-        response = await rag_service.query("¿Qué es RAG?")
+        from app.core.domain.models import Query
+        query = Query(question="¿Qué es RAG?")
+        response = await rag_service.ask_question(query)
     except Exception as e:
         pytest.fail(f"El sistema debe manejar BD vacía gracefully, pero falló: {e}")
 
@@ -155,7 +159,7 @@ async def test_rag_with_empty_database():
     assert response is not None
     assert response.answer is not None
     # Sources puede estar vacío
-    assert isinstance(response.sources, list)
+    assert isinstance(response.source_documents, list)
 
 
 @pytest.mark.integration

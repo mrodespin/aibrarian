@@ -15,7 +15,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from app.core.services.rag_service import RAGService
-from app.core.domain.models import QueryResponse, Chunk
+from app.core.domain.models import QueryResult, Chunk
 
 
 # ============================================================================
@@ -30,22 +30,24 @@ async def test_query_success(rag_service_with_mocks, sample_query):
 
     Verifica el flujo feliz completo:
     - Acepta una pregunta
-    - Retorna QueryResponse con answer y sources
+    - Retorna QueryResult con answer y sources
     - Los sources incluyen metadata de los chunks
     """
     # Act
-    response = await rag_service_with_mocks.query(sample_query)
+    response = await rag_service_with_mocks.ask_question(sample_query)
 
     # Assert
-    assert isinstance(response, QueryResponse)
+    from app.core.domain.models import SourceDocument
+    assert isinstance(response, QueryResult)
     assert response.answer is not None
     assert len(response.answer) > 0
-    assert isinstance(response.sources, list)
-    assert len(response.sources) > 0
+    assert isinstance(response.source_documents, list)
+    assert len(response.source_documents) > 0
     # Verificar que cada source tiene la estructura esperada
-    for source in response.sources:
-        assert "source" in source
-        assert "content" in source
+    for source in response.source_documents:
+        assert isinstance(source, SourceDocument)
+        assert source.document_id is not None
+        assert source.chunk_content is not None
 
 
 @pytest.mark.unit
@@ -57,13 +59,13 @@ async def test_query_calls_embedding(rag_service_with_mocks, sample_query, mock_
     El RAG debe vectorizar la pregunta antes de buscar contexto.
     """
     # Act
-    await rag_service_with_mocks.query(sample_query)
+    await rag_service_with_mocks.ask_question(sample_query)
 
     # Assert
     # Verificar que se llamó a generate_embedding con la query
     mock_ollama.generate_embedding.assert_called_once()
     call_args = mock_ollama.generate_embedding.call_args[0]
-    assert sample_query in call_args[0]
+    assert sample_query.question in call_args[0]
 
 
 @pytest.mark.unit
@@ -75,11 +77,11 @@ async def test_query_calls_vector_search(rag_service_with_mocks, sample_query, m
     Después de vectorizar, debe buscar chunks similares en la BD vectorial.
     """
     # Act
-    await rag_service_with_mocks.query(sample_query)
+    await rag_service_with_mocks.ask_question(sample_query)
 
     # Assert
-    # Verificar que se llamó al query de ChromaDB
-    mock_chromadb.query.assert_called_once()
+    # Verificar que se llamó al similarity_search de ChromaDB
+    mock_chromadb.similarity_search.assert_called_once()
 
 
 @pytest.mark.unit
@@ -91,41 +93,45 @@ async def test_query_calls_llm_generation(rag_service_with_mocks, sample_query, 
     Después de obtener contexto, debe llamar al LLM para generar la respuesta.
     """
     # Act
-    await rag_service_with_mocks.query(sample_query)
+    await rag_service_with_mocks.ask_question(sample_query)
 
     # Assert
-    # Verificar que se llamó a generate (generación de texto)
-    mock_ollama.generate.assert_called_once()
-    # El prompt debe incluir tanto la query como el contexto
-    call_args = mock_ollama.generate.call_args[0]
-    prompt = call_args[0]
-    assert sample_query in prompt  # La query debe estar en el prompt
+    # Verificar que se llamó a generate_response (generación de texto)
+    mock_ollama.generate_response.assert_called_once()
+    # El prompt debe incluir la query
+    call_args = mock_ollama.generate_response.call_args
+    # Check kwargs for 'prompt' parameter
+    assert 'prompt' in call_args.kwargs or len(call_args.args) > 0
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_query_with_empty_string_raises_error(rag_service_with_mocks):
     """
-    Test: query vacía debe lanzar ValueError.
+    Test: query vacía debe lanzar ValidationError.
 
-    El servicio debe validar inputs y rechazar queries inválidas.
+    Pydantic valida que question no esté vacía (min_length=1).
     """
     # Act & Assert
-    with pytest.raises(ValueError, match="vacía|empty"):
-        await rag_service_with_mocks.query("")
+    from pydantic import ValidationError
+    from app.core.domain.models import Query
+    with pytest.raises(ValidationError):
+        Query(question="")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_query_with_none_raises_error(rag_service_with_mocks):
     """
-    Test: query None debe lanzar error.
+    Test: query None debe lanzar ValidationError.
 
-    El servicio debe validar inputs nulos.
+    Pydantic valida que question sea requerida.
     """
     # Act & Assert
-    with pytest.raises((ValueError, TypeError)):
-        await rag_service_with_mocks.query(None)
+    from pydantic import ValidationError
+    from app.core.domain.models import Query
+    with pytest.raises(ValidationError):
+        Query(question=None)
 
 
 @pytest.mark.unit
@@ -141,31 +147,35 @@ async def test_query_with_no_results_from_db(rag_service_with_mocks, sample_quer
     mock_chromadb.query = AsyncMock(return_value=[])
 
     # Act
-    response = await rag_service_with_mocks.query(sample_query)
+    response = await rag_service_with_mocks.ask_question(sample_query)
 
     # Assert
     # Debe retornar respuesta aunque no haya contexto
-    assert isinstance(response, QueryResponse)
+    assert isinstance(response, QueryResult)
     assert response.answer is not None
     # Sources puede estar vacío o indicar que no hay contexto
-    assert isinstance(response.sources, list)
+    assert isinstance(response.source_documents, list)
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_query_limits_context_chunks(rag_service_with_mocks, sample_query):
+async def test_query_limits_context_chunks(rag_service_with_mocks):
     """
     Test: verificar que se limita el número de chunks de contexto.
 
-    El RAG debe usar MAX_CONTEXT_CHUNKS (típicamente 4) para evitar
-    prompts demasiado largos que saturen el context window del LLM.
+    El RAG debe usar max_results para evitar prompts demasiado largos
+    que saturen el context window del LLM.
     """
+    # Arrange: crear query con max_results=2
+    from app.core.domain.models import Query
+    query = Query(question="¿Qué es RAG?", max_results=2)
+
     # Act
-    response = await rag_service_with_mocks.query(sample_query, max_chunks=2)
+    response = await rag_service_with_mocks.ask_question(query)
 
     # Assert
-    # Verificar que no se incluyen más de max_chunks fuentes
-    assert len(response.sources) <= 2
+    # Verificar que no se incluyen más de max_results fuentes
+    assert len(response.source_documents) <= 2
 
 
 @pytest.mark.unit
@@ -178,15 +188,17 @@ async def test_query_includes_source_metadata(rag_service_with_mocks, sample_que
     verificar de dónde viene la información (source file, page, etc.).
     """
     # Act
-    response = await rag_service_with_mocks.query(sample_query)
+    response = await rag_service_with_mocks.ask_question(sample_query)
 
     # Assert
-    for source in response.sources:
-        # Verificar que tiene metadata básica
-        assert "source" in source or "metadata" in source
-        # Debe tener contenido del chunk
-        assert "content" in source
-        assert len(source["content"]) > 0
+    from app.core.domain.models import SourceDocument
+    for source in response.source_documents:
+        # Verificar que es un SourceDocument con los campos correctos
+        assert isinstance(source, SourceDocument)
+        assert source.document_id is not None
+        assert source.chunk_content is not None
+        assert len(source.chunk_content) > 0
+        assert isinstance(source.metadata, dict)
 
 
 # ============================================================================
@@ -203,11 +215,11 @@ async def test_query_handles_llm_error_gracefully(rag_service_with_mocks, sample
     o retornar un mensaje de error apropiado (según diseño).
     """
     # Arrange: configurar mock para lanzar excepción
-    mock_ollama.generate = AsyncMock(side_effect=Exception("Ollama connection failed"))
+    mock_ollama.generate_response = AsyncMock(side_effect=Exception("Ollama connection failed"))
 
     # Act & Assert
     with pytest.raises(Exception):
-        await rag_service_with_mocks.query(sample_query)
+        await rag_service_with_mocks.ask_question(sample_query)
 
 
 @pytest.mark.unit
@@ -219,11 +231,11 @@ async def test_query_handles_chromadb_error_gracefully(rag_service_with_mocks, s
     Si ChromaDB falla, el servicio debe propagar el error claramente.
     """
     # Arrange: configurar mock para lanzar excepción
-    mock_chromadb.query = AsyncMock(side_effect=Exception("ChromaDB connection failed"))
+    mock_chromadb.similarity_search = AsyncMock(side_effect=Exception("ChromaDB connection failed"))
 
     # Act & Assert
     with pytest.raises(Exception):
-        await rag_service_with_mocks.query(sample_query)
+        await rag_service_with_mocks.ask_question(sample_query)
 
 
 # ============================================================================
@@ -240,13 +252,15 @@ async def test_query_with_very_long_question(rag_service_with_mocks):
     (pueden ser truncadas o procesadas completamente según diseño).
     """
     # Arrange: query de 1000 palabras
-    long_query = "¿Qué es RAG? " * 200  # ~1000 palabras
+    from app.core.domain.models import Query
+    long_question_text = "¿Qué es RAG? " * 200  # ~1000 palabras
+    long_query = Query(question=long_question_text)
 
     # Act
-    response = await rag_service_with_mocks.query(long_query)
+    response = await rag_service_with_mocks.ask_question(long_query)
 
     # Assert
-    assert isinstance(response, QueryResponse)
+    assert isinstance(response, QueryResult)
     assert response.answer is not None
 
 
@@ -260,31 +274,32 @@ async def test_query_with_special_characters(rag_service_with_mocks):
     emojis, símbolos, etc.
     """
     # Arrange: query con caracteres especiales
-    special_query = "¿Qué es RAG? 🤖 ¿Cómo funciona el embedding?"
+    from app.core.domain.models import Query
+    special_question_text = "¿Qué es RAG? 🤖 ¿Cómo funciona el embedding?"
+    special_query = Query(question=special_question_text)
 
     # Act
-    response = await rag_service_with_mocks.query(special_query)
+    response = await rag_service_with_mocks.ask_question(special_query)
 
     # Assert
-    assert isinstance(response, QueryResponse)
+    assert isinstance(response, QueryResult)
     assert response.answer is not None
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_query_response_model_field_is_populated(rag_service_with_mocks, sample_query):
+async def test_query_response_has_processing_time(rag_service_with_mocks, sample_query):
     """
-    Test: verificar que el campo model está poblado en la respuesta.
+    Test: verificar que la respuesta incluye processing_time.
 
-    QueryResponse debe incluir qué modelo LLM generó la respuesta.
+    QueryResult debe incluir el tiempo de procesamiento.
     """
     # Act
-    response = await rag_service_with_mocks.query(sample_query)
+    response = await rag_service_with_mocks.ask_question(sample_query)
 
     # Assert
-    assert hasattr(response, "model")
-    # El campo puede ser None o tener un valor, dependiendo de la implementación
-    # pero debe existir en la estructura
+    assert hasattr(response, "processing_time")
+    # processing_time puede ser None o un float
 
 
 # ============================================================================

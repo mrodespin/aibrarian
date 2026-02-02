@@ -15,9 +15,9 @@ Fixtures principales:
 import pytest
 from unittest.mock import Mock, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
-from typing import List
+from typing import List, Optional, Dict
 
-from app.core.domain.models import Document, Chunk, QueryResponse
+from app.core.domain.models import Document, Chunk, QueryResult, SourceDocument
 from app.main import app
 
 
@@ -73,26 +73,33 @@ def sample_chunks() -> List[Chunk]:
 
 
 @pytest.fixture
-def sample_query() -> str:
+def sample_query():
     """Query de ejemplo para tests."""
-    return "¿Qué es RAG?"
+    from app.core.domain.models import Query
+    return Query(question="¿Qué es RAG?")
 
 
 @pytest.fixture
-def sample_query_response() -> QueryResponse:
+def sample_query_response() -> QueryResult:
     """
     Respuesta de ejemplo del RAG para tests.
 
     Returns:
-        QueryResponse con respuesta simulada
+        QueryResult con respuesta simulada
     """
-    return QueryResponse(
+    return QueryResult(
+        question="¿Qué es RAG?",
         answer="RAG (Retrieval-Augmented Generation) es una técnica que combina "
                "búsqueda de información relevante con generación de texto usando LLMs.",
-        sources=[
-            {"source": "doc1.pdf", "page": 1, "content": "RAG es Retrieval-Augmented..."}
+        source_documents=[
+            SourceDocument(
+                document_id="doc1",
+                chunk_content="RAG es Retrieval-Augmented...",
+                metadata={"source": "doc1.pdf", "page": 1},
+                relevance_score=0.95
+            )
         ],
-        model="llama3.2"
+        processing_time=1.23
     )
 
 
@@ -106,7 +113,7 @@ def mock_ollama():
     Mock del adaptador de Ollama para evitar llamadas reales al LLM.
 
     Simula:
-    - generate(): Genera respuestas de texto
+    - generate_response(): Genera respuestas de texto
     - generate_embedding(): Genera embeddings
 
     Returns:
@@ -114,8 +121,16 @@ def mock_ollama():
     """
     mock = Mock()
 
-    # Mock de generate (respuestas del LLM)
-    async def mock_generate(prompt: str, **kwargs) -> str:
+    # Mock de generate_response (respuestas del LLM)
+    async def mock_generate_response(
+        prompt: str,
+        context: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7,
+        **kwargs
+    ) -> str:
+        if context:
+            return f"Basándome en el contexto proporcionado, {prompt[:50]}"
         return "Esta es una respuesta simulada del LLM para el prompt: " + prompt[:50]
 
     # Mock de generate_embedding (vectorización)
@@ -124,7 +139,7 @@ def mock_ollama():
         # En producción, Ollama retorna vectores de 768-4096 dimensiones
         return [float(hash(text) % 100) / 100.0 for _ in range(10)]
 
-    mock.generate = AsyncMock(side_effect=mock_generate)
+    mock.generate_response = AsyncMock(side_effect=mock_generate_response)
     mock.generate_embedding = AsyncMock(side_effect=mock_embedding)
 
     return mock
@@ -136,46 +151,53 @@ def mock_chromadb():
     Mock del adaptador de ChromaDB para evitar llamadas reales a la BD vectorial.
 
     Simula:
-    - add_documents(): Añade documentos (no hace nada en tests)
-    - query(): Retorna chunks de ejemplo
-    - get_stats(): Retorna estadísticas simuladas
+    - store_chunks(): Añade documentos (no hace nada en tests)
+    - similarity_search(): Retorna SourceDocuments de ejemplo
+    - get_collection_stats(): Retorna estadísticas simuladas
 
     Returns:
         Mock del ChromaDBAdapter configurado
     """
     mock = Mock()
 
-    # Mock de add_documents
-    async def mock_add(chunks: List[Chunk]) -> None:
-        pass  # No hace nada, solo simula que añadió
+    # Mock de store_chunks
+    async def mock_store(chunks: List[Chunk], collection_name: str = "documents") -> bool:
+        return True  # Simula que almacenó correctamente
 
-    # Mock de query (búsqueda por similaridad)
-    async def mock_query_fn(query_embedding: List[float], n_results: int = 4) -> List[Chunk]:
-        # Retorna chunks de ejemplo independientemente de la query
+    # Mock de similarity_search (búsqueda por similaridad)
+    async def mock_similarity_search(
+        query_embedding: List[float],
+        collection_name: str = "documents",
+        top_k: int = 4,
+        filter_metadata: Optional[Dict] = None
+    ) -> List[SourceDocument]:
+        # Retorna SourceDocuments de ejemplo independientemente de la query
         return [
-            Chunk(
-                content="RAG combina búsqueda con generación de texto.",
+            SourceDocument(
+                document_id="doc_001",
+                chunk_content="RAG combina búsqueda con generación de texto.",
                 metadata={"source": "test.pdf", "page": 1},
-                embedding=query_embedding[:10]  # Simula similaridad
+                relevance_score=0.95
             ),
-            Chunk(
-                content="Los LLMs son modelos de lenguaje grandes.",
+            SourceDocument(
+                document_id="doc_001",
+                chunk_content="Los LLMs son modelos de lenguaje grandes.",
                 metadata={"source": "test.pdf", "page": 2},
-                embedding=query_embedding[:10]
+                relevance_score=0.87
             )
-        ]
+        ][:top_k]  # Respetar el límite top_k
 
-    # Mock de get_stats
-    async def mock_stats() -> dict:
+    # Mock de get_collection_stats
+    async def mock_stats(collection_name: str = "documents") -> dict:
         return {
-            "total_documents": 10,
-            "total_chunks": 50,
-            "collection_name": "test_collection"
+            "count": 50,
+            "dimensions": 768,
+            "collection_name": collection_name
         }
 
-    mock.add_documents = AsyncMock(side_effect=mock_add)
-    mock.query = AsyncMock(side_effect=mock_query_fn)
-    mock.get_stats = AsyncMock(side_effect=mock_stats)
+    mock.store_chunks = AsyncMock(side_effect=mock_store)
+    mock.similarity_search = AsyncMock(side_effect=mock_similarity_search)
+    mock.get_collection_stats = AsyncMock(side_effect=mock_stats)
 
     return mock
 
@@ -192,11 +214,35 @@ def mock_pdf_processor():
     """
     mock = Mock()
 
-    async def mock_process(file_path: str) -> Document:
-        return Document(
-            content=f"Contenido extraído del PDF: {file_path}",
-            metadata={"source": file_path, "pages": 1}
+    async def mock_process(
+        source: str,
+        chunk_size: int = 1000,
+        chunk_overlap: int = 200
+    ) -> tuple:
+        from app.core.domain.models import DocumentSource
+        # Crear documento mockeado
+        document = Document(
+            id="test_doc_001",
+            source=DocumentSource.PDF,
+            content=f"Contenido extraído del PDF: {source}",
+            metadata={"source": source, "pages": 1}
         )
+        # Crear chunks mockeados
+        chunks = [
+            Chunk(
+                id="chunk_001",
+                document_id="test_doc_001",
+                content="Primer chunk del documento",
+                metadata={"page": 1, "position": 0}
+            ),
+            Chunk(
+                id="chunk_002",
+                document_id="test_doc_001",
+                content="Segundo chunk del documento",
+                metadata={"page": 1, "position": 1}
+            )
+        ]
+        return (document, chunks)
 
     mock.process_document = AsyncMock(side_effect=mock_process)
 

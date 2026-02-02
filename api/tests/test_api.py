@@ -123,9 +123,9 @@ def test_ask_endpoint_returns_json_with_answer(test_client):
     if response.status_code == 200:
         data = response.json()
         assert "answer" in data
-        assert "sources" in data
+        assert "source_documents" in data
         assert isinstance(data["answer"], str)
-        assert isinstance(data["sources"], list)
+        assert isinstance(data["source_documents"], list)
 
 
 # ============================================================================
@@ -223,13 +223,13 @@ def test_sync_directory_uses_default_path_if_not_provided(test_client):
 @pytest.mark.unit
 def test_sync_notion_page_requires_page_id(test_client):
     """
-    Test: /sync/notion/page debe requerir page_id.
+    Test: /sync/notion debe requerir page_id.
     """
     # Arrange
     payload = {}
 
     # Act
-    response = test_client.post("/sync/notion/page", json=payload)
+    response = test_client.post("/sync/notion", json=payload)
 
     # Assert
     assert response.status_code == 422
