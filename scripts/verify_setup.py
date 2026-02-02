@@ -126,37 +126,77 @@ def check_dependencies():
     """
     Verifica que las dependencias Python principales estén instaladas.
 
-    Usa __import__() para intentar importar dinámicamente cada paquete.
-    Si el paquete no está instalado, lanza ImportError que se captura
-    en el except.
+    Estrategia:
+    1. Detecta si el script se ejecuta desde un virtual environment
+    2. Si NO: verifica el venv en api/venv/ mirando site-packages
+    3. Si SÍ: verifica importando los paquetes normalmente
 
-    Nota sobre nombres de paquetes:
-    Los nombres de paquetes en pip (con guiones, ej: 'pydantic-settings')
-    no coinciden siempre con el nombre del módulo Python (con guiones
-    bajos). replace('-', '_') normaliza esto para la importación.
+    Esto permite ejecutar el script sin activar el venv y aún así
+    verificar que las dependencias estén instaladas.
 
     Returns:
         bool: True si todos los paquetes están instalados
     """
     print_header("2. Verificando Dependencias Python")
 
-    # Lista de paquetes críticos para el sistema.
-    # No es exhaustiva (requirements.txt tiene más), pero cubre
-    # los que sin los que el sistema no puede funcionar.
-    required_packages = [
-        'fastapi',
-        'uvicorn',
-        'langchain',
-        'chromadb',
-        'pydantic',
-        'httpx'
-    ]
+    # Detectar si estamos en un virtual environment
+    # sys.real_prefix existe en virtualenv antiguo
+    # sys.base_prefix != sys.prefix en venv moderno (Python 3.3+)
+    in_venv = hasattr(sys, 'real_prefix') or (
+        hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix
+    )
+
+    project_root = Path(__file__).parent.parent
+    venv_path = project_root / "api" / "venv"
+
+    required_packages = ['fastapi', 'uvicorn', 'langchain', 'chromadb', 'pydantic', 'httpx']
+
+    if not in_venv:
+        # No estamos en venv, verificar si existe api/venv
+        if not venv_path.exists():
+            print_error("Virtual environment NO encontrado en api/venv/")
+            print_info("Ejecuta: python3 scripts/setup.py")
+            return False
+
+        print_info(f"Virtual environment: {venv_path.relative_to(project_root)}")
+        print_warning("No estás en el venv (pero está OK, verificando paquetes...)")
+
+        # Buscar site-packages del venv
+        site_packages_candidates = list((venv_path / "lib").glob("python*/site-packages"))
+
+        if not site_packages_candidates:
+            print_error("No se encontró site-packages en el venv")
+            return False
+
+        site_packages = site_packages_candidates[0]
+        all_ok = True
+
+        for package in required_packages:
+            # Buscar el paquete en site-packages
+            # Puede ser un directorio o un .dist-info
+            package_normalized = package.replace('-', '_')
+            package_dir = site_packages / package_normalized
+            dist_info = list(site_packages.glob(f"{package_normalized}*.dist-info"))
+
+            if package_dir.exists() or dist_info:
+                print_success(f"{package} instalado")
+            else:
+                print_error(f"{package} NO instalado")
+                all_ok = False
+
+        if not all_ok:
+            print_warning("Instala dependencias:")
+            print_info("  cd api && source venv/bin/activate")
+            print_info("  pip install -r requirements.txt")
+
+        return all_ok
+
+    # Estamos en venv, verificar importando directamente
+    print_success("Ejecutando desde virtual environment ✓")
 
     all_ok = True
     for package in required_packages:
         try:
-            # replace('-', '_'): pip instala 'pydantic-settings' pero
-            # el módulo importable se llama 'pydantic_settings'
             __import__(package.replace('-', '_'))
             print_success(f"{package} instalado")
         except ImportError:

@@ -225,9 +225,9 @@ Estas mejoras quedan documentadas como evolución natural del proyecto, pero no 
 | Documento | Descripción |
 |-----------|-------------|
 | **[docs/STRUCTURE.md](docs/STRUCTURE.md)** | Arquitectura y estructura del proyecto |
-| **[docs/USAGE.md](docs/USAGE.md)** | API endpoints y ejemplos |
+| **[docs/USAGE.md](docs/USAGE.md)** | API endpoints y scripts CLI |
+| **[docs/USAGE_TESTING.md](docs/USAGE_TESTING.md)** | Suite de tests y guía de testing |
 | **[.ai/context.md](.ai/context.md)** | Contexto para agentes IA |
-| **[.ai/evaluation.md](.ai/evaluation.md)** | Contexto de los criterios de evaluacion del TFM para agentes IA |
 
 ---
 
