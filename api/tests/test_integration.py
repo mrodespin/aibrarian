@@ -51,14 +51,14 @@ async def test_full_rag_pipeline():
 
     # Arrange: Inicializar servicios reales
     ollama = OllamaAdapter(
-        base_url=settings.OLLAMA_BASE_URL,
-        model=settings.OLLAMA_MODEL,
-        embedding_model=settings.OLLAMA_EMBEDDING_MODEL
+        base_url=settings.ollama_base_url,
+        model=settings.ollama_model,
+        embedding_model=settings.ollama_embedding_model
     )
 
     chromadb = ChromaDBAdapter(
-        host=settings.CHROMADB_HOST,
-        port=settings.CHROMADB_PORT,
+        host=settings.chromadb_host,
+        port=settings.chromadb_port,
         collection_name="test_integration_collection"  # Colección de test
     )
 
@@ -76,7 +76,7 @@ async def test_full_rag_pipeline():
     )
 
     # Verificar que existe el PDF de prueba
-    test_pdf = Path(settings.DATA_DIRECTORY) / "test_document.pdf"
+    test_pdf = Path(settings.data_directory) / "test_document.pdf"
     if not test_pdf.exists():
         pytest.skip(f"PDF de prueba no encontrado en {test_pdf}")
 
@@ -133,15 +133,15 @@ async def test_rag_with_empty_database():
 
     # Arrange: RAG con colección vacía
     ollama = OllamaAdapter(
-        base_url=settings.OLLAMA_BASE_URL,
-        model=settings.OLLAMA_MODEL,
-        embedding_model=settings.OLLAMA_EMBEDDING_MODEL
+        base_url=settings.ollama_base_url,
+        model=settings.ollama_model,
+        embedding_model=settings.ollama_embedding_model
     )
 
     # Usar colección diferente para no interferir con otros tests
     chromadb = ChromaDBAdapter(
-        host=settings.CHROMADB_HOST,
-        port=settings.CHROMADB_PORT,
+        host=settings.chromadb_host,
+        port=settings.chromadb_port,
         collection_name="test_empty_collection"
     )
 
@@ -175,9 +175,9 @@ async def test_ollama_connectivity():
 
     # Arrange
     ollama = OllamaAdapter(
-        base_url=settings.OLLAMA_BASE_URL,
-        model=settings.OLLAMA_MODEL,
-        embedding_model=settings.OLLAMA_EMBEDDING_MODEL
+        base_url=settings.ollama_base_url,
+        model=settings.ollama_model,
+        embedding_model=settings.ollama_embedding_model
     )
 
     # Act: Generar embedding simple
@@ -206,8 +206,8 @@ async def test_chromadb_connectivity():
 
     # Arrange
     chromadb = ChromaDBAdapter(
-        host=settings.CHROMADB_HOST,
-        port=settings.CHROMADB_PORT,
+        host=settings.chromadb_host,
+        port=settings.chromadb_port,
         collection_name="test_connectivity_check"
     )
 

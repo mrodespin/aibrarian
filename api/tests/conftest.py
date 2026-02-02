@@ -139,8 +139,14 @@ def mock_ollama():
         # En producción, Ollama retorna vectores de 768-4096 dimensiones
         return [float(hash(text) % 100) / 100.0 for _ in range(10)]
 
+    # Mock de generate_embeddings_batch (vectorización en batch)
+    async def mock_embeddings_batch(texts: List[str]) -> List[List[float]]:
+        # Retorna un embedding por cada texto
+        return [await mock_embedding(text) for text in texts]
+
     mock.generate_response = AsyncMock(side_effect=mock_generate_response)
     mock.generate_embedding = AsyncMock(side_effect=mock_embedding)
+    mock.generate_embeddings_batch = AsyncMock(side_effect=mock_embeddings_batch)
 
     return mock
 

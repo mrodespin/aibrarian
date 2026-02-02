@@ -211,15 +211,19 @@ async def test_query_handles_llm_error_gracefully(rag_service_with_mocks, sample
     """
     Test: manejar error del LLM gracefully.
 
-    Si Ollama falla, el servicio debe propagar el error de forma clara
-    o retornar un mensaje de error apropiado (según diseño).
+    Si Ollama falla, el servicio captura el error y retorna un QueryResult
+    con un mensaje de error en el answer.
     """
     # Arrange: configurar mock para lanzar excepción
     mock_ollama.generate_response = AsyncMock(side_effect=Exception("Ollama connection failed"))
 
-    # Act & Assert
-    with pytest.raises(Exception):
-        await rag_service_with_mocks.ask_question(sample_query)
+    # Act
+    response = await rag_service_with_mocks.ask_question(sample_query)
+
+    # Assert: El servicio retorna un resultado con mensaje de error
+    assert response is not None
+    assert isinstance(response, QueryResult)
+    assert "error" in response.answer.lower() or "failed" in response.answer.lower()
 
 
 @pytest.mark.unit
@@ -228,14 +232,19 @@ async def test_query_handles_chromadb_error_gracefully(rag_service_with_mocks, s
     """
     Test: manejar error de ChromaDB gracefully.
 
-    Si ChromaDB falla, el servicio debe propagar el error claramente.
+    Si ChromaDB falla, el servicio captura el error y retorna un QueryResult
+    con un mensaje de error en el answer.
     """
     # Arrange: configurar mock para lanzar excepción
     mock_chromadb.similarity_search = AsyncMock(side_effect=Exception("ChromaDB connection failed"))
 
-    # Act & Assert
-    with pytest.raises(Exception):
-        await rag_service_with_mocks.ask_question(sample_query)
+    # Act
+    response = await rag_service_with_mocks.ask_question(sample_query)
+
+    # Assert: El servicio retorna un resultado con mensaje de error
+    assert response is not None
+    assert isinstance(response, QueryResult)
+    assert "error" in response.answer.lower() or "failed" in response.answer.lower()
 
 
 # ============================================================================

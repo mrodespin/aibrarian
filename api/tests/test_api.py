@@ -239,6 +239,9 @@ def test_sync_notion_page_requires_page_id(test_client):
 def test_sync_notion_database_requires_database_id(test_client):
     """
     Test: /sync/notion/database debe requerir database_id.
+
+    El endpoint valida el database_id con lógica custom y retorna 400
+    si no está configurado (ni en request ni en settings).
     """
     # Arrange
     payload = {}
@@ -246,8 +249,8 @@ def test_sync_notion_database_requires_database_id(test_client):
     # Act
     response = test_client.post("/sync/notion/database", json=payload)
 
-    # Assert
-    assert response.status_code == 422
+    # Assert: El endpoint retorna 400 cuando falta el database_id
+    assert response.status_code == 400
 
 
 # ============================================================================
