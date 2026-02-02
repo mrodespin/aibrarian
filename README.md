@@ -226,8 +226,8 @@ Estas mejoras quedan documentadas como evolución natural del proyecto, pero no 
 |-----------|-------------|
 | **[docs/STRUCTURE.md](docs/STRUCTURE.md)** | Arquitectura y estructura del proyecto |
 | **[docs/USAGE.md](docs/USAGE.md)** | API endpoints y ejemplos |
-| **[docs/PYTHON_GUIDE.md](docs/PYTHON_GUIDE.md)** | Guía de Python para JS devs |
 | **[.ai/context.md](.ai/context.md)** | Contexto para agentes IA |
+| **[.ai/evaluation.md](.ai/evaluation.md)** | Contexto de los criterios de evaluacion del TFM para agentes IA |
 
 ---
 
@@ -237,9 +237,29 @@ Estas mejoras quedan documentadas como evolución natural del proyecto, pero no 
 
 1. **Python 3.11+**
 2. **Docker** (para ChromaDB)
-3. **Ollama** instalado localmente
+3. **Ollama** instalado localmente (Para Mac/Desarrollo local) o en Docker (Para entornos productivos)
 
 ### Instalación
+
+**Opción 1: Instalación Automática (Recomendada)**
+
+```bash
+# 1. Clonar repositorio
+git clone <URL_DEL_REPO>
+cd tfm-bibliotecario-ia
+
+# 2. Ejecutar script de instalación
+python3 setup.py
+```
+
+El script `setup.py` te guiará interactivamente por todo el proceso:
+- Detecta qué está instalado y qué falta
+- Te permite elegir entre Modo Docker o Modo Local/Híbrido
+- Instala sólo lo necesario
+- Configura el entorno automáticamente
+- Ejecuta verificación al final
+
+**Opción 2: Instalación Manual**
 
 ```bash
 # 1. Clonar repositorio
@@ -266,8 +286,7 @@ cd ..
 docker-compose up -d chromadb
 
 # 6. Verificar setup
-cd api
-python verify_setup.py
+python scripts/verify_setup.py
 ```
 
 ### Uso Básico
@@ -281,7 +300,7 @@ cd api && source venv/bin/activate
 uvicorn app.main:app --reload
 
 # Terminal 3: Ingestar documentos
-python api/ingest_pdfs.py --directory data/
+python scripts/ingest_pdfs.py
 
 # Terminal 4: Hacer consultas
 curl -X POST http://localhost:8000/ask \
@@ -289,7 +308,7 @@ curl -X POST http://localhost:8000/ask \
   -d '{"question": "¿De qué tratan los documentos?"}'
 ```
 
-Ver [docs/USAGE.md](docs/USAGE.md) para documentación completa de la API.
+Ver [docs/USAGE.md](docs/USAGE.md) para documentación completa de la API y scripts CLI.
 
 ---
 

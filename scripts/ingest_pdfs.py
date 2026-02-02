@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# /api/ingest_pdfs.py
+# /scripts/ingest_pdfs.py
 """
 Script CLI de Ingesta de PDFs - TFM Bibliotecario-IA
 
@@ -47,14 +47,13 @@ import argparse   # Librería estándar de Python para parsear argumentos CLI
 # sys.path.insert(0, ...): añade el directorio api/ al path de búsqueda de módulos.
 #
 # ¿Por qué es necesario?
-# Este script se ejecuta desde api/ como punto de entrada:
-#     cd api && python ingest_pdfs.py
-# Sin esta línea, Python no encontraría el paquete "app" porque busca
-# módulos relativo al directorio del script, y "app" está dentro de api/.
+# Este script ahora está en scripts/, pero necesita importar desde api/app/*.
+# Sin esta línea, Python no encontraría el paquete "app".
 #
-# Path(__file__).parent = directorio donde está este script = api/
-# Equivalente JS: require.resolve('./app/...')
-sys.path.insert(0, str(Path(__file__).parent))
+# Path(__file__).parent = scripts/
+# Path(__file__).parent.parent = root del proyecto
+# Path(__file__).parent.parent / "api" = api/
+sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
 
 from app.config.settings import settings
 from app.core.services.sync_service import SyncService

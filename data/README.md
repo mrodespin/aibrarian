@@ -8,14 +8,14 @@ Esta carpeta está destinada a almacenar los **documentos PDF** que serán proce
 
 2. **Ejecuta el script de ingesta**:
    ```bash
-   # Desde la carpeta /api
-   python ingest_pdfs.py
+   # Procesa todos los PDFs en /data
+   python scripts/ingest_pdfs.py
 
    # O especifica un directorio diferente
-   python ingest_pdfs.py /ruta/a/otros/pdfs
+   python scripts/ingest_pdfs.py /ruta/a/otros/pdfs
 
    # O procesa un archivo específico
-   python ingest_pdfs.py --file documento.pdf
+   python scripts/ingest_pdfs.py --file documento.pdf
    ```
 
 3. **O usa la API**:

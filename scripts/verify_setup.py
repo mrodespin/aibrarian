@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# /api/verify_setup.py
+# /scripts/verify_setup.py
 """
 Script de Verificación del Entorno - TFM Bibliotecario-IA
 
@@ -22,12 +22,13 @@ Checks que realiza (8 en total):
     8. API: health check (opcional, no falla si no está corriendo)
 
 Nota sobre rutas relativas:
-    Este script usa rutas relativas como '../data'. Se debe ejecutar
-    desde el directorio api/:
-        cd api && python verify_setup.py
+    Este script se ejecuta desde el directorio scripts/ y usa rutas
+    relativas al directorio raíz del proyecto.
 
 Uso:
-    python verify_setup.py
+    python scripts/verify_setup.py
+    # o desde scripts/
+    cd scripts && python verify_setup.py
 """
 
 # ============================================================================
@@ -339,30 +340,34 @@ def check_project_structure():
     Verifica que los directorios principales del proyecto existan.
 
     Comprueba los directorios necesarios para que el sistema funcione:
-    - app/core: lógica de negocio
-    - app/adapters: implementaciones concretas
-    - app/config: configuración
-    - ../data: directorio de PDFs (relativo a api/)
+    - api/app/core: lógica de negocio
+    - api/app/adapters: implementaciones concretas
+    - api/app/config: configuración
+    - data: directorio de PDFs
 
     Returns:
         bool: True si todos los directorios existen
     """
     print_header("6. Verificando Estructura del Proyecto")
 
+    # Calcular rutas desde la ubicación del script
+    project_root = Path(__file__).parent.parent
+
     required_dirs = [
-        'app/core',
-        'app/adapters',
-        'app/config',
-        '../data'       # Relativo a api/ → apunta al directorio /data del repo
+        project_root / 'api' / 'app' / 'core',
+        project_root / 'api' / 'app' / 'adapters',
+        project_root / 'api' / 'app' / 'config',
+        project_root / 'data'
     ]
 
     all_ok = True
-    for dir_path in required_dirs:
-        path = Path(dir_path)
+    for path in required_dirs:
+        # Mostrar path relativo para mejor legibilidad
+        rel_path = path.relative_to(project_root)
         if path.exists():
-            print_success(f"Directorio {dir_path} existe")
+            print_success(f"Directorio {rel_path} existe")
         else:
-            print_error(f"Directorio {dir_path} NO existe")
+            print_error(f"Directorio {rel_path} NO existe")
             all_ok = False
 
     return all_ok
@@ -382,7 +387,10 @@ def check_data_directory():
     """
     print_header("7. Verificando Directorio de Datos")
 
-    data_dir = Path('../data')
+    # Calcular ruta desde la ubicación del script
+    project_root = Path(__file__).parent.parent
+    data_dir = project_root / 'data'
+
     if not data_dir.exists():
         print_error("Directorio /data NO existe")
         return False

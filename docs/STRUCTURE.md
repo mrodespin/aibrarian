@@ -34,16 +34,19 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   │   └── /config/
 │   │       └── settings.py         # Configuración con Pydantic Settings
 │   │
-│   ├── ingest_pdfs.py              # Script CLI para ingestar PDFs
-│   ├── ingest_notion.py            # Script CLI para ingestar Notion
-│   ├── verify_setup.py             # Script de verificación del entorno
 │   ├── requirements.txt            # Dependencias Python
 │   ├── .env.example                # Template de variables de entorno
 │   └── Dockerfile                  # Imagen Docker para la API
 │
+├── /scripts/                       # Scripts de Automatización
+│   ├── setup.py                    # Instalación automática e interactiva
+│   ├── verify_setup.py             # Verificación del entorno (8 checks)
+│   ├── ingest_pdfs.py              # Ingesta de PDFs (CLI alternativa a API)
+│   ├── ingest_notion.py            # Ingesta de Notion (CLI alternativa a API)
+│   └── generate_test_pdf.py        # Genera PDF de prueba en /data
+│
 ├── /data/                          # Directorio para PDFs locales (MVP)
 │   ├── README.md                   # Instrucciones de uso
-│   ├── create_test_pdf.py          # Script para generar PDFs de prueba
 │   ├── test_document.pdf           # PDF de ejemplo para testing
 │   ├── test_document.txt           # Texto fuente del PDF de ejemplo
 │   └── .gitkeep                    # Mantiene el directorio en Git
@@ -141,15 +144,14 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 **Propósito:** Almacena PDFs locales para ingesta
 
 Este directorio es la fuente de datos del MVP. Los PDFs aquí son procesados por:
-1. Script CLI: `python api/ingest_pdfs.py`
+1. Script CLI: `python scripts/ingest_pdfs.py`
 2. API: `POST /sync/directory`
 
 **Estructura:**
 ```
 /data/
 ├── README.md              # Instrucciones de uso
-├── create_test_pdf.py     # Script para generar test_document.pdf
-├── test_document.pdf      # PDF de ejemplo (generado por create_test_pdf.py)
+├── test_document.pdf      # PDF de ejemplo (generado por scripts/generate_test_pdf.py)
 ├── test_document.txt      # Texto fuente del PDF de ejemplo
 ├── .gitkeep               # Mantiene directorio en Git
 └── *.pdf                  # Tus documentos PDF
@@ -330,8 +332,7 @@ Documentación de API:
 cp mis_documentos/*.pdf data/
 
 # 2. Ejecutar ingesta
-cd api
-python ingest_pdfs.py
+python scripts/ingest_pdfs.py
 ```
 
 ### 2. Fase 1 - Consultas RAG
@@ -351,7 +352,7 @@ curl -X POST http://localhost:8000/ask \
 export NOTION_API_KEY=secret_xxx
 
 # 2. Sincronizar página
-python ingest_notion.py --page PAGE_ID
+python scripts/ingest_notion.py --page PAGE_ID
 ```
 
 ---
