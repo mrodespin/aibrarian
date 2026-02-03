@@ -508,13 +508,32 @@ def setup_env_file(mode):
         shutil.copy(env_example, env_file)
         print_success("Archivo .env creado desde .env.example")
 
-        # Si es Modo A, avisar que no necesita cambios
+        # Leer el archivo .env para modificarlo según el modo
+        with open(env_file, 'r') as f:
+            content = f.read()
+
+        # Configurar OLLAMA_BASE_URL según el modo elegido
         if mode == "A":
-            print_info("Para Modo A (Docker), el .env.example ya tiene valores correctos")
-            print_info("docker-compose sobrescribe automáticamente con los nombres de contenedor")
+            # Modo A: Todo en Docker - Ollama también corre en Docker
+            ollama_url = "http://ollama:11434"
+            print_info("Modo A (Docker): Configurando Ollama para contenedor Docker")
         else:
-            print_info("Para Modo B (Local), el .env.example ya tiene valores correctos")
-            print_info("(localhost y puertos mapeados)")
+            # Modo B: Híbrido - API en Docker, Ollama nativo en Mac (GPU)
+            ollama_url = "http://host.docker.internal:11434"
+            print_info("Modo B (Híbrido): Configurando Ollama para acceso desde Docker al host")
+
+        # Reemplazar la URL de Ollama en el .env
+        # El .env.example tiene: OLLAMA_BASE_URL=http://localhost:11434
+        content = content.replace(
+            "OLLAMA_BASE_URL=http://localhost:11434",
+            f"OLLAMA_BASE_URL={ollama_url}"
+        )
+
+        # Escribir los cambios
+        with open(env_file, 'w') as f:
+            f.write(content)
+
+        print_success(f"OLLAMA_BASE_URL configurado: {ollama_url}")
 
         # Preguntar por credenciales de Notion
         print_info("\n¿Quieres configurar las credenciales de Notion ahora?")
@@ -524,11 +543,11 @@ def setup_env_file(mode):
             notion_key = input(f"{Colors.CYAN}NOTION_API_KEY: {Colors.ENDC}").strip()
             notion_db = input(f"{Colors.CYAN}NOTION_DATABASE_ID (opcional): {Colors.ENDC}").strip()
 
-            # Leer el archivo .env
+            # Leer el archivo .env actualizado
             with open(env_file, 'r') as f:
                 content = f.read()
 
-            # Reemplazar valores
+            # Reemplazar valores de Notion
             content = content.replace("NOTION_API_KEY=", f"NOTION_API_KEY={notion_key}")
             if notion_db:
                 content = content.replace("NOTION_DATABASE_ID=", f"NOTION_DATABASE_ID={notion_db}")
@@ -782,22 +801,38 @@ def main():
         print_header("✨ Instalación Completada ✨")
 
         print_success("El entorno está listo para usar")
+        print_info(f"Modo configurado: {'A (Todo en Docker)' if mode == 'A' else 'B (Híbrido - Ollama nativo)'}")
 
         print_info("\n📝 Próximos pasos:")
         print_info("")
-        print_info("  1. Iniciar servicios Docker (Ollama + ChromaDB):")
-        print_info("     docker-compose up -d")
+
+        if mode == "A":
+            # Modo A: Todo en Docker
+            print_info("  1. Iniciar TODOS los servicios Docker (Ollama + ChromaDB + API):")
+            print_info("     docker-compose up -d")
+            print_info("")
+            print_info("  2. Descargar modelos en Ollama (primera vez):")
+            print_info("     docker exec ollama ollama pull llama3.2")
+            print_info("     docker exec ollama ollama pull nomic-embed-text")
+        else:
+            # Modo B: Híbrido (Ollama nativo + Docker para el resto)
+            print_info("  1. Asegurarse de que Ollama esté corriendo:")
+            print_info("     ollama serve  # o verificar que ya está activo")
+            print_info("")
+            print_info("  2. Iniciar servicios Docker (ChromaDB):")
+            print_info("     docker-compose up -d chromadb")
+
         print_info("")
-        print_info("  2. Iniciar la API:")
-        print_info("     cd api")
-        print_info("     source venv/bin/activate")
-        print_info("     uvicorn app.main:app --reload")
+        print_info("  3. Iniciar la API (opción Docker o local):")
+        print_info("     # Opción A - Docker:")
+        print_info("     docker-compose up -d api")
+        print_info("     # Opción B - Local:")
+        print_info("     cd api && source venv/bin/activate && uvicorn app.main:app --reload")
         print_info("")
-        print_info("  3. Iniciar el Frontend (en otra terminal):")
+        print_info("  4. Iniciar el Frontend (en otra terminal):")
         print_info("     cd frontend")
         print_info("     npm run dev")
         print_info("")
-        print_info("  4. Abrir en navegador:")
         print_info("     - Frontend: http://localhost:5173")
         print_info("     - API Docs: http://localhost:8000/docs")
         print_info("")
