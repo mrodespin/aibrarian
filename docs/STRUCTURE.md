@@ -247,11 +247,10 @@ Para agregar soporte para Google Docs:
 
 ### `docker-compose.yml`
 
-Orquesta los 4 servicios del proyecto:
-- **ollama**: LLM local (modelos llama3.2 y nomic-embed-text)
-- **chromadb**: Base de datos vectorial
-- **api**: API FastAPI
-- **n8n**: Automatización de workflows
+Orquesta los 3 servicios del proyecto:
+- **ollama**: LLM local (modelos llama3.2 y nomic-embed-text) - Puerto 11434
+- **chromadb**: Base de datos vectorial - Puerto 8001 (host) → 8000 (contenedor)
+- **api**: API FastAPI - Puerto 8000
 
 **Uso:**
 ```bash

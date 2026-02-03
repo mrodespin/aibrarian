@@ -11,10 +11,10 @@ Cuando ejecutas el sistema, estos son los servicios que necesitas:
 | Servicio | URL Local | URL Interna (Docker) | Propósito |
 | :--- | :--- | :--- | :--- |
 | **FastAPI API** | `http://localhost:8000` | `http://api:8000` | API principal del proyecto (ingesta y consultas) |
-| **ChromaDB** | `http://localhost:8000` | `http://chromadb:8000` | Base de datos vectorial para embeddings |
-| **Ollama** | `http://localhost:11434` | `http://host.docker.internal:11434` | LLM local (generación de texto y embeddings) |
+| **ChromaDB** | `http://localhost:8001` | `http://chromadb:8000` | Base de datos vectorial para embeddings |
+| **Ollama** | `http://localhost:11434` | `http://ollama:11434` | LLM local (generación de texto y embeddings) |
 
-**Nota sobre Ollama:** Ollama se ejecuta en tu máquina local (no en Docker) para mejor rendimiento. Los contenedores Docker pueden acceder a él mediante `host.docker.internal`.
+**Nota sobre puertos:** ChromaDB expone el puerto 8001 en el host para evitar conflicto con la API (que usa 8000). Internamente en Docker, ChromaDB usa el puerto 8000.
 
 ---
 
@@ -517,6 +517,85 @@ echo "NOTION_API_KEY=secret_xxxxxxxxxxxxx" >> api/.env
 
 ---
 
+## 🖥️ Frontend (React + Vite)
+
+El proyecto incluye un frontend web para interactuar con el sistema RAG.
+
+### Requisitos
+
+- **Node.js 18+** (recomendado: usar `nvm` o `fnm`)
+- **npm** (incluido con Node.js)
+
+### Instalación
+
+```bash
+# 1. Ir al directorio frontend
+cd frontend
+
+# 2. Instalar dependencias
+npm install
+
+# 3. Configurar variables de entorno (opcional)
+cp .env.example .env
+# Editar .env si la API no está en localhost:8000
+```
+
+### Ejecución
+
+```bash
+# Modo desarrollo (con hot-reload)
+cd frontend
+npm run dev
+```
+
+El frontend estará disponible en: **http://localhost:5173**
+
+### Build de Producción
+
+```bash
+# Generar build optimizado
+npm run build
+
+# Los archivos se generan en frontend/dist/
+```
+
+### Configuración
+
+El frontend se configura mediante variables de entorno en `frontend/.env`:
+
+| Variable | Valor por defecto | Descripción |
+|----------|-------------------|-------------|
+| `VITE_API_URL` | `http://localhost:8000` | URL de la API FastAPI |
+
+### Funcionalidades
+
+- **Chat con RAG**: Interfaz para hacer preguntas sobre los documentos indexados
+- **Visualización de fuentes**: Muestra las fuentes citadas con su score de relevancia
+- **Historial de conversación**: Mantiene el historial durante la sesión
+- **Panel de estado**: Muestra el estado de los servicios (API, Ollama, ChromaDB)
+- **Sincronización de documentos**: Permite sincronizar PDFs y páginas de Notion
+
+### Arquitectura del Frontend
+
+```
+frontend/
+├── src/
+│   ├── api/           # Servicios que consumen la API FastAPI
+│   ├── components/    # Componentes React
+│   │   ├── chat/      # Interfaz de chat
+│   │   ├── layout/    # Header, Sidebar, Layout
+│   │   ├── stats/     # Panel de estadísticas
+│   │   ├── documents/ # Gestión de documentos
+│   │   └── common/    # Componentes reutilizables
+│   ├── context/       # Estado global (AppContext)
+│   ├── hooks/         # Custom hooks (useChat)
+│   └── utils/         # Utilidades (markdown)
+├── .env.example       # Template de configuración
+└── package.json       # Dependencias
+```
+
+---
+
 **Parte del proyecto:** TFM Bibliotecario-IA
 **Versión API:** 0.1.0
-**Stack:** FastAPI + LangChain + Ollama + ChromaDB
+**Stack:** FastAPI + LangChain + Ollama + ChromaDB + React

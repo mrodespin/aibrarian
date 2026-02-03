@@ -1,5 +1,5 @@
 # /docker-compose.yml
-# Orquesta los 4 servicios del proyecto Bibliotecario-IA.
+# Orquesta los 3 servicios del proyecto Bibliotecario-IA.
 #
 # 'version' tag removed as it is obsolete.
 
@@ -45,33 +45,21 @@ services:
       - ./api/app:/app/app
       - ./data:/app/data    # Monta el directorio de PDFs dentro del contenedor
     env_file:
-      - ./.env              # Variables generales (NOTION_API_KEY, etc.)
+      - ./api/.env          # Variables de la API (NOTION_API_KEY, etc.)
     environment:
-      # Overrides de networking para Docker: dentro de la red de compose
-      # los servicios se comunican por nombre de contenedor, no localhost.
-      # Estos valores tienen prioridad sobre los de env_file.
-      - OLLAMA_BASE_URL=http://ollama:11434
+      # Overrides de networking para Docker.
+      # NOTA: OLLAMA_BASE_URL se configura en api/.env para permitir dos modos:
+      #   - Modo Local (GPU en Mac): OLLAMA_BASE_URL=http://host.docker.internal:11434
+      #   - Modo Docker (Linux/prod): OLLAMA_BASE_URL=http://ollama:11434
+      # Ver api/.env.example para más detalles.
+      # ChromaDB siempre corre en Docker, por eso se fuerza aquí.
       - CHROMADB_HOST=chromadb
       - CHROMADB_PORT=8000
       - DATA_DIRECTORY=/app/data
     depends_on:
-      - ollama
       - chromadb
-
-  # --------------------------------------------------------------------
-  # Service 4: Automation (n8n)
-  # --------------------------------------------------------------------
-  n8n:
-    image: n8nio/n8n
-    ports:
-      - "5678:5678"
-    volumes:
-      - n8n_data:/home/node/.n8n
-    environment:
-      - GENERIC_TIMEZONE=Europe/Madrid
-      - N8N_SECURE_COOKIE=false
-    depends_on:
-      - api
+      # Si usas Ollama en Docker, descomenta la siguiente línea:
+      # - ollama
 
 # --------------------------------------------------------------------
 # Named Volumes
@@ -80,4 +68,3 @@ services:
 volumes:
   ollama_data:    # Modelos descargados por Ollama (~4GB por modelo)
   chroma_data:    # Base de datos vectorial
-  n8n_data:       # Configuración y workflows de n8n

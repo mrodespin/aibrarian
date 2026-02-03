@@ -11,7 +11,7 @@ para ejecutar Bibliotecario-IA estén correctamente instalados y configurados.
 - Cuando algo no funciona y quieres verificar que el entorno está correcto
 - Antes de ejecutar la API por primera vez
 
-Checks que realiza (8 en total):
+Checks que realiza (10 en total):
     1. Versión de Python (se requiere 3.11+)
     2. Dependencias Python instaladas
     3. Ollama: instalación, servicio y modelos
@@ -20,6 +20,8 @@ Checks que realiza (8 en total):
     6. Estructura del proyecto: directorios necesarios
     7. Directorio de datos: presencia de PDFs
     8. API: health check (opcional, no falla si no está corriendo)
+    9. Node.js: versión 18+ (para el frontend)
+    10. Frontend: dependencias instaladas (node_modules)
 
 Nota sobre rutas relativas:
     Este script se ejecuta desde el directorio scripts/ y usa rutas
@@ -503,6 +505,128 @@ async def check_api_health():
         return False
 
 
+def check_nodejs():
+    """
+    Verifica que Node.js esté instalado y sea versión 18+.
+
+    ¿Por qué Node.js 18+?
+    El frontend usa Vite 5 y React 18, que requieren Node.js 18 o superior.
+    Además, Node.js 18 es LTS (Long Term Support) hasta 2025.
+
+    Returns:
+        bool: True si Node.js 18+ está instalado
+    """
+    print_header("9. Verificando Node.js")
+
+    try:
+        result = subprocess.run(
+            ['node', '--version'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            version_str = result.stdout.strip()  # e.g., "v20.11.0"
+            print_info(f"Node.js version: {version_str}")
+
+            # Parsear versión (quitar 'v' inicial)
+            version_parts = version_str.lstrip('v').split('.')
+            major_version = int(version_parts[0])
+
+            if major_version >= 18:
+                print_success(f"Node.js {version_str} es compatible")
+
+                # También verificar npm
+                try:
+                    npm_result = subprocess.run(
+                        ['npm', '--version'],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if npm_result.returncode == 0:
+                        print_success(f"npm {npm_result.stdout.strip()} instalado")
+                except:
+                    print_warning("npm no encontrado (debería venir con Node.js)")
+
+                return True
+            else:
+                print_error(f"Node.js {version_str} es muy antiguo. Se requiere 18+")
+                print_info("Actualiza Node.js: https://nodejs.org/")
+                print_info("O usa nvm/fnm: nvm install 20")
+                return False
+        else:
+            print_error("Node.js no responde correctamente")
+            return False
+    except FileNotFoundError:
+        print_error("Node.js NO está instalado")
+        print_info("Instala desde: https://nodejs.org/")
+        print_info("O usa nvm: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash")
+        return False
+    except subprocess.TimeoutExpired:
+        print_error("Node.js no responde (timeout)")
+        return False
+
+
+def check_frontend():
+    """
+    Verifica que el frontend esté configurado correctamente.
+
+    Comprueba:
+    1. Que el directorio frontend/ exista
+    2. Que package.json exista
+    3. Que node_modules esté instalado (npm install ejecutado)
+
+    Returns:
+        bool: True si el frontend está listo para usar
+    """
+    print_header("10. Verificando Frontend")
+
+    project_root = Path(__file__).parent.parent
+    frontend_dir = project_root / 'frontend'
+
+    # Check 1: Directorio frontend existe
+    if not frontend_dir.exists():
+        print_error("Directorio frontend/ NO existe")
+        print_info("Clona el repositorio completo o ejecuta setup.py")
+        return False
+
+    print_success("Directorio frontend/ existe")
+
+    # Check 2: package.json existe
+    package_json = frontend_dir / 'package.json'
+    if not package_json.exists():
+        print_error("package.json NO encontrado en frontend/")
+        return False
+
+    print_success("package.json encontrado")
+
+    # Check 3: node_modules existe (dependencias instaladas)
+    node_modules = frontend_dir / 'node_modules'
+    if not node_modules.exists():
+        print_warning("node_modules NO encontrado")
+        print_info("Las dependencias no están instaladas")
+        print_info("Ejecuta: cd frontend && npm install")
+        return False
+
+    # Verificar que tiene contenido (no está vacío)
+    if not any(node_modules.iterdir()):
+        print_warning("node_modules está vacío")
+        print_info("Ejecuta: cd frontend && npm install")
+        return False
+
+    print_success("Dependencias del frontend instaladas (node_modules)")
+
+    # Check 4 (opcional): Verificar que react está instalado
+    react_dir = node_modules / 'react'
+    if react_dir.exists():
+        print_success("React instalado correctamente")
+    else:
+        print_warning("React no encontrado en node_modules")
+
+    return True
+
+
 # ============================================================================
 # RESUMEN DE RESULTADOS
 # ============================================================================
@@ -531,9 +655,11 @@ def print_summary(results):
         # Todo correcto: mostrar los próximos pasos para usar el sistema
         print_success("🎉 ¡TODO ESTÁ CONFIGURADO CORRECTAMENTE!")
         print_info("\nPróximos pasos:")
-        print_info("1. Iniciar API: uvicorn app.main:app --reload")
-        print_info("2. Ingestar PDFs: python ingest_pdfs.py")
-        print_info("3. Hacer consultas: curl -X POST http://localhost:8000/ask ...")
+        print_info("1. Iniciar servicios: docker-compose up -d")
+        print_info("2. Iniciar API: cd api && source venv/bin/activate && uvicorn app.main:app --reload")
+        print_info("3. Iniciar Frontend: cd frontend && npm run dev")
+        print_info("4. Abrir en navegador: http://localhost:5173")
+        print_info("5. Ingestar PDFs desde la interfaz o con: python scripts/ingest_pdfs.py")
     else:
         print_warning("⚠️  Hay algunos problemas que debes solucionar")
         print_info("\nRevisa los errores marcados con ❌ arriba")
@@ -546,13 +672,14 @@ def print_summary(results):
 # ============================================================================
 async def main():
     """
-    Función principal: ejecuta los 8 checks en secuencia y muestra el resumen.
+    Función principal: ejecuta los 10 checks en secuencia y muestra el resumen.
 
     Los checks se ejecutan en orden de dependencia lógica:
     1. Python y dependencias primero (sin estas nada funciona)
     2. Servicios externos (Ollama, Docker, ChromaDB)
     3. Estructura local del proyecto
-    4. API (último porque depende de todo lo anterior)
+    4. API (último de backend)
+    5. Node.js y frontend (para la interfaz web)
 
     Nota: los checks se ejecutan secuencialmente (no en paralelo) porque
     el output debe ser legible y ordenado en la terminal.
@@ -569,6 +696,7 @@ async def main():
     results = {}
 
     # Ejecutar checks en secuencia
+    # Backend checks
     results['python'] = check_python_version()
     results['dependencies'] = check_dependencies()
     results['ollama'] = check_ollama()
@@ -577,6 +705,10 @@ async def main():
     results['structure'] = check_project_structure()
     results['data'] = check_data_directory()
     results['api'] = await check_api_health()   # Único check async
+
+    # Frontend checks
+    results['nodejs'] = check_nodejs()
+    results['frontend'] = check_frontend()
 
     # Resumen final con conteo de pasados/fallidos
     print_summary(results)
