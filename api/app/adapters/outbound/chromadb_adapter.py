@@ -43,18 +43,21 @@ Equivalente en TypeScript:
 # ============================================================================
 # IMPORTS
 # ============================================================================
+import time
 import chromadb  # Cliente oficial de ChromaDB
 from chromadb.config import Settings as ChromaSettings  # Configuración de ChromaDB
 from typing import List, Dict, Any, Optional
-import logging
 
 # Importamos el PUERTO (interfaz) que implementamos
 from app.core.ports.vector_db_port import VectorDBPort
 from app.core.domain.models import Chunk, SourceDocument
 from app.config.settings import settings
 
+# Observabilidad: logging estructurado y métricas
+from app.core.observability import get_logger, VECTOR_SEARCH_LATENCY
 
-logger = logging.getLogger(__name__)
+
+logger = get_logger(__name__)
 
 
 # ============================================================================
@@ -110,9 +113,9 @@ class ChromaDBAdapter(VectorDBPort):
                         anonymized_telemetry=False  # No envía datos a Chroma
                     )
                 )
-                logger.info(f"Connected to ChromaDB at {settings.chromadb_url}")
+                logger.info("Connected to ChromaDB", url=settings.chromadb_url)
             except Exception as e:
-                logger.error(f"Failed to connect to ChromaDB: {e}")
+                logger.error("Failed to connect to ChromaDB", error=str(e), url=settings.chromadb_url)
                 raise
         return self._client
 
@@ -144,9 +147,9 @@ class ChromaDBAdapter(VectorDBPort):
                     name=collection_name,
                     metadata={"description": "Bibliotecario-IA document embeddings"}
                 )
-                logger.info(f"Using collection: {collection_name}")
+                logger.info("Using collection", collection_name=collection_name)
             except Exception as e:
-                logger.error(f"Failed to get/create collection {collection_name}: {e}")
+                logger.error("Failed to get/create collection", collection_name=collection_name, error=str(e))
                 raise
         return self._collections[collection_name]
 
@@ -227,11 +230,15 @@ class ChromaDBAdapter(VectorDBPort):
                 metadatas=metadatas
             )
 
-            logger.info(f"Stored {len(chunks)} chunks in collection '{collection_name}'")
+            logger.info(
+                "Stored chunks in collection",
+                count=len(chunks),
+                collection_name=collection_name
+            )
             return True
 
         except Exception as e:
-            logger.error(f"Failed to store chunks: {e}")
+            logger.error("Failed to store chunks", error=str(e), count=len(chunks))
             return False
 
     async def similarity_search(
@@ -298,7 +305,9 @@ class ChromaDBAdapter(VectorDBPort):
             if keyword_filter:
                 # $contains busca substring en el contenido del documento
                 where_document = {"$contains": keyword_filter}
-                logger.info(f"Applying keyword filter: '{keyword_filter}'")
+                logger.info("Applying keyword filter", keyword=keyword_filter)
+
+            start_time = time.perf_counter()
 
             results = collection.query(
                 query_embeddings=[query_embedding],  # Lista con una sola query
@@ -341,11 +350,20 @@ class ChromaDBAdapter(VectorDBPort):
                         )
                     )
 
-            logger.info(f"Found {len(source_docs)} similar documents")
+            # Registrar métricas
+            duration = time.perf_counter() - start_time
+            VECTOR_SEARCH_LATENCY.observe(duration)
+
+            logger.info(
+                "Similarity search completed",
+                results_found=len(source_docs),
+                duration_seconds=round(duration, 3),
+                keyword_filter=keyword_filter
+            )
             return source_docs
 
         except Exception as e:
-            logger.error(f"Similarity search failed: {e}")
+            logger.error("Similarity search failed", error=str(e))
             return []  # En caso de error, retorna lista vacía (no lanza excepción)
 
     async def delete_document(
@@ -381,11 +399,11 @@ class ChromaDBAdapter(VectorDBPort):
                 where={"document_id": document_id}
             )
 
-            logger.info(f"Deleted chunks for document: {document_id}")
+            logger.info("Deleted chunks for document", document_id=document_id)
             return True
 
         except Exception as e:
-            logger.error(f"Failed to delete document {document_id}: {e}")
+            logger.error("Failed to delete document", document_id=document_id, error=str(e))
             return False
 
     async def collection_exists(self, collection_name: str) -> bool:
@@ -411,7 +429,7 @@ class ChromaDBAdapter(VectorDBPort):
             # en el primer match (no recorre toda la lista si ya encontró)
             return any(col.name == collection_name for col in collections)
         except Exception as e:
-            logger.error(f"Failed to check collection existence: {e}")
+            logger.error("Failed to check collection existence", error=str(e), collection_name=collection_name)
             return False
 
     async def get_collection_stats(
@@ -445,7 +463,7 @@ class ChromaDBAdapter(VectorDBPort):
             }
 
         except Exception as e:
-            logger.error(f"Failed to get collection stats: {e}")
+            logger.error("Failed to get collection stats", error=str(e), collection_name=collection_name)
             # En error, retornamos estructura válida con el error
             # El frontend no falla al parsear
             return {

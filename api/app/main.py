@@ -36,7 +36,6 @@ Relación con otros ficheros:
 # ============================================================================
 # IMPORTS
 # ============================================================================
-import logging
 from contextlib import asynccontextmanager  # Para definir el ciclo de vida (startup/shutdown)
 from pathlib import Path                    # Manejo de rutas de archivos
 
@@ -49,6 +48,18 @@ from pydantic import BaseModel              # Para los modelos de request/respon
 # Modelos del dominio que se reutilizan como schemas de la API
 from app.config.settings import settings
 from app.core.domain.models import Query, QueryResult, SyncResult
+# Observabilidad: logging estructurado y métricas Prometheus
+from app.core.observability import (
+    configure_structlog,
+    get_logger,
+    MetricsMiddleware,
+    metrics_endpoint,
+    RAG_QUERIES_TOTAL,
+    RAG_QUERY_DURATION,
+    RAG_CONTEXT_CHUNKS,
+    DOCUMENTS_SYNCED,
+    CHUNKS_CREATED,
+)
 # Servicios de lógica de negocio
 from app.core.services.sync_service import SyncService
 from app.core.services.rag_service import RAGService
@@ -60,17 +71,15 @@ from app.adapters.outbound.notion_processor_adapter import NotionProcessorAdapte
 
 
 # ============================================================================
-# CONFIGURACIÓN DE LOGGING
+# CONFIGURACIÓN DE LOGGING ESTRUCTURADO
 # ============================================================================
-# basicConfig configura el sistema de logs una sola vez.
-# Si debug=True → nivel DEBUG (todo). Si no → nivel INFO (solo info e superiores).
-# El format define el aspecto de cada línea de log:
-#   "2026-01-31 10:00:00 - app.main - INFO - Starting app..."
-logging.basicConfig(
-    level=logging.INFO if not settings.debug else logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# structlog reemplaza el logging básico con logs en formato JSON.
+# Esto facilita la búsqueda y análisis en herramientas como ELK, Loki, etc.
+#
+# En desarrollo (debug=True): formato human-readable con colores
+# En producción (debug=False): formato JSON para parsing automático
+configure_structlog(json_format=not settings.debug)
+logger = get_logger(__name__)
 
 
 # ============================================================================
@@ -137,18 +146,22 @@ rag_service = RAGService(
 async def lifespan(app: FastAPI):
     """Gestor del ciclo de vida de la aplicación FastAPI."""
     # --- STARTUP ---
-    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
-    logger.info(f"Ollama URL: {settings.ollama_base_url}")
-    logger.info(f"ChromaDB URL: {settings.chromadb_url}")
+    logger.info(
+        "Starting application",
+        app_name=settings.app_name,
+        version=settings.app_version,
+        ollama_url=settings.ollama_base_url,
+        chromadb_url=settings.chromadb_url
+    )
 
     # Verificar que Ollama está corriendo antes de atender peticiones.
     # Si no está disponible, la app inicia de todas formas pero los
     # endpoints que necesitan al LLM fallarán con error descriptivo.
     is_available = await ollama_adapter.is_available()
     if not is_available:
-        logger.warning("Ollama service is not available!")
+        logger.warning("Ollama service is not available")
     else:
-        logger.info("Ollama service is ready")
+        logger.info("Ollama service is ready", model=settings.ollama_model)
 
     yield  # ← La app está activa y atiende peticiones desde aquí
 
@@ -177,6 +190,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Middleware de métricas: registra contador y latencia de cada request HTTP
+# Las métricas se exponen en /metrics para que Prometheus las recolecte
+app.add_middleware(MetricsMiddleware)
 
 
 # ============================================================================
@@ -313,8 +330,34 @@ async def get_stats():
         info = await rag_service.get_collection_info()
         return info
     except Exception as e:
-        logger.error(f"Failed to get stats: {e}")
+        logger.error("Failed to get stats", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """
+    Endpoint de métricas Prometheus.
+
+    Expone todas las métricas de la aplicación en formato Prometheus.
+    Este endpoint es scrapeado periódicamente por Prometheus para
+    recolectar métricas y almacenarlas en su base de datos de series temporales.
+
+    Métricas incluidas:
+    - http_requests_total: Contador de requests por método/endpoint/status
+    - http_request_duration_seconds: Histograma de latencias HTTP
+    - rag_queries_total: Contador de consultas RAG (éxito/error)
+    - rag_query_duration_seconds: Tiempo de procesamiento de queries
+    - documents_synced_total: Documentos sincronizados por fuente
+    - llm_requests_total: Requests al LLM por operación
+
+    Uso con Prometheus (prometheus.yml):
+        scrape_configs:
+          - job_name: 'bibliotecario-ia'
+            static_configs:
+              - targets: ['localhost:8000']
+    """
+    return await metrics_endpoint()
 
 
 # ----------------------------------------------------------------------------
@@ -352,6 +395,7 @@ async def sync_document(request: SyncFileRequest):
     """
     try:
         file_path = Path(request.file_path)
+        logger.info("Syncing PDF document", file_path=str(file_path))
 
         # Validaciones previas al procesamiento
         if not file_path.exists():
@@ -368,14 +412,21 @@ async def sync_document(request: SyncFileRequest):
 
         # Si el servicio reporta fallo, lanzar error 500
         if not result.success:
+            DOCUMENTS_SYNCED.labels(source='pdf', status='error').inc()
             raise HTTPException(status_code=500, detail=result.message)
+
+        # Registrar métricas de éxito
+        DOCUMENTS_SYNCED.labels(source='pdf', status='success').inc()
+        CHUNKS_CREATED.inc(result.chunks_created)
+        logger.info("PDF sync completed", document_id=result.document_id, chunks=result.chunks_created)
 
         return result
 
     except HTTPException:
         raise  # Re-lanza HTTPException sin envolverla en otra
     except Exception as e:
-        logger.error(f"Sync endpoint error: {e}", exc_info=True)
+        DOCUMENTS_SYNCED.labels(source='pdf', status='error').inc()
+        logger.error("Sync endpoint error", error=str(e), file_path=request.file_path)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -421,7 +472,7 @@ async def sync_upload(
             shutil.copyfileobj(file.file, temp_file)
             temp_path = Path(temp_file.name)
 
-        logger.info(f"Uploaded file saved to temp: {temp_path}")
+        logger.info("Uploaded file saved to temp", temp_path=str(temp_path), filename=file.filename)
 
         # Procesar el PDF usando el servicio existente
         result = await sync_service.sync_document_from_file(
@@ -430,26 +481,33 @@ async def sync_upload(
         )
 
         if not result.success:
+            DOCUMENTS_SYNCED.labels(source='pdf', status='error').inc()
             raise HTTPException(status_code=500, detail=result.message)
+
+        # Registrar métricas de éxito
+        DOCUMENTS_SYNCED.labels(source='pdf', status='success').inc()
+        CHUNKS_CREATED.inc(result.chunks_created)
 
         # Añadir el nombre original del archivo al mensaje
         result.message = f"Uploaded and synced: {file.filename}"
+        logger.info("Upload sync completed", filename=file.filename, chunks=result.chunks_created)
 
         return result
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Upload sync error: {e}", exc_info=True)
+        DOCUMENTS_SYNCED.labels(source='pdf', status='error').inc()
+        logger.error("Upload sync error", error=str(e), filename=file.filename)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         # Limpiar archivo temporal
         if temp_file and Path(temp_file.name).exists():
             try:
                 Path(temp_file.name).unlink()
-                logger.debug(f"Cleaned up temp file: {temp_file.name}")
+                logger.debug("Cleaned up temp file", temp_path=temp_file.name)
             except Exception as e:
-                logger.warning(f"Failed to cleanup temp file: {e}")
+                logger.warning("Failed to cleanup temp file", error=str(e))
 
 
 @app.post("/sync/directory")
@@ -487,7 +545,7 @@ async def sync_directory(directory_path: str | None = None):
         }
 
     except Exception as e:
-        logger.error(f"Directory sync error: {e}", exc_info=True)
+        logger.error("Directory sync error", error=str(e), directory=directory_path)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -511,6 +569,8 @@ async def sync_notion_page(request: SyncNotionPageRequest):
     El resto del pipeline es idéntico al de PDFs.
     """
     try:
+        logger.info("Syncing Notion page", page_id=request.page_id)
+
         # Verificar configuración antes de proceder
         if not settings.notion_api_key:
             raise HTTPException(
@@ -525,14 +585,21 @@ async def sync_notion_page(request: SyncNotionPageRequest):
         )
 
         if not result.success:
+            DOCUMENTS_SYNCED.labels(source='notion', status='error').inc()
             raise HTTPException(status_code=500, detail=result.message)
+
+        # Registrar métricas de éxito
+        DOCUMENTS_SYNCED.labels(source='notion', status='success').inc()
+        CHUNKS_CREATED.inc(result.chunks_created)
+        logger.info("Notion page sync completed", page_id=request.page_id, chunks=result.chunks_created)
 
         return result
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Notion sync endpoint error: {e}", exc_info=True)
+        DOCUMENTS_SYNCED.labels(source='notion', status='error').inc()
+        logger.error("Notion sync endpoint error", error=str(e), page_id=request.page_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -628,7 +695,8 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Notion database sync error: {e}", exc_info=True)
+        DOCUMENTS_SYNCED.labels(source='notion', status='error').inc()
+        logger.error("Notion database sync error", error=str(e), database_id=request.database_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -670,12 +738,31 @@ async def ask_question(query: Query):
             "processing_time": 2.34
         }
     """
+    import time
+    start_time = time.perf_counter()
+
     try:
+        logger.info("Processing RAG query", question=query.question[:100])
         result = await rag_service.ask_question(query)
+
+        # Registrar métricas de éxito
+        duration = time.perf_counter() - start_time
+        RAG_QUERIES_TOTAL.labels(status='success').inc()
+        RAG_QUERY_DURATION.observe(duration)
+        RAG_CONTEXT_CHUNKS.observe(len(result.source_documents))
+
+        logger.info(
+            "RAG query completed",
+            question=query.question[:50],
+            duration_seconds=round(duration, 3),
+            num_sources=len(result.source_documents)
+        )
         return result
 
     except Exception as e:
-        logger.error(f"Ask endpoint error: {e}", exc_info=True)
+        # Registrar métricas de error
+        RAG_QUERIES_TOTAL.labels(status='error').inc()
+        logger.error("Ask endpoint error", error=str(e), question=query.question[:50])
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -712,7 +799,7 @@ async def delete_document(document_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Delete endpoint error: {e}", exc_info=True)
+        logger.error("Delete endpoint error", error=str(e), document_id=document_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 
