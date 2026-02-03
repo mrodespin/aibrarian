@@ -100,7 +100,8 @@ class VectorDBPort(ABC):
         query_embedding: List[float],
         collection_name: str = "documents",
         top_k: int = 4,
-        filter_metadata: Optional[Dict[str, Any]] = None
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        keyword_filter: Optional[str] = None
     ) -> List[SourceDocument]:
         """
         Busca los chunks más similares a un vector de consulta.
@@ -119,12 +120,19 @@ class VectorDBPort(ABC):
         - Score 0.0 = vectores perpendiculares (nada en común)
         - Ejemplo: "perro" y "gato" → ~0.7, "perro" y "avión" → ~0.2
 
+        Query Expansion (búsqueda híbrida):
+        Si se proporciona keyword_filter, primero filtra documentos que
+        contienen esa palabra clave, luego rankea por similitud semántica.
+        Útil para nombres propios y títulos específicos.
+
         Args:
             query_embedding: Vector de la pregunta (lista de ~768 floats)
                            Generado por el modelo de embeddings (nomic-embed-text)
             collection_name: Colección donde buscar
             top_k: Número de resultados a devolver (default: 4)
             filter_metadata: Filtros opcionales, ej: {"source": "pdf"}
+            keyword_filter: Palabra clave para filtrar documentos (Query Expansion)
+                          Ejemplo: "Blade Runner" → solo chunks que contengan ese texto
 
         Returns:
             List[SourceDocument]: Chunks más relevantes con:

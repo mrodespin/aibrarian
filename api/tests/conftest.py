@@ -144,9 +144,20 @@ def mock_ollama():
         # Retorna un embedding por cada texto
         return [await mock_embedding(text) for text in texts]
 
+    # Mock de extract_keywords (Query Expansion)
+    async def mock_extract_keywords(question: str) -> List[str]:
+        # Extrae palabras simples de la pregunta como keywords
+        # En producción, el LLM extrae entidades y nombres propios
+        words = question.replace("¿", "").replace("?", "").split()
+        # Filtra palabras cortas y de pregunta
+        stopwords = {"qué", "es", "cómo", "cuál", "quién", "dónde", "por", "para", "el", "la", "los", "las", "un", "una"}
+        keywords = [w for w in words if len(w) > 2 and w.lower() not in stopwords]
+        return keywords[:3]  # Máximo 3 keywords
+
     mock.generate_response = AsyncMock(side_effect=mock_generate_response)
     mock.generate_embedding = AsyncMock(side_effect=mock_embedding)
     mock.generate_embeddings_batch = AsyncMock(side_effect=mock_embeddings_batch)
+    mock.extract_keywords = AsyncMock(side_effect=mock_extract_keywords)
 
     return mock
 
@@ -170,14 +181,16 @@ def mock_chromadb():
     async def mock_store(chunks: List[Chunk], collection_name: str = "documents") -> bool:
         return True  # Simula que almacenó correctamente
 
-    # Mock de similarity_search (búsqueda por similaridad)
+    # Mock de similarity_search (búsqueda por similaridad con Query Expansion)
     async def mock_similarity_search(
         query_embedding: List[float],
         collection_name: str = "documents",
         top_k: int = 4,
-        filter_metadata: Optional[Dict] = None
+        filter_metadata: Optional[Dict] = None,
+        keyword_filter: Optional[str] = None
     ) -> List[SourceDocument]:
         # Retorna SourceDocuments de ejemplo independientemente de la query
+        # Si hay keyword_filter, simula que filtra (en tests siempre devuelve resultados)
         return [
             SourceDocument(
                 document_id="doc_001",

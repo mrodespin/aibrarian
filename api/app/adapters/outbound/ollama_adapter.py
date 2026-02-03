@@ -359,3 +359,59 @@ RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
             "temperature": settings.llm_temperature,            # 0.3
             "timeout": settings.ollama_timeout                  # segundos
         }
+
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=5)
+    )
+    async def extract_keywords(self, question: str) -> List[str]:
+        """
+        Extrae palabras clave y entidades de una pregunta usando el LLM.
+
+        TÉCNICA: Query Expansion
+        El LLM identifica nombres propios, títulos, y términos clave
+        que pueden usarse para filtrar documentos antes de la búsqueda semántica.
+
+        El prompt está diseñado para:
+        - Extraer entidades nombradas (películas, personas, lugares, etc.)
+        - Devolver formato parseable (una keyword por línea)
+        - Ser rápido (temperatura baja, respuesta corta)
+
+        Args:
+            question: Pregunta del usuario
+
+        Returns:
+            List[str]: Keywords extraídas, vacía si no hay o hay error
+        """
+        try:
+            llm = self._get_llm()
+
+            # Prompt optimizado para extracción de keywords
+            extraction_prompt = f"""Extrae las palabras clave y nombres propios de esta pregunta.
+Devuelve SOLO las keywords, una por línea, sin explicaciones ni numeración.
+Si hay un título de película, libro, o nombre propio, inclúyelo exactamente como aparece.
+
+Pregunta: {question}
+
+Keywords:"""
+
+            response = await llm.ainvoke(
+                extraction_prompt,
+                temperature=0.1  # Muy bajo para respuestas consistentes
+            )
+
+            # Parsear respuesta: dividir por líneas y limpiar
+            keywords = []
+            for line in response.strip().split('\n'):
+                keyword = line.strip().strip('-').strip('•').strip()
+                # Filtrar líneas vacías y keywords muy cortas
+                if keyword and len(keyword) > 2:
+                    keywords.append(keyword)
+
+            logger.info(f"Extracted {len(keywords)} keywords from question: {keywords}")
+            return keywords
+
+        except Exception as e:
+            logger.warning(f"Failed to extract keywords: {e}")
+            # En caso de error, devolvemos lista vacía (fallback a búsqueda semántica pura)
+            return []

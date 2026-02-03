@@ -239,14 +239,20 @@ class ChromaDBAdapter(VectorDBPort):
         query_embedding: List[float],
         collection_name: str = "documents",
         top_k: int = 4,
-        filter_metadata: Optional[Dict[str, Any]] = None
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        keyword_filter: Optional[str] = None
     ) -> List[SourceDocument]:
         """
-        Realiza búsqueda por similitud en ChromaDB.
+        Realiza búsqueda por similitud en ChromaDB con soporte para Query Expansion.
 
         ESTE ES EL MÉTODO MÁS IMPORTANTE DEL SISTEMA.
         Es donde ocurre la búsqueda semántica: dado el vector de una pregunta,
         encuentra los chunks más semánticamente similares.
+
+        QUERY EXPANSION (búsqueda híbrida):
+        Si se proporciona keyword_filter, primero filtra documentos que contienen
+        esa palabra clave (case-insensitive), luego rankea por similitud semántica.
+        Esto mejora resultados para nombres propios y títulos específicos.
 
         ¿Cómo funciona internamente?
         1. ChromaDB calcula la distancia L2 entre el vector de la pregunta
@@ -270,6 +276,8 @@ class ChromaDBAdapter(VectorDBPort):
             top_k: Número máximo de resultados (ej: 3 chunks más relevantes)
             filter_metadata: Filtro opcional por metadatos
                            Ejemplo: {"source": "pdf"} → solo chunks de PDFs
+            keyword_filter: Palabra clave para filtrar documentos (Query Expansion)
+                           Ejemplo: "Blade Runner" → solo chunks que contengan ese texto
 
         Returns:
             List[SourceDocument]: Chunks relevantes ordenados por similitud
@@ -278,15 +286,25 @@ class ChromaDBAdapter(VectorDBPort):
             collection = self._get_or_create_collection(collection_name)
 
             # ============================================================
-            # QUERY A CHROMADB
+            # QUERY A CHROMADB (con soporte para Query Expansion)
             # ============================================================
             # query_embeddings en lista porque ChromaDB acepta batch queries
             # include: qué campos devolver (por defecto solo ids)
             # where: filtro por metadatos (como WHERE en SQL)
+            # where_document: filtro por contenido del documento (keyword search)
+
+            # Construir filtro de documento si se proporciona keyword
+            where_document = None
+            if keyword_filter:
+                # $contains busca substring en el contenido del documento
+                where_document = {"$contains": keyword_filter}
+                logger.info(f"Applying keyword filter: '{keyword_filter}'")
+
             results = collection.query(
                 query_embeddings=[query_embedding],  # Lista con una sola query
                 n_results=top_k,                     # Máximo de resultados
                 where=filter_metadata,               # Filtro opcional (None = sin filtro)
+                where_document=where_document,       # Filtro por contenido (Query Expansion)
                 include=["documents", "metadatas", "distances"]  # Campos a incluir
             )
 
