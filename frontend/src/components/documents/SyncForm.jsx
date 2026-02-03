@@ -9,17 +9,13 @@ import { Card, Button, Input, Alert, Spinner } from '../common';
 
 const TABS = [
   { id: 'pdf', label: 'PDF' },
-  { id: 'directory', label: 'Directorio' },
   { id: 'notion', label: 'Notion' },
 ];
 
 export function SyncForm() {
   const { refreshStats } = useApp();
   const [activeTab, setActiveTab] = useState('pdf');
-  const [pdfMode, setPdfMode] = useState('upload'); // 'upload' or 'path'
   const [selectedFile, setSelectedFile] = useState(null);
-  const [filePath, setFilePath] = useState('');
-  const [directoryPath, setDirectoryPath] = useState('');
   const [notionId, setNotionId] = useState('');
   const [notionType, setNotionType] = useState('page'); // 'page' or 'database'
   const [isSyncing, setIsSyncing] = useState(false);
@@ -34,21 +30,10 @@ export function SyncForm() {
 
       switch (activeTab) {
         case 'pdf':
-          if (pdfMode === 'upload') {
-            if (!selectedFile) {
-              throw new Error('Selecciona un archivo PDF');
-            }
-            response = await syncApi.uploadFile(selectedFile);
-          } else {
-            if (!filePath.trim()) {
-              throw new Error('Ingresa la ruta del archivo PDF');
-            }
-            response = await syncApi.syncFile(filePath.trim());
+          if (!selectedFile) {
+            throw new Error('Selecciona un archivo PDF');
           }
-          break;
-
-        case 'directory':
-          response = await syncApi.syncDirectory(directoryPath.trim() || null);
+          response = await syncApi.uploadFile(selectedFile);
           break;
 
         case 'notion':
@@ -76,7 +61,7 @@ export function SyncForm() {
           successMessage += ` - ${response.message}`;
         }
       } else if (response.total !== undefined) {
-        // Batch sync (directory or Notion database)
+        // Batch sync (Notion database)
         const successful = response.successful ?? 0;
         const total = response.total ?? 0;
         successMessage = `Sincronizado: ${successful}/${total} documentos`;
@@ -98,7 +83,6 @@ export function SyncForm() {
       refreshStats();
 
       // Clear inputs on success
-      setFilePath('');
       setSelectedFile(null);
       setNotionId('');
       // Reset file input
@@ -118,12 +102,7 @@ export function SyncForm() {
   const canSync = () => {
     switch (activeTab) {
       case 'pdf':
-        if (pdfMode === 'upload') {
-          return selectedFile !== null;
-        }
-        return filePath.trim().length > 0;
-      case 'directory':
-        return true; // Can sync with default directory
+        return selectedFile !== null;
       case 'notion':
         // Page requires ID, database can use .env default
         if (notionType === 'page') {
@@ -175,80 +154,29 @@ export function SyncForm() {
       {/* Tab content */}
       <div className="space-y-4">
         {activeTab === 'pdf' && (
-          <>
-            {/* Mode selector */}
-            <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setPdfMode('upload')}
-                className={`px-3 py-1 text-sm rounded ${
-                  pdfMode === 'upload'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                Subir archivo
-              </button>
-              <button
-                onClick={() => setPdfMode('path')}
-                className={`px-3 py-1 text-sm rounded ${
-                  pdfMode === 'path'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                Ruta del servidor
-              </button>
-            </div>
-
-            {pdfMode === 'upload' ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Seleccionar PDF
-                </label>
-                <input
-                  id="pdf-file-input"
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={handleFileChange}
-                  disabled={isSyncing}
-                  className="block w-full text-sm text-gray-500
-                    file:mr-4 file:py-2 file:px-4
-                    file:rounded file:border-0
-                    file:text-sm file:font-medium
-                    file:bg-blue-50 file:text-blue-700
-                    hover:file:bg-blue-100
-                    disabled:opacity-50"
-                />
-                {selectedFile && (
-                  <p className="text-sm text-green-600 mt-1">
-                    Seleccionado: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                  </p>
-                )}
-              </div>
-            ) : (
-              <Input
-                label="Ruta del archivo PDF"
-                placeholder="/ruta/al/documento.pdf"
-                value={filePath}
-                onChange={(e) => setFilePath(e.target.value)}
-                disabled={isSyncing}
-              />
-            )}
-          </>
-        )}
-
-        {activeTab === 'directory' && (
           <div>
-            <Input
-              label="Directorio (opcional)"
-              placeholder="./data (por defecto)"
-              value={directoryPath}
-              onChange={(e) => setDirectoryPath(e.target.value)}
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Seleccionar PDF
+            </label>
+            <input
+              id="pdf-file-input"
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={handleFileChange}
               disabled={isSyncing}
+              className="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded file:border-0
+                file:text-sm file:font-medium
+                file:bg-blue-50 file:text-blue-700
+                hover:file:bg-blue-100
+                disabled:opacity-50"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Deja vacío para usar el directorio por defecto (./data)
-            </p>
+            {selectedFile && (
+              <p className="text-sm text-green-600 mt-1">
+                Seleccionado: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+              </p>
+            )}
           </div>
         )}
 
@@ -315,6 +243,11 @@ export function SyncForm() {
             {result.message}
           </Alert>
         )}
+
+        {/* Admin tip */}
+        <p className="text-xs text-gray-400 mt-4 pt-3 border-t border-gray-100">
+          💡 Para sincronización masiva, usa <code className="bg-gray-100 px-1 rounded">python scripts/sync_documents.py</code>
+        </p>
       </div>
     </Card>
   );

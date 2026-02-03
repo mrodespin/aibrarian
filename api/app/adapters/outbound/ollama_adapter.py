@@ -201,12 +201,21 @@ class OllamaAdapter(LLMPort):
             # Si hay contexto (chunks de ChromaDB), se estructura el prompt
             # para que el LLM use esa información como base
             if context:
-                full_prompt = f"""Context information:
+                full_prompt = f"""Eres un asistente bibliotecario que SOLO responde usando la información proporcionada en el contexto.
+
+REGLAS ESTRICTAS:
+1. SOLO usa la información del contexto para responder
+2. NO uses tu conocimiento general o información externa
+3. Si la información no está en el contexto, di "No tengo información sobre eso en mi base de conocimientos"
+4. Cita las fuentes cuando sea relevante
+5. Responde en el mismo idioma que la pregunta
+
+CONTEXTO (información de tu base de conocimientos):
 {context}
 
-Question: {prompt}
+PREGUNTA DEL USUARIO: {prompt}
 
-Answer based on the context above:"""
+RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
             else:
                 # Sin contexto: la pregunta se envía directa al LLM
                 # (el LLM responderá con su conocimiento general)
