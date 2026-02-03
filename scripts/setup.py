@@ -25,7 +25,8 @@ Modos de instalación soportados:
 6. Inicia servicios con docker-compose
 7. Configura entorno Python (venv + dependencias)
 8. Crea archivo .env con configuración correcta
-9. Ejecuta verify_setup.py para confirmar
+9. Configura entorno Frontend (Node.js + npm install)
+10. Ejecuta verify_setup.py para confirmar
 
 Requisitos previos:
 - macOS (soporte para Linux/Windows pendiente)
@@ -546,15 +547,133 @@ def setup_env_file(mode):
 
 
 # ============================================================================
+# CONFIGURACIÓN DEL FRONTEND
+# ============================================================================
+def check_nodejs():
+    """
+    Verifica que Node.js 18+ esté instalado.
+
+    Returns:
+        bool: True si Node.js 18+ está disponible
+    """
+    if not is_installed("node"):
+        return False
+
+    try:
+        result = run_command("node --version")
+        version_str = result.stdout.strip().lstrip('v')
+        major_version = int(version_str.split('.')[0])
+        return major_version >= 18
+    except:
+        return False
+
+
+def setup_frontend():
+    """
+    Configura el frontend: verifica Node.js e instala dependencias.
+
+    Returns:
+        bool: True si el frontend quedó configurado correctamente
+    """
+    print_header("Configurando Frontend")
+
+    project_root = Path(__file__).parent.parent
+    frontend_dir = project_root / "frontend"
+
+    # Verificar que el directorio frontend existe
+    if not frontend_dir.exists():
+        print_error("Directorio frontend/ no encontrado")
+        print_info("Asegúrate de haber clonado el repositorio completo")
+        return False
+
+    print_success("Directorio frontend/ encontrado")
+
+    # Verificar Node.js
+    if not is_installed("node"):
+        print_error("Node.js NO está instalado")
+        print_info("El frontend requiere Node.js 18+")
+        print_info("")
+        print_info("Opciones de instalación:")
+        print_info("  1. Descarga desde: https://nodejs.org/")
+        print_info("  2. Con Homebrew: brew install node")
+        print_info("  3. Con nvm: nvm install 20")
+        print_info("")
+
+        if ask_yes_no("¿Instalar Node.js con Homebrew?", default=True):
+            try:
+                print_info("Instalando Node.js...")
+                run_command("brew install node")
+                print_success("Node.js instalado correctamente")
+            except subprocess.CalledProcessError:
+                print_error("Falló la instalación de Node.js")
+                print_info("Instálalo manualmente y vuelve a ejecutar setup.py")
+                return False
+        else:
+            print_warning("Saltando configuración del frontend")
+            print_info("Puedes configurarlo manualmente después:")
+            print_info("  cd frontend && npm install")
+            return True
+
+    # Verificar versión de Node.js
+    try:
+        result = run_command("node --version")
+        version_str = result.stdout.strip()
+        print_info(f"Node.js version: {version_str}")
+
+        major_version = int(version_str.lstrip('v').split('.')[0])
+        if major_version < 18:
+            print_warning(f"Node.js {version_str} es antiguo. Se recomienda 18+")
+            print_info("Actualiza con: brew upgrade node")
+    except:
+        pass
+
+    print_success("Node.js está instalado")
+
+    # Verificar npm
+    if is_installed("npm"):
+        try:
+            result = run_command("npm --version")
+            print_success(f"npm {result.stdout.strip()} disponible")
+        except:
+            pass
+
+    # Verificar si node_modules existe
+    node_modules = frontend_dir / "node_modules"
+    if node_modules.exists() and any(node_modules.iterdir()):
+        print_success("Dependencias del frontend ya instaladas")
+
+        if not ask_yes_no("¿Reinstalar dependencias?", default=False):
+            return True
+
+    # Instalar dependencias
+    print_info("Instalando dependencias del frontend (npm install)...")
+    print_info("Esto puede tardar 1-2 minutos...")
+
+    try:
+        subprocess.run(
+            ["npm", "install"],
+            cwd=frontend_dir,
+            check=True
+        )
+        print_success("Dependencias del frontend instaladas correctamente")
+        return True
+    except subprocess.CalledProcessError as e:
+        print_error("Falló la instalación de dependencias del frontend")
+        print_info("Intenta manualmente: cd frontend && npm install")
+        return False
+
+
+# ============================================================================
 # VERIFICACIÓN FINAL
 # ============================================================================
 def run_verification():
     """Ejecuta el script de verificación."""
     print_header("Verificación Final del Setup")
 
-    api_dir = Path(__file__).parent.parent / "api"
-    verify_script = api_dir / "verify_setup.py"
-    venv_python = api_dir / "venv" / "bin" / "python"
+    project_root = Path(__file__).parent.parent
+    scripts_dir = Path(__file__).parent
+    verify_script = scripts_dir / "verify_setup.py"
+    venv_python = project_root / "api" / "venv" / "bin" / "python"
 
     if not verify_script.exists():
         print_warning("Script de verificación no encontrado")
@@ -566,7 +685,7 @@ def run_verification():
         # Ejecutar verify_setup.py sin capturar output para que el usuario lo vea
         result = subprocess.run(
             [str(venv_python), str(verify_script)],
-            cwd=api_dir,
+            cwd=project_root,
             check=False
         )
 
@@ -653,7 +772,10 @@ def main():
         if not setup_env_file(mode):
             return
 
-        # 10. Verificación final
+        # 10. Configurar Frontend
+        setup_frontend()  # No fallamos si esto no funciona (es opcional para desarrollo)
+
+        # 11. Verificación final
         run_verification()
 
         # Resumen final
@@ -662,17 +784,26 @@ def main():
         print_success("El entorno está listo para usar")
 
         print_info("\n📝 Próximos pasos:")
-        print_info("  1. Iniciar la API:")
+        print_info("")
+        print_info("  1. Iniciar servicios Docker (Ollama + ChromaDB):")
+        print_info("     docker-compose up -d")
+        print_info("")
+        print_info("  2. Iniciar la API:")
         print_info("     cd api")
         print_info("     source venv/bin/activate")
         print_info("     uvicorn app.main:app --reload")
         print_info("")
-        print_info("  2. La API estará en: http://localhost:8000")
-        print_info("  3. Documentación: http://localhost:8000/docs")
+        print_info("  3. Iniciar el Frontend (en otra terminal):")
+        print_info("     cd frontend")
+        print_info("     npm run dev")
+        print_info("")
+        print_info("  4. Abrir en navegador:")
+        print_info("     - Frontend: http://localhost:5173")
+        print_info("     - API Docs: http://localhost:8000/docs")
         print_info("")
         print_info("📚 Recursos:")
         print_info("  - README.md: Guía general")
-        print_info("  - docs/USAGE.md: Endpoints de la API")
+        print_info("  - docs/USAGE.md: Endpoints de la API y Frontend")
         print_info("  - .ai/context.md: Contexto completo del proyecto")
 
     except KeyboardInterrupt:

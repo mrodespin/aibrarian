@@ -21,6 +21,12 @@ export function StatsPanel() {
             <h4 className="text-sm font-medium text-gray-500 mb-2">Servicios</h4>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
+                <span className="text-sm">API FastAPI</span>
+                <Badge variant={health.api ? 'success' : 'error'}>
+                  {health.api ? 'Conectado' : 'Desconectado'}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-sm">Ollama (LLM)</span>
                 <Badge variant={health.ollama ? 'success' : 'error'}>
                   {health.ollama ? 'Conectado' : 'Desconectado'}

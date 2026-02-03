@@ -29,7 +29,7 @@ export function ChatContainer() {
   const { messages, isLoading, sendMessage, clearHistory } = useChat();
   const { health } = useApp();
 
-  const servicesAvailable = health.ollama && health.chromadb;
+  const servicesAvailable = health.api && health.ollama && health.chromadb;
 
   return (
     <div className="h-full flex flex-col bg-gray-50">

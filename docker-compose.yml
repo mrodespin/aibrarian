@@ -45,18 +45,21 @@ services:
       - ./api/app:/app/app
       - ./data:/app/data    # Monta el directorio de PDFs dentro del contenedor
     env_file:
-      - ./.env              # Variables generales (NOTION_API_KEY, etc.)
+      - ./api/.env          # Variables de la API (NOTION_API_KEY, etc.)
     environment:
-      # Overrides de networking para Docker: dentro de la red de compose
-      # los servicios se comunican por nombre de contenedor, no localhost.
-      # Estos valores tienen prioridad sobre los de env_file.
-      - OLLAMA_BASE_URL=http://ollama:11434
+      # Overrides de networking para Docker.
+      # NOTA: OLLAMA_BASE_URL se configura en api/.env para permitir dos modos:
+      #   - Modo Local (GPU en Mac): OLLAMA_BASE_URL=http://host.docker.internal:11434
+      #   - Modo Docker (Linux/prod): OLLAMA_BASE_URL=http://ollama:11434
+      # Ver api/.env.example para más detalles.
+      # ChromaDB siempre corre en Docker, por eso se fuerza aquí.
       - CHROMADB_HOST=chromadb
       - CHROMADB_PORT=8000
       - DATA_DIRECTORY=/app/data
     depends_on:
-      - ollama
       - chromadb
+      # Si usas Ollama en Docker, descomenta la siguiente línea:
+      # - ollama
 
 # --------------------------------------------------------------------
 # Named Volumes

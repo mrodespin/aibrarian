@@ -32,6 +32,9 @@ export function Header({ onMenuClick }) {
 
         {/* Service status badges */}
         <div className="flex items-center gap-2">
+          <Badge variant={health.api ? 'success' : 'error'}>
+            API {health.api ? 'ON' : 'OFF'}
+          </Badge>
           <Badge variant={health.ollama ? 'success' : 'error'}>
             Ollama {health.ollama ? 'ON' : 'OFF'}
           </Badge>

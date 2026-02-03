@@ -13,6 +13,7 @@ const POLL_INTERVAL = 30000; // 30 seconds
 export function AppProvider({ children }) {
   const [health, setHealth] = useState({
     status: 'unknown',
+    api: false,
     ollama: false,
     chromadb: false,
     lastChecked: null,
@@ -31,14 +32,19 @@ export function AppProvider({ children }) {
       const data = await healthApi.getHealth();
       setHealth({
         status: data.status || 'healthy',
+        api: true, // Si llegamos aquí, la API responde
         ollama: data.services?.ollama ?? false,
         chromadb: data.services?.chromadb ?? false,
         lastChecked: new Date(),
       });
     } catch (err) {
+      // La API no responde
       setHealth(prev => ({
         ...prev,
         status: 'error',
+        api: false,
+        ollama: false,
+        chromadb: false,
         lastChecked: new Date(),
       }));
     }
