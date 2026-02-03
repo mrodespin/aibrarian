@@ -18,11 +18,12 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 ## 🛠️ Stack Tecnológico
 
 * **Framework Backend:** **Python** con **FastAPI**
-* **Orquestación de IA:** **LangChain**
+* **Orquestación de IA:** **LangChain** con **Query Expansion**
 * **Modelo de Lenguaje (LLM):** **Ollama** (ej. `llama3.2`)
 * **Base de Datos Vectorial:** **ChromaDB**
 * **Fuentes de Datos:** **PDFs locales** y **Notion API**
-* **Frontend:** **React** con **Vite** y **Tailwind CSS**
+* **Frontend:** **React 18** + **Vite 5** + **Tailwind CSS v4** (Linear Dark Mode)
+* **Observabilidad:** **Structlog** + **Prometheus** + **OpenTelemetry**
 * **Contenerización:** **Docker Compose**
 
 ---
@@ -41,7 +42,7 @@ graph TD
     classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
     classDef phase1 fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
     classDef extension fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
-    classDef frontend fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
+    classDef observability fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
 
     %% --- Fuentes de Datos ---
     subgraph "Fuentes de Documentos"
@@ -51,15 +52,22 @@ graph TD
 
     %% --- Adaptadores de Entrada ---
     subgraph "Capa de Presentación"
+        UI["Frontend React<br>Chat + Sync UI<br>Linear Dark Mode"]
         CLI["Scripts CLI<br>ingest_pdfs.py<br>ingest_notion.py"]
-        API["FastAPI REST<br>/sync, /ask"]
-        UI["Frontend Web<br>(React + Vite)"]
+        API["FastAPI REST<br>/sync, /ask, /health"]
+    end
+
+    %% --- Observabilidad ---
+    subgraph "Observabilidad"
+        Logging["Structlog<br>Logging Estructurado"]
+        Metrics["Prometheus<br>Métricas"]
+        Tracing["OpenTelemetry<br>Tracing"]
     end
 
     %% --- Núcleo Hexagonal ---
     subgraph "Núcleo de Negocio (Hexágono)"
         SyncService["SyncService<br>Pipeline de Ingesta"]
-        RAGService["RAGService<br>Consultas Q&A"]
+        RAGService["RAGService<br>Query Expansion + RAG"]
         Ports["Puertos<br>DocumentProcessor<br>LLM<br>VectorDB"]
     end
 
@@ -71,29 +79,37 @@ graph TD
         ChromaAdapter["ChromaDB<br>Vector Store"]
     end
 
-    %% --- Conexiones MVP (Verde) ---
-    PDFs --> CLI
+    %% --- Conexiones Presentación ---
+    UI --> API
     CLI --> API
+    PDFs --> CLI
+    NotionAPI --> UI
+
+    %% --- Conexiones API a Servicios ---
     API --> SyncService
+    API --> RAGService
+
+    %% --- Conexiones Servicios a Puertos ---
     SyncService --> Ports
+    RAGService --> Ports
+
+    %% --- Conexiones Puertos a Adaptadores ---
     Ports --> PDFAdapter
+    Ports --> NotionAdapter
     Ports --> OllamaAdapter
     Ports --> ChromaAdapter
 
-    %% --- Conexiones Fase 1 (Azul) ---
-    UI --> API
-    API --> RAGService
-    RAGService --> Ports
-
-    %% --- Conexiones Extensión (Naranja) ---
-    NotionAPI --> API
-    Ports --> NotionAdapter
+    %% --- Observabilidad ---
+    API -.-> Logging
+    SyncService -.-> Metrics
+    RAGService -.-> Tracing
 
     %% --- Asignación de Clases ---
     class PDFs,CLI,SyncService,PDFAdapter,ChromaAdapter mvp
-    class UI,RAGService,OllamaAdapter phase1
+    class UI,RAGService,OllamaAdapter,API phase1
     class NotionAPI,NotionAdapter extension
-    class API,Ports mvp
+    class Logging,Metrics,Tracing observability
+    class Ports mvp
 ```
 ---
 
@@ -162,7 +178,7 @@ flowchart TD
 ```
 
 ### **Fase 1: Sistema RAG (Chatbot)**
-El chatbot inteligente que responde preguntas usando la base de conocimientos indexada. (Azul).
+El chatbot inteligente con Query Expansion que responde preguntas usando la base de conocimientos indexada. (Azul).
 
 ```mermaid
 flowchart TD
@@ -172,33 +188,123 @@ flowchart TD
 
     %% --- Nodos ---
     A["Usuario<br>Hace pregunta"]
-    B["Frontend Web<br>Interfaz chat"]
+    B["Frontend React<br>Chat Interface"]
     C["API FastAPI<br>POST /ask"]
     D["RAGService<br>Orquestador"]
+    QE["Query Expansion<br>LLM genera keywords"]
     E["Ollama Embeddings<br>Vectoriza pregunta"]
-    F["ChromaDB<br>Búsqueda similaridad"]
+    F["ChromaDB<br>Búsqueda similaridad<br>+ keyword filter"]
     G["RAGService<br>Construye prompt"]
     H["Ollama LLM<br>Genera respuesta"]
     I["Respuesta + Fuentes<br>al usuario"]
 
     %% --- Asignación de Clases ---
-    class A,B,C,D,E,G,H,I phase1
+    class A,B,C,D,QE,E,G,H,I phase1
     class F mvp
 
     %% --- Flujo Fase 1 ---
     A --> B
     B --> C
     C --> D
-    D -->|"1. Embedding query"| E
-    E -->|"2. Vector pregunta"| D
-    D -->|"3. Busca contexto"| F
-    F -->|"4. Top-K chunks<br>(PDFs/Notion)"| D
-    D -->|"5. Prompt con contexto"| G
-    G -->|"6. Genera respuesta"| H
-    H -->|"7. Respuesta + fuentes"| D
+    D -->|"1. Query Expansion"| QE
+    QE -->|"2. Keywords extraídos"| D
+    D -->|"3. Embedding query"| E
+    E -->|"4. Vector pregunta"| D
+    D -->|"5. Búsqueda híbrida"| F
+    F -->|"6. Top-K chunks<br>(PDFs/Notion)"| D
+    D -->|"7. Prompt con contexto"| G
+    G -->|"8. Genera respuesta"| H
+    H -->|"9. Respuesta + fuentes"| D
     D --> C
     C --> B
     B --> I
+```
+
+---
+
+## 🔍 Observabilidad
+
+El sistema incluye una **capa completa de observabilidad** para monitoreo en producción:
+
+### **Logging Estructurado** (Structlog)
+- Logs en formato JSON para fácil parsing
+- Contexto enriquecido (request_id, user_id, timestamps)
+- Niveles configurables por módulo
+
+### **Métricas** (Prometheus)
+- `vector_search_latency_seconds`: Latencia de búsquedas vectoriales
+- `llm_generation_time_seconds`: Tiempo de generación del LLM
+- `documents_synced_total`: Contador de documentos procesados
+- Endpoint `/metrics` para scraping
+
+### **Tracing** (OpenTelemetry)
+- Trazas distribuidas end-to-end
+- Spans para cada operación crítica
+- Integración con Jaeger/Zipkin (opcional)
+
+**Arquitectura de Observabilidad:**
+
+```mermaid
+graph LR
+    %% --- Definiciones de Estilo ---
+    classDef app fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
+    classDef obs fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
+    classDef external fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
+
+    %% --- Aplicación ---
+    subgraph "Aplicación"
+        API["FastAPI<br>Endpoints"]
+        Services["Services<br>RAGService<br>SyncService"]
+        Adapters["Adapters<br>Ollama<br>ChromaDB"]
+    end
+
+    %% --- Capa de Observabilidad ---
+    subgraph "Observability Layer"
+        Logger["Structlog<br>Structured Logging"]
+        Metrics["Prometheus<br>Metrics Registry"]
+        Tracer["OpenTelemetry<br>Tracing"]
+    end
+
+    %% --- Sistemas Externos ---
+    subgraph "External Systems (Opcional)"
+        LogAgg["Log Aggregator<br>ELK/Loki"]
+        MetricsDB["Prometheus Server<br>Time Series DB"]
+        TracingBackend["Jaeger/Zipkin<br>Tracing Backend"]
+    end
+
+    %% --- Flujo de Observabilidad ---
+    API --> Logger
+    API --> Metrics
+    API --> Tracer
+
+    Services --> Logger
+    Services --> Metrics
+    Services --> Tracer
+
+    Adapters --> Logger
+    Adapters --> Metrics
+
+    %% --- Exportación ---
+    Logger -.->|JSON Logs| LogAgg
+    Metrics -.->|/metrics endpoint| MetricsDB
+    Tracer -.->|OTLP| TracingBackend
+
+    %% --- Asignación de Clases ---
+    class API,Services,Adapters app
+    class Logger,Metrics,Tracer obs
+    class LogAgg,MetricsDB,TracingBackend external
+```
+
+**Ejemplo de uso:**
+```python
+# Los logs estructurados se generan automáticamente
+logger.info("Query processed",
+           query=query,
+           results_count=len(sources),
+           latency=duration)
+
+# Las métricas se registran automáticamente
+VECTOR_SEARCH_LATENCY.observe(duration)
 ```
 
 ---
@@ -274,18 +380,45 @@ python scripts/verify_setup.py
 
 ### Uso Básico
 
+**Opción A: Con Frontend (Recomendado)**
+
 ```bash
 # Terminal 1: Ollama
 ollama serve
 
-# Terminal 2: API
+# Terminal 2: ChromaDB
+docker-compose up -d chromadb
+
+# Terminal 3: API Backend
 cd api && source venv/bin/activate
 uvicorn app.main:app --reload
 
-# Terminal 3: Ingestar documentos
+# Terminal 4: Frontend React
+cd frontend
+npm install  # Solo la primera vez
+npm run dev
+
+# Abrir navegador en http://localhost:5173
+```
+
+El frontend incluye:
+- 💬 **Chat Interface** con Linear Dark Mode
+- 📊 **Panel de Estadísticas** en tiempo real
+- 📁 **Sincronización de Documentos** (PDF y Notion) desde la UI
+- 📈 **Visualización de Fuentes** con scores de relevancia
+
+**Opción B: Solo API (sin Frontend)**
+
+```bash
+# Terminal 1: Ollama + API
+ollama serve &
+cd api && source venv/bin/activate
+uvicorn app.main:app --reload
+
+# Terminal 2: Ingestar documentos
 python scripts/ingest_pdfs.py
 
-# Terminal 4: Hacer consultas
+# Terminal 3: Hacer consultas vía cURL
 curl -X POST http://localhost:8000/ask \
   -H "Content-Type: application/json" \
   -d '{"question": "¿De qué tratan los documentos?"}'

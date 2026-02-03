@@ -20,9 +20,14 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   │   │   │   ├── vector_db_port.py
 │   │   │   │   ├── llm_port.py
 │   │   │   │   └── document_processor_port.py
-│   │   │   └── /services/          # Servicios de lógica de negocio
-│   │   │       ├── sync_service.py      # Pipeline de ingesta
-│   │   │       └── rag_service.py       # Sistema RAG (consultas)
+│   │   │   ├── /services/          # Servicios de lógica de negocio
+│   │   │   │   ├── sync_service.py      # Pipeline de ingesta
+│   │   │   │   └── rag_service.py       # Sistema RAG (consultas)
+│   │   │   │
+│   │   │   └── /observability/     # Capa de observabilidad
+│   │   │       ├── __init__.py          # Configuración de logging (Structlog)
+│   │   │       ├── metrics.py           # Métricas Prometheus
+│   │   │       └── tracing.py           # OpenTelemetry tracing
 │   │   │
 │   │   ├── /adapters/              # Adaptadores (implementaciones)
 │   │   │   └── /outbound/          # Adaptadores de salida
@@ -51,8 +56,26 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   ├── test_document.txt           # Texto fuente del PDF de ejemplo
 │   └── .gitkeep                    # Mantiene el directorio en Git
 │
-├── /frontend/                      # Frontend React (Futuro - Fase 1)
-│   └── .gitkeep                    # Placeholder hasta la implementación
+├── /frontend/                      # Frontend React (✅ IMPLEMENTADO)
+│   ├── /src/                       # Código fuente
+│   │   ├── main.jsx                # Entry point
+│   │   ├── App.jsx                 # Root component
+│   │   ├── index.css               # Global styles + Tailwind @theme (Linear Dark Mode)
+│   │   ├── /api/                   # API client layer
+│   │   ├── /hooks/                 # Custom React hooks
+│   │   ├── /context/               # React context providers
+│   │   ├── /components/            # Componentes React
+│   │   │   ├── /layout/            # Layout components
+│   │   │   ├── /chat/              # Chat interface
+│   │   │   ├── /documents/         # Document management
+│   │   │   ├── /stats/             # Statistics panel
+│   │   │   └── /common/            # Reusable components
+│   │   └── /utils/                 # Utilities (markdown, etc.)
+│   ├── package.json                # Dependencies
+│   ├── vite.config.js              # Vite configuration
+│   ├── tailwind.config.js          # Tailwind CSS configuration
+│   ├── postcss.config.js           # PostCSS configuration
+│   └── README.md                   # Frontend documentation
 │
 ├── /.ai/                           # Contexto para Agentes IA (Universal)
 │   ├── context.md                  # Contexto completo del proyecto (stack, arquitectura, comandos)
@@ -102,6 +125,18 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
   - Carga variables de entorno
   - Valores por defecto
   - Validación de tipos
+
+**📊 Observability (Observabilidad)**
+- `observability/`: Capa de observabilidad completa
+  - `__init__.py`: Configuración de logging (Structlog)
+  - `metrics.py`: Métricas Prometheus (histogramas, contadores)
+  - `tracing.py`: OpenTelemetry tracing setup
+
+**Métricas disponibles:**
+- `vector_search_latency_seconds`: Latencia de búsquedas vectoriales
+- `llm_generation_time_seconds`: Tiempo de generación del LLM
+- `documents_synced_total`: Contador de documentos sincronizados
+- Endpoint `/metrics` para Prometheus scraping
 
 #### **Endpoints Principales:**
 
@@ -161,85 +196,92 @@ Los archivos `test_document.*` y `create_test_pdf.py` están destinados a testin
 
 ---
 
-### `/frontend` - Interfaz Web (Fase 1)
+### `/frontend` - Interfaz Web ✅ **IMPLEMENTADO**
 
-**Lenguaje:** JavaScript
-**Framework:** React + Vite
-**Estado:** Estructura básica (implementación futura)
+**Lenguaje:** JavaScript (React 18)
+**Framework:** React + Vite 5 + Tailwind CSS v4
+**Estado:** **Completamente funcional** con Linear Dark Mode
 
-**Funcionalidad planeada:**
-- Interfaz de chat para interactuar con el RAG
-- Visualización de fuentes de información
-- Historial de conversaciones
-- Muestra de metadatos de documentos
+**Estructura:**
+```
+frontend/src/
+├── main.jsx                    # Entry point
+├── App.jsx                     # Root component
+├── index.css                   # Global styles + Tailwind @theme
+│
+├── /api/                       # API Client Layer
+│   ├── client.js               # Base fetch wrapper
+│   ├── health.js               # GET /health, /stats
+│   ├── chat.js                 # POST /ask
+│   ├── sync.js                 # POST /sync/*
+│   └── documents.js            # DELETE /documents/{id}
+│
+├── /hooks/
+│   └── useChat.js              # Chat state management
+│
+├── /context/
+│   └── AppContext.jsx          # Global app state (health, stats)
+│
+├── /components/
+│   ├── /layout/
+│   │   ├── Header.jsx          # Top bar + service status
+│   │   ├── Sidebar.jsx         # Stats + Documents panel
+│   │   └── Layout.jsx          # Main layout grid
+│   │
+│   ├── /chat/
+│   │   ├── ChatContainer.jsx   # Chat orchestrator
+│   │   ├── MessageList.jsx     # Scrollable messages
+│   │   ├── MessageItem.jsx     # Single message bubble
+│   │   ├── ChatInput.jsx       # Textarea + send button
+│   │   └── SourceCard.jsx      # Document source with relevance
+│   │
+│   ├── /documents/
+│   │   ├── DocumentPanel.jsx   # Document management container
+│   │   └── SyncForm.jsx        # PDF/Notion sync interface
+│   │
+│   ├── /stats/
+│   │   └── StatsPanel.jsx      # Service stats + collection info
+│   │
+│   └── /common/
+│       ├── Button.jsx          # Reusable button component
+│       ├── Input.jsx           # Reusable input component
+│       ├── Badge.jsx           # Status badges
+│       ├── Card.jsx            # Card container
+│       ├── Spinner.jsx         # Loading spinner
+│       └── Alert.jsx           # Alert/notification
+│
+└── /utils/
+    └── markdown.jsx            # Markdown rendering
+```
+
+**Funcionalidades implementadas:**
+- ✅ **Chat Interface**: Conversación completa con el RAG
+- ✅ **Linear Dark Mode**: Diseño profesional inspirado en Linear
+- ✅ **Document Sync UI**: Sincronización de PDFs y Notion desde el frontend
+- ✅ **Real-time Stats**: Panel de estadísticas en vivo
+- ✅ **Source Visualization**: Fuentes con scores de relevancia y contenido expandible
+- ✅ **Responsive Design**: Mobile-first con sidebar colapsable
+- ✅ **Service Health**: Indicadores de estado de Ollama, ChromaDB y API
 
 **Integración:**
-- Consume endpoint `POST /ask` para consultas
-- Muestra respuestas y fuentes devueltas por la API
+- Consume todos los endpoints de la API (`/health`, `/stats`, `/ask`, `/sync/*`)
+- Polling automático para estadísticas en tiempo real
+- Manejo de errores y estados de carga
 
 ---
 
-## 🏗️ Arquitectura Hexagonal Explicada
+## 🏗️ Arquitectura Hexagonal
 
-La estructura del proyecto implementa **Arquitectura Hexagonal** (también conocida como Puertos y Adaptadores):
+El proyecto sigue **Arquitectura Hexagonal (Puertos y Adaptadores)**. Ver diagrama completo en [README.md](../README.md#-arquitectura-del-sistema).
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    Adaptadores                      │
-│                    de Entrada                       │
-│         (FastAPI, CLI Scripts, Frontend)            │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│              NÚCLEO HEXAGONAL                       │
-│                                                     │
-│  ┌─────────────┐         ┌─────────────┐          │
-│  │  Services   │────────▶│   Ports     │          │
-│  │  (Lógica)   │         │ (Interfaces)│          │
-│  └─────────────┘         └─────────────┘          │
-│         │                        ▲                 │
-│         │                        │                 │
-│         ▼                        │                 │
-│  ┌─────────────┐                 │                │
-│  │   Domain    │                 │                │
-│  │  (Modelos)  │                 │                │
-│  └─────────────┘                 │                │
-└──────────────────────────────────┼─────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────┐
-│                Adaptadores                          │
-│                de Salida                            │
-│    (ChromaDB, Ollama, PDF, Notion)                 │
-└─────────────────────────────────────────────────────┘
-```
+**Capas principales:**
+- **Domain** (`core/domain/`): Entidades de negocio
+- **Ports** (`core/ports/`): Interfaces abstractas
+- **Services** (`core/services/`): Lógica de negocio
+- **Adapters** (`adapters/outbound/`): Implementaciones concretas
+- **Observability** (`core/observability/`): Logging, métricas y tracing
 
-### **Qué contiene cada capa:**
-
-| Capa | Directorio | Responsabilidad |
-|------|-----------|-----------------|
-| **Domain** | `core/domain/` | Entidades del dominio (`Document`, `Chunk`, `Query`). Estructuras de datos que representan los conceptos principales del sistema, independientes de cualquier infraestructura. |
-| **Ports** | `core/ports/` | Interfaces abstractas (contratos). Definen **cómo** hablar con el exterior sin implementar el **cómo**. |
-| **Services** | `core/services/` | Lógica de negocio (orquestación). `SyncService` coordina la ingesta, `RAGService` coordina las consultas. Conocen los puertos, pero no saben qué adaptador concreto hay detrás. |
-| **Adapters (outbound)** | `adapters/outbound/` | Implementaciones concretas de los puertos. Conectan la lógica de negocio con servicios externos (ChromaDB, Ollama, PDF, Notion). |
-| **Adapters (inbound)** | `main.py` + scripts CLI | Puntos de entrada al sistema. Las rutas de FastAPI (`main.py`) y los scripts CLI (`ingest_pdfs.py`, `ingest_notion.py`) actúan de adaptadores de entrada sin un directorio dedicado. |
-
-### **Ventajas de esta Arquitectura:**
-
-1. **Testabilidad**: Los servicios pueden probarse con mocks de los puertos
-2. **Intercambiabilidad**: Cambiar ChromaDB por Pinecone solo requiere crear un nuevo adaptador
-3. **Independencia**: La lógica de negocio no depende de frameworks específicos
-4. **Mantenibilidad**: Cambios en implementaciones no afectan la lógica core
-5. **Escalabilidad**: Fácil agregar nuevas fuentes de datos (Google Docs, Confluence, etc.)
-
-### **Ejemplo Práctico:**
-
-Para agregar soporte para Google Docs:
-1. ✅ Crear `google_docs_adapter.py` que implemente `DocumentProcessorPort`
-2. ✅ Inyectar el adaptador en `SyncService`
-3. ❌ **NO** necesitas cambiar `SyncService` (ya funciona con cualquier `DocumentProcessorPort`)
-4. ❌ **NO** necesitas cambiar `RAGService` (no sabe de dónde vienen los datos)
+**Beneficio clave**: Cambiar un adaptador (ej: ChromaDB → Pinecone) no requiere modificar la lógica de negocio
 
 ---
 
@@ -300,59 +342,29 @@ Documentación de API:
 
 ## 📦 Dependencias Principales
 
-### Python (Backend)
+**Backend (Python):**
+- FastAPI + Uvicorn + Pydantic Settings
+- LangChain + LangChain-Ollama + LangChain-Chroma
+- ChromaDB, PyPDF, Notion-Client
+- Structlog, Prometheus-Client, OpenTelemetry
 
-**Core API:**
-- `fastapi` - Framework web moderno y rápido
-- `uvicorn` - Servidor ASGI
-- `pydantic-settings` - Gestión de configuración
+**Frontend (JavaScript):**
+- React 18 + Vite 5
+- Tailwind CSS v4 + @tailwindcss/postcss
+- Ver `frontend/package.json` para lista completa
 
-**LangChain & RAG:**
-- `langchain` - Framework para aplicaciones LLM
-- `langchain-ollama` - Integración con Ollama
-- `langchain-chroma` - Integración con ChromaDB
-
-**Document Processing:**
-- `pypdf` - Lectura de PDFs
-- `notion-client` - Cliente de Notion API
-
-**Utilities:**
-- `chromadb` - Cliente de base de datos vectorial
-- `httpx` - Cliente HTTP asíncrono
-- `tenacity` - Lógica de reintentos
+Ver `api/requirements.txt` para versiones exactas
 
 ---
 
-## 🚀 Flujo de Desarrollo
+## 🚀 Flujo de Uso
 
-### 1. MVP - Ingesta de PDFs
-```bash
-# 1. Colocar PDFs en /data
-cp mis_documentos/*.pdf data/
+Ver [README.md - Quick Start](../README.md#-quick-start) para instrucciones completas de instalación y uso.
 
-# 2. Ejecutar ingesta
-python scripts/ingest_pdfs.py
-```
-
-### 2. Fase 1 - Consultas RAG
-```bash
-# 1. Iniciar API
-uvicorn app.main:app --reload
-
-# 2. Hacer consultas
-curl -X POST http://localhost:8000/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question": "¿De qué trata el documento?"}'
-```
-
-### 3. Extensión - Notion
-```bash
-# 1. Configurar API key
-export NOTION_API_KEY=secret_xxx
-
-# 2. Sincronizar página
-python scripts/ingest_notion.py --page PAGE_ID
-```
+**Resumen:**
+1. **Instalar**: `python3 setup.py` (automático) o manual
+2. **Iniciar servicios**: Ollama + API + Frontend
+3. **Usar**: Interfaz web en `http://localhost:5173` o API REST
 
 ---
 
@@ -373,4 +385,4 @@ python scripts/ingest_notion.py --page PAGE_ID
 
 **Proyecto:** TFM Bibliotecario-IA
 **Arquitectura:** Hexagonal (Puertos y Adaptadores)
-**Stack:** Python + FastAPI + LangChain + Ollama + ChromaDB
+**Stack:** Python + FastAPI + LangChain + Ollama + ChromaDB + React + Observabilidad
