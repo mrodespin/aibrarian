@@ -16,6 +16,8 @@ const TABS = [
 export function SyncForm() {
   const { refreshStats } = useApp();
   const [activeTab, setActiveTab] = useState('pdf');
+  const [pdfMode, setPdfMode] = useState('upload'); // 'upload' or 'path'
+  const [selectedFile, setSelectedFile] = useState(null);
   const [filePath, setFilePath] = useState('');
   const [directoryPath, setDirectoryPath] = useState('');
   const [notionId, setNotionId] = useState('');
@@ -32,10 +34,17 @@ export function SyncForm() {
 
       switch (activeTab) {
         case 'pdf':
-          if (!filePath.trim()) {
-            throw new Error('Ingresa la ruta del archivo PDF');
+          if (pdfMode === 'upload') {
+            if (!selectedFile) {
+              throw new Error('Selecciona un archivo PDF');
+            }
+            response = await syncApi.uploadFile(selectedFile);
+          } else {
+            if (!filePath.trim()) {
+              throw new Error('Ingresa la ruta del archivo PDF');
+            }
+            response = await syncApi.syncFile(filePath.trim());
           }
-          response = await syncApi.syncFile(filePath.trim());
           break;
 
         case 'directory':
@@ -43,13 +52,14 @@ export function SyncForm() {
           break;
 
         case 'notion':
-          if (!notionId.trim()) {
-            throw new Error('Ingresa el ID de Notion');
-          }
           if (notionType === 'page') {
+            if (!notionId.trim()) {
+              throw new Error('Ingresa el ID de la página de Notion');
+            }
             response = await syncApi.syncNotionPage(notionId.trim());
           } else {
-            response = await syncApi.syncNotionDatabase(notionId.trim());
+            // Database: ID opcional, usa el del .env si está vacío
+            response = await syncApi.syncNotionDatabase(notionId.trim() || null);
           }
           break;
 
@@ -57,14 +67,31 @@ export function SyncForm() {
           throw new Error('Tipo de sincronización no válido');
       }
 
-      // Format success message
+      // Format success message based on response type
       let successMessage;
       if (response.chunks_created !== undefined) {
+        // Single document sync (PDF or Notion page)
         successMessage = `Sincronizado: ${response.chunks_created} chunks creados`;
+        if (response.message) {
+          successMessage += ` - ${response.message}`;
+        }
       } else if (response.total !== undefined) {
-        successMessage = `Sincronizado: ${response.successful}/${response.total} documentos`;
+        // Batch sync (directory or Notion database)
+        const successful = response.successful ?? 0;
+        const total = response.total ?? 0;
+        successMessage = `Sincronizado: ${successful}/${total} documentos`;
+        if (response.failed > 0) {
+          successMessage += ` (${response.failed} fallidos)`;
+        }
+        // Add details if available
+        if (response.results && response.results.length > 0) {
+          const totalChunks = response.results.reduce(
+            (sum, r) => sum + (r.chunks_created || 0), 0
+          );
+          successMessage += ` - ${totalChunks} chunks totales`;
+        }
       } else {
-        successMessage = 'Sincronización completada';
+        successMessage = response.message || 'Sincronización completada';
       }
 
       setResult({ success: true, message: successMessage });
@@ -72,7 +99,11 @@ export function SyncForm() {
 
       // Clear inputs on success
       setFilePath('');
+      setSelectedFile(null);
       setNotionId('');
+      // Reset file input
+      const fileInput = document.getElementById('pdf-file-input');
+      if (fileInput) fileInput.value = '';
 
     } catch (err) {
       setResult({
@@ -87,13 +118,33 @@ export function SyncForm() {
   const canSync = () => {
     switch (activeTab) {
       case 'pdf':
+        if (pdfMode === 'upload') {
+          return selectedFile !== null;
+        }
         return filePath.trim().length > 0;
       case 'directory':
         return true; // Can sync with default directory
       case 'notion':
-        return notionId.trim().length > 0;
+        // Page requires ID, database can use .env default
+        if (notionType === 'page') {
+          return notionId.trim().length > 0;
+        }
+        return true; // Database can be empty (uses .env default)
       default:
         return false;
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        setResult({ success: false, message: 'Solo se permiten archivos PDF' });
+        e.target.value = '';
+        return;
+      }
+      setSelectedFile(file);
+      setResult(null);
     }
   };
 
@@ -124,13 +175,66 @@ export function SyncForm() {
       {/* Tab content */}
       <div className="space-y-4">
         {activeTab === 'pdf' && (
-          <Input
-            label="Ruta del archivo PDF"
-            placeholder="/ruta/al/documento.pdf"
-            value={filePath}
-            onChange={(e) => setFilePath(e.target.value)}
-            disabled={isSyncing}
-          />
+          <>
+            {/* Mode selector */}
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => setPdfMode('upload')}
+                className={`px-3 py-1 text-sm rounded ${
+                  pdfMode === 'upload'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                Subir archivo
+              </button>
+              <button
+                onClick={() => setPdfMode('path')}
+                className={`px-3 py-1 text-sm rounded ${
+                  pdfMode === 'path'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                Ruta del servidor
+              </button>
+            </div>
+
+            {pdfMode === 'upload' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Seleccionar PDF
+                </label>
+                <input
+                  id="pdf-file-input"
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={handleFileChange}
+                  disabled={isSyncing}
+                  className="block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded file:border-0
+                    file:text-sm file:font-medium
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100
+                    disabled:opacity-50"
+                />
+                {selectedFile && (
+                  <p className="text-sm text-green-600 mt-1">
+                    Seleccionado: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                  </p>
+                )}
+              </div>
+            ) : (
+              <Input
+                label="Ruta del archivo PDF"
+                placeholder="/ruta/al/documento.pdf"
+                value={filePath}
+                onChange={(e) => setFilePath(e.target.value)}
+                disabled={isSyncing}
+              />
+            )}
+          </>
         )}
 
         {activeTab === 'directory' && (
@@ -172,13 +276,20 @@ export function SyncForm() {
                 Base de datos
               </button>
             </div>
-            <Input
-              label={notionType === 'page' ? 'ID de página' : 'ID de base de datos'}
-              placeholder="abc123..."
-              value={notionId}
-              onChange={(e) => setNotionId(e.target.value)}
-              disabled={isSyncing}
-            />
+            <div>
+              <Input
+                label={notionType === 'page' ? 'ID de página' : 'ID de base de datos (opcional)'}
+                placeholder={notionType === 'page' ? 'abc123... (requerido)' : 'Vacío = usar configuración .env'}
+                value={notionId}
+                onChange={(e) => setNotionId(e.target.value)}
+                disabled={isSyncing}
+              />
+              {notionType === 'database' && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Deja vacío para usar la base de datos configurada en el servidor
+                </p>
+              )}
+            </div>
           </>
         )}
 

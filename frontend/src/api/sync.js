@@ -1,14 +1,16 @@
 /**
  * Document sync API services
- * Consumes: POST /sync, /sync/directory, /sync/notion, /sync/notion/database
+ * Consumes: POST /sync, /sync/upload, /sync/directory, /sync/notion, /sync/notion/database
  */
 
-import { api } from './client';
+import { api, ApiError } from './client';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const syncApi = {
   /**
-   * Sync a single PDF file
-   * @param {string} filePath - Path to the PDF file
+   * Sync a single PDF file by server path
+   * @param {string} filePath - Path to the PDF file on the server
    * @param {string} [collectionName] - Optional collection name
    * @returns {Promise<{document_id, chunks_created, success, message}>}
    */
@@ -17,6 +19,37 @@ export const syncApi = {
       file_path: filePath,
       collection_name: collectionName,
     }),
+
+  /**
+   * Upload and sync a PDF file from the browser
+   * @param {File} file - File object from input[type=file]
+   * @param {string} [collectionName] - Optional collection name
+   * @returns {Promise<{document_id, chunks_created, success, message}>}
+   */
+  uploadFile: async (file, collectionName = null) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (collectionName) {
+      formData.append('collection_name', collectionName);
+    }
+
+    const response = await fetch(`${API_BASE_URL}/sync/upload`, {
+      method: 'POST',
+      body: formData,
+      // Note: Don't set Content-Type header - browser sets it with boundary
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new ApiError(
+        data.detail || `Upload failed: ${response.status}`,
+        response.status,
+        data
+      );
+    }
+
+    return response.json();
+  },
 
   /**
    * Sync all PDFs in a directory

@@ -40,7 +40,9 @@ import logging
 from contextlib import asynccontextmanager  # Para definir el ciclo de vida (startup/shutdown)
 from pathlib import Path                    # Manejo de rutas de archivos
 
-from fastapi import FastAPI, HTTPException  # Framework web + excepciones HTTP
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form  # Framework web + excepciones HTTP
+import tempfile
+import shutil
 from fastapi.middleware.cors import CORSMiddleware  # Middleware para permitir origen cruzado
 from pydantic import BaseModel              # Para los modelos de request/response de la API
 
@@ -375,6 +377,79 @@ async def sync_document(request: SyncFileRequest):
     except Exception as e:
         logger.error(f"Sync endpoint error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/sync/upload", response_model=SyncResult)
+async def sync_upload(
+    file: UploadFile = File(...),
+    collection_name: str = Form(None)
+):
+    """
+    Sube y sincroniza un archivo PDF desde el navegador.
+
+    Este endpoint acepta multipart/form-data con un archivo PDF.
+    El archivo se guarda temporalmente, se procesa y luego se elimina.
+
+    Ejemplo con curl:
+        curl -X POST "http://localhost:8000/sync/upload" \
+             -F "file=@documento.pdf"
+
+    Args:
+        file: Archivo PDF subido (multipart/form-data)
+        collection_name: Colección destino (opcional)
+
+    Returns:
+        SyncResult con el resultado de la sincronización
+    """
+    # Validar que es un PDF
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are supported. Please upload a .pdf file."
+        )
+
+    # Validar content type
+    if file.content_type and file.content_type != 'application/pdf':
+        logger.warning(f"Unexpected content type: {file.content_type}")
+
+    temp_file = None
+    try:
+        # Crear archivo temporal para guardar el PDF
+        # suffix mantiene la extensión .pdf para que el procesador lo reconozca
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            # Copiar contenido del upload al archivo temporal
+            shutil.copyfileobj(file.file, temp_file)
+            temp_path = Path(temp_file.name)
+
+        logger.info(f"Uploaded file saved to temp: {temp_path}")
+
+        # Procesar el PDF usando el servicio existente
+        result = await sync_service.sync_document_from_file(
+            file_path=temp_path,
+            collection_name=collection_name
+        )
+
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.message)
+
+        # Añadir el nombre original del archivo al mensaje
+        result.message = f"Uploaded and synced: {file.filename}"
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Upload sync error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Limpiar archivo temporal
+        if temp_file and Path(temp_file.name).exists():
+            try:
+                Path(temp_file.name).unlink()
+                logger.debug(f"Cleaned up temp file: {temp_file.name}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp file: {e}")
 
 
 @app.post("/sync/directory")
