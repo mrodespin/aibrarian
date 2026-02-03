@@ -8,7 +8,7 @@ para el proyecto Bibliotecario-IA. Detecta qué está instalado y qué falta,
 luego instala sólo lo necesario.
 
 Modos de instalación soportados:
-    - Modo A (Docker): Todo en contenedores (ollama, chromadb, api, n8n)
+    - Modo A (Docker): Todo en contenedores (ollama, chromadb, api)
     - Modo B (Local/Híbrido): Ollama nativo + ChromaDB en Docker
 
 ¿Cuándo usar este script?
@@ -375,7 +375,7 @@ def setup_docker_services(mode):
     print_header("Configurando Servicios Docker")
 
     if mode == "A":
-        print_info("Iniciando todos los servicios (ollama, chromadb, api, n8n)...")
+        print_info("Iniciando todos los servicios (ollama, chromadb, api)...")
         try:
             subprocess.run(
                 ["docker-compose", "up", "-d"],

@@ -3,7 +3,7 @@
 ![TFM](https://img.shields.io/badge/Proyecto-TFM_MDEV_IA-blue.svg)
 ![Licencia](https://img.shields.io/badge/Licencia-MIT-green.svg)
 
-TFM que implementa un asistente RAG ('Bibliotecario IA') para consultar documentos de Notion usando Ollama y LangChain, con sincronización automática vía n8n.
+TFM que implementa un asistente RAG ('Bibliotecario IA') para consultar documentos (PDFs locales y Notion) usando Ollama y LangChain.
 
 ---
 
@@ -19,10 +19,10 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 
 * **Framework Backend:** **Python** con **FastAPI**
 * **Orquestación de IA:** **LangChain**
-* **Modelo de Lenguaje (LLM):** **Ollama** (ej. `llama3` o `mistral`)
+* **Modelo de Lenguaje (LLM):** **Ollama** (ej. `llama3.2`)
 * **Base de Datos Vectorial:** **ChromaDB**
-* **Fuente de Datos:** **Notion API**
-* **Automatización / Sincronización:** **n8n** (self-hosted)
+* **Fuentes de Datos:** **PDFs locales** y **Notion API**
+* **Frontend:** **React** con **Vite** y **Tailwind CSS**
 * **Contenerización:** **Docker Compose**
 
 ---
@@ -32,9 +32,8 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 El proyecto sigue un patrón de **Arquitectura Hexagonal (Puertos y Adaptadores)** y se desarrolla en fases incrementales:
 
 * **MVP (Verde):** Pipeline de ingesta de PDFs locales - Garantiza funcionalidad básica del TFM
-* **Fase 1 (Azul):** Sistema RAG completo para consultas - El chatbot IA
+* **Fase 1 (Azul):** Sistema RAG completo para consultas - El chatbot IA con frontend React
 * **Extensión (Naranja):** Integración con Notion API - Valor añadido y diferenciación
-* **Futuro (Gris):** Automatización con n8n y notificaciones - Mejoras opcionales
 
 ```mermaid
 graph TD
@@ -42,7 +41,7 @@ graph TD
     classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
     classDef phase1 fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
     classDef extension fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
-    classDef future fill:#f5f5f5,stroke:#999,stroke-width:2px,stroke-dasharray: 5 5;
+    classDef frontend fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
 
     %% --- Fuentes de Datos ---
     subgraph "Fuentes de Documentos"
@@ -54,8 +53,7 @@ graph TD
     subgraph "Capa de Presentación"
         CLI["Scripts CLI<br>ingest_pdfs.py<br>ingest_notion.py"]
         API["FastAPI REST<br>/sync, /ask"]
-        UI["Frontend Web<br>(React)"]
-        N8N["n8n Workflows<br>(Futuro)"]
+        UI["Frontend Web<br>(React + Vite)"]
     end
 
     %% --- Núcleo Hexagonal ---
@@ -91,14 +89,10 @@ graph TD
     NotionAPI --> API
     Ports --> NotionAdapter
 
-    %% --- Conexiones Futuro (Gris) ---
-    N8N -.-> API
-
     %% --- Asignación de Clases ---
     class PDFs,CLI,SyncService,PDFAdapter,ChromaAdapter mvp
     class UI,RAGService,OllamaAdapter phase1
     class NotionAPI,NotionAdapter extension
-    class N8N future
     class API,Ports mvp
 ```
 ---
@@ -206,17 +200,6 @@ flowchart TD
     C --> B
     B --> I
 ```
-
-### **Futuro: Automatización con n8n**
-Mejoras opcionales para automatizar sincronización y notificaciones. (Gris - No implementado).
-
-**Posibles extensiones:**
-- Workflow n8n que detecte cambios en Notion y sincronice automáticamente
-- Notificaciones por email cuando se añaden nuevos documentos
-- Webhooks para integración con otros sistemas
-- Sincronización programada (cron jobs)
-
-Estas mejoras quedan documentadas como evolución natural del proyecto, pero no son necesarias para demostrar el valor del TFM.
 
 ---
 

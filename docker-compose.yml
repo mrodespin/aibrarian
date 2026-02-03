@@ -1,5 +1,5 @@
 # /docker-compose.yml
-# Orquesta los 4 servicios del proyecto Bibliotecario-IA.
+# Orquesta los 3 servicios del proyecto Bibliotecario-IA.
 #
 # 'version' tag removed as it is obsolete.
 
@@ -58,21 +58,6 @@ services:
       - ollama
       - chromadb
 
-  # --------------------------------------------------------------------
-  # Service 4: Automation (n8n)
-  # --------------------------------------------------------------------
-  n8n:
-    image: n8nio/n8n
-    ports:
-      - "5678:5678"
-    volumes:
-      - n8n_data:/home/node/.n8n
-    environment:
-      - GENERIC_TIMEZONE=Europe/Madrid
-      - N8N_SECURE_COOKIE=false
-    depends_on:
-      - api
-
 # --------------------------------------------------------------------
 # Named Volumes
 # --------------------------------------------------------------------
@@ -80,4 +65,3 @@ services:
 volumes:
   ollama_data:    # Modelos descargados por Ollama (~4GB por modelo)
   chroma_data:    # Base de datos vectorial
-  n8n_data:       # Configuración y workflows de n8n

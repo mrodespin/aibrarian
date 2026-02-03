@@ -11,10 +11,10 @@ Cuando ejecutas el sistema, estos son los servicios que necesitas:
 | Servicio | URL Local | URL Interna (Docker) | Propósito |
 | :--- | :--- | :--- | :--- |
 | **FastAPI API** | `http://localhost:8000` | `http://api:8000` | API principal del proyecto (ingesta y consultas) |
-| **ChromaDB** | `http://localhost:8000` | `http://chromadb:8000` | Base de datos vectorial para embeddings |
-| **Ollama** | `http://localhost:11434` | `http://host.docker.internal:11434` | LLM local (generación de texto y embeddings) |
+| **ChromaDB** | `http://localhost:8001` | `http://chromadb:8000` | Base de datos vectorial para embeddings |
+| **Ollama** | `http://localhost:11434` | `http://ollama:11434` | LLM local (generación de texto y embeddings) |
 
-**Nota sobre Ollama:** Ollama se ejecuta en tu máquina local (no en Docker) para mejor rendimiento. Los contenedores Docker pueden acceder a él mediante `host.docker.internal`.
+**Nota sobre puertos:** ChromaDB expone el puerto 8001 en el host para evitar conflicto con la API (que usa 8000). Internamente en Docker, ChromaDB usa el puerto 8000.
 
 ---
 
