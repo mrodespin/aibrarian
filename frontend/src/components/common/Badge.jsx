@@ -8,11 +8,11 @@ export function Badge({
   className = '',
 }) {
   const variants = {
-    default: 'bg-gray-100 text-gray-800',
-    success: 'bg-green-100 text-green-800',
-    error: 'bg-red-100 text-red-800',
-    warning: 'bg-yellow-100 text-yellow-800',
-    info: 'bg-blue-100 text-blue-800',
+    default: 'bg-bg-800 text-text-200 border border-bg-700',
+    success: 'bg-success-500/20 text-success-400 border border-success-500/30',
+    error: 'bg-error-500/20 text-error-400 border border-error-500/30',
+    warning: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
+    info: 'bg-accent-500/20 text-accent-400 border border-accent-500/30',
   };
 
   return (

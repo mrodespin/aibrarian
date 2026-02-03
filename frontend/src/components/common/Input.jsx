@@ -11,22 +11,24 @@ export function Input({
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-text-100 mb-1">
           {label}
         </label>
       )}
       <input
         className={`
           w-full px-3 py-2 border rounded-lg
-          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-          disabled:bg-gray-100 disabled:cursor-not-allowed
-          ${error ? 'border-red-500' : 'border-gray-300'}
+          bg-bg-850 text-text-50 placeholder-text-400
+          focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500
+          disabled:bg-bg-900 disabled:cursor-not-allowed disabled:text-text-400
+          transition-all
+          ${error ? 'border-error-500' : 'border-bg-700 hover:border-bg-600'}
           ${className}
         `}
         {...props}
       />
       {error && (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <p className="mt-1 text-sm text-error-400">{error}</p>
       )}
     </div>
   );

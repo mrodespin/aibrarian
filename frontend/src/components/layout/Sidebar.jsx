@@ -7,13 +7,13 @@ import { DocumentPanel } from '../documents/DocumentPanel';
 
 export function Sidebar({ onClose }) {
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-bg-850">
       {/* Header with close button (mobile) */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 lg:hidden">
-        <h2 className="font-semibold text-gray-900">Panel</h2>
+      <div className="flex items-center justify-between p-4 border-b border-bg-700 lg:hidden">
+        <h2 className="font-semibold text-text-50">Panel</h2>
         <button
           onClick={onClose}
-          className="p-2 rounded-lg hover:bg-gray-100"
+          className="p-2 rounded-lg hover:bg-bg-800 text-text-100 transition-colors"
           aria-label="Cerrar panel"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -8,8 +8,25 @@ import { useApp } from '../../context/AppContext';
 import { Card, Button, Input, Alert, Spinner } from '../common';
 
 const TABS = [
-  { id: 'pdf', label: 'PDF' },
-  { id: 'notion', label: 'Notion' },
+  {
+    id: 'pdf',
+    label: 'PDF',
+    icon: (
+      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M4 18h12V6h-4V2H4v16zm-2 1V0h10l4 4v16H2v-1z"/>
+      </svg>
+    )
+  },
+  {
+    id: 'notion',
+    label: 'Notion',
+    icon: (
+      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+        <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5z" clipRule="evenodd"/>
+      </svg>
+    )
+  },
 ];
 
 export function SyncForm() {
@@ -130,7 +147,7 @@ export function SyncForm() {
   return (
     <Card title="Sincronizar Documentos">
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-4 -mx-4 px-4">
+      <div className="flex border-b border-bg-700 mb-4 -mx-4 px-4">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -139,13 +156,14 @@ export function SyncForm() {
               setResult(null);
             }}
             className={`
-              px-4 py-2 text-sm font-medium border-b-2 transition-colors
+              px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2
               ${activeTab === tab.id
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-accent-500 text-accent-400'
+                : 'border-transparent text-text-300 hover:text-text-200'
               }
             `}
           >
+            {tab.icon}
             {tab.label}
           </button>
         ))}
@@ -155,7 +173,7 @@ export function SyncForm() {
       <div className="space-y-4">
         {activeTab === 'pdf' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-text-100 mb-1">
               Seleccionar PDF
             </label>
             <input
@@ -164,16 +182,17 @@ export function SyncForm() {
               accept=".pdf,application/pdf"
               onChange={handleFileChange}
               disabled={isSyncing}
-              className="block w-full text-sm text-gray-500
+              className="block w-full text-sm text-text-200
                 file:mr-4 file:py-2 file:px-4
-                file:rounded file:border-0
+                file:rounded-lg file:border file:border-bg-700
                 file:text-sm file:font-medium
-                file:bg-blue-50 file:text-blue-700
-                hover:file:bg-blue-100
+                file:bg-bg-800 file:text-text-100
+                hover:file:bg-bg-700 hover:file:text-text-50
+                file:transition-all file:cursor-pointer
                 disabled:opacity-50"
             />
             {selectedFile && (
-              <p className="text-sm text-green-600 mt-1">
+              <p className="text-sm text-success-400 mt-1">
                 Seleccionado: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
               </p>
             )}
@@ -185,20 +204,20 @@ export function SyncForm() {
             <div className="flex gap-2 mb-2">
               <button
                 onClick={() => setNotionType('page')}
-                className={`px-3 py-1 text-sm rounded ${
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all font-medium ${
                   notionType === 'page'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600'
+                    ? 'bg-accent-500/20 text-accent-400 border border-accent-500/50 shadow-sm shadow-accent-500/20'
+                    : 'bg-bg-800 text-text-200 border border-bg-700 hover:bg-bg-700 hover:text-text-100'
                 }`}
               >
                 Página
               </button>
               <button
                 onClick={() => setNotionType('database')}
-                className={`px-3 py-1 text-sm rounded ${
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all font-medium ${
                   notionType === 'database'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-600'
+                    ? 'bg-accent-500/20 text-accent-400 border border-accent-500/50 shadow-sm shadow-accent-500/20'
+                    : 'bg-bg-800 text-text-200 border border-bg-700 hover:bg-bg-700 hover:text-text-100'
                 }`}
               >
                 Base de datos
@@ -213,7 +232,7 @@ export function SyncForm() {
                 disabled={isSyncing}
               />
               {notionType === 'database' && (
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-text-300 mt-1">
                   Deja vacío para usar la base de datos configurada en el servidor
                 </p>
               )}
@@ -245,8 +264,8 @@ export function SyncForm() {
         )}
 
         {/* Admin tip */}
-        <p className="text-xs text-gray-400 mt-4 pt-3 border-t border-gray-100">
-          💡 Para sincronización masiva, usa <code className="bg-gray-100 px-1 rounded">python scripts/sync_documents.py</code>
+        <p className="text-xs text-text-300 mt-4 pt-3 border-t border-gray-100">
+          💡 Para sincronización masiva, usa <code className="bg-bg-800 px-1 rounded">python scripts/sync_documents.py</code>
         </p>
       </div>
     </Card>

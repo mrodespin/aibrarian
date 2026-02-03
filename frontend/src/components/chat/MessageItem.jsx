@@ -13,15 +13,15 @@ export function MessageItem({ message }) {
   const hasSources = message.sources?.length > 0;
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-6 animate-fade-in`}>
       <div
         className={`
-          max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3
+          max-w-[85%] md:max-w-[70%] rounded-2xl px-5 py-4
           ${isUser
-            ? 'bg-blue-600 text-white'
+            ? 'bg-gradient-to-br from-accent-500 to-violet-600 text-white shadow-lg shadow-accent-500/30'
             : message.isError
-              ? 'bg-red-50 text-red-900 border border-red-200'
-              : 'bg-white text-gray-900 border border-gray-200 shadow-sm'
+              ? 'bg-error-500/10 text-error-400 border border-error-500/30 rounded-2xl'
+              : 'bg-bg-850 border border-bg-700 shadow-sm text-text-50'
           }
         `}
       >
@@ -33,7 +33,7 @@ export function MessageItem({ message }) {
 
             {/* Processing time */}
             {message.processingTime && (
-              <div className="mt-3 pt-2 border-t border-gray-100">
+              <div className="mt-3 pt-2 border-t border-bg-700">
                 <Badge variant="default">
                   {message.processingTime.toFixed(2)}s
                 </Badge>
@@ -42,10 +42,10 @@ export function MessageItem({ message }) {
 
             {/* Sources */}
             {hasSources && (
-              <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="mt-3 pt-3 border-t border-bg-700">
                 <button
                   onClick={() => setShowSources(!showSources)}
-                  className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                  className="text-sm text-accent-400 hover:text-accent-300 flex items-center gap-1 transition-colors"
                 >
                   <svg className={`w-4 h-4 transition-transform ${showSources ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

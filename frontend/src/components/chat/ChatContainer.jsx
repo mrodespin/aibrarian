@@ -13,10 +13,10 @@ function EmptyState() {
     <div className="flex-1 flex items-center justify-center p-8">
       <div className="text-center max-w-md">
         <div className="text-6xl mb-4">📚</div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">
+        <h2 className="text-xl font-bold text-text-50 mb-2">
           Bienvenido a Bibliotecario-IA
         </h2>
-        <p className="text-gray-600">
+        <p className="text-text-200 leading-relaxed">
           Hazme preguntas sobre los documentos que has sincronizado.
           Buscaré en la base de conocimiento y te daré respuestas basadas en el contenido.
         </p>
@@ -32,10 +32,10 @@ export function ChatContainer() {
   const servicesAvailable = health.api && health.ollama && health.chromadb;
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-full flex flex-col bg-transparent">
       {/* Header with clear button */}
       {messages.length > 0 && (
-        <div className="flex justify-end p-2 border-b border-gray-200 bg-white">
+        <div className="flex justify-end p-2 border-b border-bg-700 bg-bg-850/50 backdrop-blur-sm">
           <Button variant="ghost" size="sm" onClick={clearHistory}>
             Limpiar chat
           </Button>
@@ -46,12 +46,12 @@ export function ChatContainer() {
       {messages.length === 0 ? (
         <EmptyState />
       ) : (
-        <MessageList messages={messages} />
+        <MessageList messages={messages} isLoading={isLoading} />
       )}
 
       {/* Service warning */}
       {!servicesAvailable && (
-        <div className="px-4 py-2 bg-yellow-50 border-t border-yellow-200 text-yellow-800 text-sm">
+        <div className="px-4 py-2 bg-error-500/10 border-t border-error-500/30 text-error-400 text-sm">
           ⚠️ Algunos servicios no están disponibles. Verifica que Ollama y ChromaDB estén corriendo.
         </div>
       )}

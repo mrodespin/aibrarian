@@ -11,7 +11,7 @@ export function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-bg-900">
       {/* Header */}
       <Header onMenuClick={() => setSidebarOpen(true)} />
 
@@ -19,7 +19,7 @@ export function Layout({ children }) {
         {/* Sidebar - hidden on mobile, overlay on tablet, fixed on desktop */}
         <aside
           className={`
-            fixed inset-y-0 left-0 z-40 w-80 bg-white border-r border-gray-200
+            fixed inset-y-0 left-0 z-40 w-80 bg-bg-850 border-r border-bg-700
             transform transition-transform duration-200 ease-in-out
             lg:relative lg:translate-x-0
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}

@@ -34,7 +34,7 @@ export function ChatInput({ onSend, isLoading, disabled }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="border-t border-gray-200 bg-white p-4">
+    <form onSubmit={handleSubmit} className="border-t border-bg-700 bg-bg-850/80 backdrop-blur-sm p-4">
       <div className="flex gap-3 items-end">
         <textarea
           ref={textareaRef}
@@ -45,9 +45,11 @@ export function ChatInput({ onSend, isLoading, disabled }) {
           disabled={isLoading || disabled}
           rows={1}
           className="
-            flex-1 resize-none rounded-lg border border-gray-300 px-4 py-3
-            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-            disabled:bg-gray-100 disabled:cursor-not-allowed
+            flex-1 resize-none rounded-lg border border-bg-700 px-4 py-3
+            bg-bg-900 text-text-50 placeholder-text-400
+            focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500
+            disabled:bg-bg-950 disabled:cursor-not-allowed disabled:text-text-400
+            hover:border-bg-600 transition-all
             max-h-36
           "
         />
@@ -65,7 +67,7 @@ export function ChatInput({ onSend, isLoading, disabled }) {
           )}
         </Button>
       </div>
-      <p className="text-xs text-gray-500 mt-2">
+      <p className="text-xs text-text-300 mt-2">
         Presiona Enter para enviar, Shift+Enter para nueva línea
       </p>
     </form>

@@ -18,22 +18,22 @@ export function StatsPanel() {
         <div className="space-y-4">
           {/* Services status */}
           <div>
-            <h4 className="text-sm font-medium text-gray-500 mb-2">Servicios</h4>
+            <h4 className="text-sm font-medium text-text-300 mb-2">Servicios</h4>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm">API FastAPI</span>
+                <span className="text-sm text-text-200">API FastAPI</span>
                 <Badge variant={health.api ? 'success' : 'error'}>
                   {health.api ? 'Conectado' : 'Desconectado'}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">Ollama (LLM)</span>
+                <span className="text-sm text-text-200">Ollama (LLM)</span>
                 <Badge variant={health.ollama ? 'success' : 'error'}>
                   {health.ollama ? 'Conectado' : 'Desconectado'}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">ChromaDB</span>
+                <span className="text-sm text-text-200">ChromaDB</span>
                 <Badge variant={health.chromadb ? 'success' : 'error'}>
                   {health.chromadb ? 'Conectado' : 'Desconectado'}
                 </Badge>
@@ -43,18 +43,18 @@ export function StatsPanel() {
 
           {/* Collection stats */}
           <div>
-            <h4 className="text-sm font-medium text-gray-500 mb-2">Colección</h4>
+            <h4 className="text-sm font-medium text-text-300 mb-2">Colección</h4>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm">Documentos</span>
-                <span className="font-mono text-sm font-semibold">
+                <span className="text-sm text-text-200">Documentos</span>
+                <span className="font-mono text-sm font-semibold text-text-50">
                   {stats.documentCount}
                 </span>
               </div>
               {stats.collectionName && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">Nombre</span>
-                  <span className="font-mono text-xs text-gray-600 truncate max-w-32" title={stats.collectionName}>
+                  <span className="text-sm text-text-200">Nombre</span>
+                  <span className="font-mono text-xs text-text-200 truncate max-w-32" title={stats.collectionName}>
                     {stats.collectionName}
                   </span>
                 </div>
@@ -65,17 +65,17 @@ export function StatsPanel() {
           {/* Model info */}
           {stats.modelInfo && (
             <div>
-              <h4 className="text-sm font-medium text-gray-500 mb-2">Modelo</h4>
+              <h4 className="text-sm font-medium text-text-300 mb-2">Modelo</h4>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">LLM</span>
-                  <span className="font-mono text-xs text-gray-600">
+                  <span className="text-sm text-text-200">LLM</span>
+                  <span className="font-mono text-xs text-text-200">
                     {stats.modelInfo.model_name || 'N/A'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">Embeddings</span>
-                  <span className="font-mono text-xs text-gray-600">
+                  <span className="text-sm text-text-200">Embeddings</span>
+                  <span className="font-mono text-xs text-text-200">
                     {stats.modelInfo.embedding_model || 'N/A'}
                   </span>
                 </div>
@@ -86,7 +86,7 @@ export function StatsPanel() {
           {/* Refresh button */}
           <button
             onClick={refreshAll}
-            className="w-full text-sm text-blue-600 hover:underline mt-2"
+            className="w-full text-sm text-accent-400 hover:text-accent-300 transition-colors mt-2"
           >
             Actualizar estado
           </button>

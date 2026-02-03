@@ -9,10 +9,10 @@ export function Alert({
   className = '',
 }) {
   const types = {
-    info: 'bg-blue-50 text-blue-800 border-blue-200',
-    success: 'bg-green-50 text-green-800 border-green-200',
-    warning: 'bg-yellow-50 text-yellow-800 border-yellow-200',
-    error: 'bg-red-50 text-red-800 border-red-200',
+    info: 'bg-accent-500/10 text-accent-400 border-accent-500/30',
+    success: 'bg-success-500/10 text-success-400 border-success-500/30',
+    warning: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+    error: 'bg-error-500/10 text-error-400 border-error-500/30',
   };
 
   const icons = {
