@@ -242,12 +242,22 @@ def test_sync_notion_database_requires_database_id(test_client):
 
     El endpoint valida el database_id con lógica custom y retorna 400
     si no está configurado (ni en request ni en settings).
+
+    Nota: Usamos patch para simular que NOTION_DATABASE_ID no está
+    configurado en el entorno, ya que el .env de desarrollo puede tenerlo.
     """
+    from unittest.mock import patch
+
     # Arrange
     payload = {}
 
-    # Act
-    response = test_client.post("/sync/notion/database", json=payload)
+    # Act: Mockear settings para que notion_database_id sea None
+    with patch("app.main.settings") as mock_settings:
+        # Configurar el mock con los valores necesarios
+        mock_settings.notion_api_key = "fake-api-key"  # Pasar primera validación
+        mock_settings.notion_database_id = None  # Simular que no está configurado
+
+        response = test_client.post("/sync/notion/database", json=payload)
 
     # Assert: El endpoint retorna 400 cuando falta el database_id
     assert response.status_code == 400
