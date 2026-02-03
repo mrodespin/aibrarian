@@ -328,8 +328,32 @@ async def test_query_with_real_services():
     - ChromaDB corriendo (docker-compose up chromadb)
     - Datos ingestados previamente
 
-    No se ejecuta por defecto (usa pytest -m integration)
+    Ejecutar con: pytest -m integration tests/test_rag_service.py -v
     """
-    # Este test se implementaría conectando con servicios reales
-    # Por ahora se deja como placeholder para documentar el approach
-    pytest.skip("Requiere servicios reales - implementar cuando sea necesario")
+    from app.adapters.outbound.ollama_adapter import OllamaAdapter
+    from app.adapters.outbound.chromadb_adapter import ChromaDBAdapter
+    from app.core.services.rag_service import RAGService
+    from app.core.domain.models import Query
+
+    # Verificar que Ollama está disponible
+    ollama = OllamaAdapter()
+    if not await ollama.is_available():
+        pytest.skip("Ollama no está disponible")
+
+    # Crear servicio RAG con adaptadores reales
+    chromadb = ChromaDBAdapter()
+    rag_service = RAGService(llm=ollama, vector_db=chromadb)
+
+    # Test básico de query
+    query = Query(question="¿Qué información tienes disponible?", max_results=3)
+    result = await rag_service.ask_question(query)
+
+    # Verificar estructura de respuesta
+    assert result is not None
+    assert result.answer is not None
+    assert isinstance(result.source_documents, list)
+    assert result.processing_time > 0
+
+    # Log para debugging
+    print(f"\n✅ Respuesta: {result.answer[:100]}...")
+    print(f"📚 Fuentes encontradas: {len(result.source_documents)}")

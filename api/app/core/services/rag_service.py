@@ -98,17 +98,25 @@ class RAGService:
         collection_name: Optional[str] = None
     ) -> QueryResult:
         """
-        Responde una pregunta usando el pipeline RAG completo.
+        Responde una pregunta usando el pipeline RAG completo con Query Expansion.
 
         ESTE ES EL MÉTODO PRINCIPAL DEL SISTEMA.
         Es el que se invoca cuando un usuario hace una pregunta.
 
-        Pipeline:
-            ① Vectorizar pregunta      → generate_embedding()
-            ② Buscar contexto relevante → similarity_search()
-            ③ Construir contexto        → _build_context()
-            ④ Generar respuesta         → generate_response()
-            ⑤ Devolver resultado        → QueryResult
+        Pipeline con Query Expansion:
+            ① Extraer keywords         → extract_keywords() [NUEVO]
+            ② Vectorizar pregunta      → generate_embedding()
+            ③ Buscar con keywords      → similarity_search(keyword_filter) [NUEVO]
+            ④ Fallback semántico       → similarity_search() sin filtro
+            ⑤ Construir contexto       → _build_context()
+            ⑥ Generar respuesta        → generate_response()
+            ⑦ Devolver resultado       → QueryResult
+
+        ¿Qué es Query Expansion?
+        Técnica que mejora la búsqueda para nombres propios y títulos:
+        - Extraemos keywords de la pregunta (ej: "Blade Runner 2049")
+        - Buscamos documentos que contengan esas keywords
+        - Si no hay resultados, hacemos búsqueda semántica pura
 
         Args:
             query: Objeto Query con:
@@ -138,7 +146,15 @@ class RAGService:
             logger.info(f"Processing question: {query.question[:50]}...")
 
             # ================================================================
-            # PASO 1: Vectorizar la pregunta del usuario
+            # PASO 1: Extraer keywords para Query Expansion
+            # ================================================================
+            # El LLM identifica nombres propios, títulos, etc.
+            # Ejemplo: "¿Quién dirigió Blade Runner?" → ["Blade Runner"]
+            keywords = await self.llm.extract_keywords(query.question)
+            logger.info(f"Extracted keywords: {keywords}")
+
+            # ================================================================
+            # PASO 2: Vectorizar la pregunta del usuario
             # ================================================================
             # La pregunta se convierte en un vector numérico
             # Este vector se usará para buscar chunks similares
@@ -146,16 +162,38 @@ class RAGService:
             logger.debug(f"Generated query embedding of dimension: {len(query_embedding)}")
 
             # ================================================================
-            # PASO 2: Buscar contexto relevante en ChromaDB
+            # PASO 3: Buscar con Query Expansion (keyword + semantic)
             # ================================================================
-            # similarity_search compara el vector de la pregunta
-            # con los vectores de los chunks almacenados
-            # Devuelve los top_k chunks más similares
-            source_documents = await self.vector_db.similarity_search(
-                query_embedding=query_embedding,
-                collection_name=collection,
-                top_k=query.max_results  # Ej: 3 chunks más relevantes
-            )
+            # Intentamos buscar con cada keyword extraída
+            # Si encontramos resultados, usamos esos; si no, fallback semántico
+            source_documents = []
+
+            if keywords:
+                # Intentar búsqueda con la primera keyword más relevante
+                # (normalmente es el nombre propio o título)
+                for keyword in keywords:
+                    source_documents = await self.vector_db.similarity_search(
+                        query_embedding=query_embedding,
+                        collection_name=collection,
+                        top_k=query.max_results,
+                        keyword_filter=keyword
+                    )
+                    if source_documents:
+                        logger.info(f"Found {len(source_documents)} docs with keyword '{keyword}'")
+                        break  # Encontramos resultados, no seguir buscando
+
+            # ================================================================
+            # PASO 4: Fallback a búsqueda semántica pura
+            # ================================================================
+            # Si no hay keywords o no encontramos resultados con keywords,
+            # hacemos búsqueda semántica sin filtros
+            if not source_documents:
+                logger.info("No results with keywords, falling back to semantic search")
+                source_documents = await self.vector_db.similarity_search(
+                    query_embedding=query_embedding,
+                    collection_name=collection,
+                    top_k=query.max_results
+                )
 
             # Si no hay resultados relevantes, no llamamos al LLM
             # Ahorra recursos y evita que invente una respuesta

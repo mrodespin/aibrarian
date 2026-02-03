@@ -41,7 +41,7 @@ Equivalente en TypeScript:
 # IMPORTS
 # ============================================================================
 from typing import List, Optional, Dict, Any
-import logging
+import time
 import httpx  # Cliente HTTP async (equivalente a axios en JS)
 
 # tenacity: librería para retries automáticos con estrategias de espera
@@ -54,8 +54,11 @@ from langchain_ollama import OllamaLLM, OllamaEmbeddings
 from app.core.ports.llm_port import LLMPort
 from app.config.settings import settings
 
+# Observabilidad: logging estructurado y métricas
+from app.core.observability import get_logger, LLM_REQUESTS, LLM_LATENCY
 
-logger = logging.getLogger(__name__)
+
+logger = get_logger(__name__)
 
 
 # ============================================================================
@@ -117,9 +120,9 @@ class OllamaAdapter(LLMPort):
                     temperature=settings.llm_temperature,   # 0.3 (precisión)
                     timeout=settings.ollama_timeout          # segundos de espera
                 )
-                logger.info(f"Initialized Ollama LLM with model: {settings.ollama_model}")
+                logger.info("Initialized Ollama LLM", model=settings.ollama_model)
             except Exception as e:
-                logger.error(f"Failed to initialize Ollama LLM: {e}")
+                logger.error("Failed to initialize Ollama LLM", error=str(e))
                 raise  # Re-lanza la excepción después de loguear
         return self._llm
 
@@ -139,9 +142,9 @@ class OllamaAdapter(LLMPort):
                     base_url=settings.ollama_base_url,            # http://localhost:11434
                     model=settings.ollama_embedding_model         # nomic-embed-text
                 )
-                logger.info(f"Initialized Ollama Embeddings with model: {settings.ollama_embedding_model}")
+                logger.info("Initialized Ollama Embeddings", model=settings.ollama_embedding_model)
             except Exception as e:
-                logger.error(f"Failed to initialize Ollama Embeddings: {e}")
+                logger.error("Failed to initialize Ollama Embeddings", error=str(e))
                 raise
         return self._embeddings
 
@@ -227,17 +230,27 @@ RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
             # ainvoke() es el método async de LangChain para invocar el LLM
             # "a" de ainvoke = async (vs invoke que es síncrono)
             # Equivalente: await llm.invoke(prompt) en versión async
+            start_time = time.perf_counter()
             response = await llm.ainvoke(
                 full_prompt,
                 temperature=temperature,
                 **kwargs  # Parámetros adicionales (top_p, etc.)
             )
+            duration = time.perf_counter() - start_time
 
-            logger.info("Generated response from Ollama")
+            # Registrar métricas
+            LLM_REQUESTS.labels(operation='generate').inc()
+            LLM_LATENCY.labels(operation='generate').observe(duration)
+
+            logger.info(
+                "Generated response from Ollama",
+                duration_seconds=round(duration, 3),
+                response_length=len(response)
+            )
             return response
 
         except Exception as e:
-            logger.error(f"Failed to generate response: {e}")
+            logger.error("Failed to generate response", error=str(e))
             raise  # Re-lanza para que @retry pueda reintentar
 
     @retry(
@@ -266,12 +279,19 @@ RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
             embeddings = self._get_embeddings()
 
             # aembed_query: embedding async para queries/preguntas
+            start_time = time.perf_counter()
             embedding = await embeddings.aembed_query(text)
-            logger.debug(f"Generated embedding of dimension: {len(embedding)}")
+            duration = time.perf_counter() - start_time
+
+            # Registrar métricas
+            LLM_REQUESTS.labels(operation='embed').inc()
+            LLM_LATENCY.labels(operation='embed').observe(duration)
+
+            logger.debug("Generated embedding", dimension=len(embedding), duration_seconds=round(duration, 3))
             return embedding
 
         except Exception as e:
-            logger.error(f"Failed to generate embedding: {e}")
+            logger.error("Failed to generate embedding", error=str(e))
             raise
 
     @retry(
@@ -298,12 +318,23 @@ RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
             embeddings = self._get_embeddings()
 
             # aembed_documents: embedding async en batch para documentos
+            start_time = time.perf_counter()
             embedding_vectors = await embeddings.aembed_documents(texts)
-            logger.info(f"Generated {len(embedding_vectors)} embeddings")
+            duration = time.perf_counter() - start_time
+
+            # Registrar métricas
+            LLM_REQUESTS.labels(operation='embed_batch').inc()
+            LLM_LATENCY.labels(operation='embed_batch').observe(duration)
+
+            logger.info(
+                "Generated batch embeddings",
+                count=len(embedding_vectors),
+                duration_seconds=round(duration, 3)
+            )
             return embedding_vectors
 
         except Exception as e:
-            logger.error(f"Failed to generate batch embeddings: {e}")
+            logger.error("Failed to generate batch embeddings", error=str(e), batch_size=len(texts))
             raise
 
     async def is_available(self) -> bool:
@@ -331,15 +362,15 @@ RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
                     timeout=5.0  # 5 segundos máximo de espera
                 )
                 if response.status_code == 200:
-                    logger.info("Ollama service is available")
+                    logger.info("Ollama service is available", base_url=settings.ollama_base_url)
                     return True
                 else:
-                    logger.warning(f"Ollama returned status code: {response.status_code}")
+                    logger.warning("Ollama returned unexpected status", status_code=response.status_code)
                     return False
 
         except Exception as e:
             # Cualquier error (timeout, conexión rechazada, etc.) = no disponible
-            logger.error(f"Ollama service unavailable: {e}")
+            logger.error("Ollama service unavailable", error=str(e), base_url=settings.ollama_base_url)
             return False
 
     def get_model_info(self) -> Dict[str, Any]:
@@ -359,3 +390,70 @@ RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
             "temperature": settings.llm_temperature,            # 0.3
             "timeout": settings.ollama_timeout                  # segundos
         }
+
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=5)
+    )
+    async def extract_keywords(self, question: str) -> List[str]:
+        """
+        Extrae palabras clave y entidades de una pregunta usando el LLM.
+
+        TÉCNICA: Query Expansion
+        El LLM identifica nombres propios, títulos, y términos clave
+        que pueden usarse para filtrar documentos antes de la búsqueda semántica.
+
+        El prompt está diseñado para:
+        - Extraer entidades nombradas (películas, personas, lugares, etc.)
+        - Devolver formato parseable (una keyword por línea)
+        - Ser rápido (temperatura baja, respuesta corta)
+
+        Args:
+            question: Pregunta del usuario
+
+        Returns:
+            List[str]: Keywords extraídas, vacía si no hay o hay error
+        """
+        try:
+            llm = self._get_llm()
+
+            # Prompt optimizado para extracción de keywords
+            extraction_prompt = f"""Extrae las palabras clave y nombres propios de esta pregunta.
+Devuelve SOLO las keywords, una por línea, sin explicaciones ni numeración.
+Si hay un título de película, libro, o nombre propio, inclúyelo exactamente como aparece.
+
+Pregunta: {question}
+
+Keywords:"""
+
+            start_time = time.perf_counter()
+            response = await llm.ainvoke(
+                extraction_prompt,
+                temperature=0.1  # Muy bajo para respuestas consistentes
+            )
+            duration = time.perf_counter() - start_time
+
+            # Parsear respuesta: dividir por líneas y limpiar
+            keywords = []
+            for line in response.strip().split('\n'):
+                keyword = line.strip().strip('-').strip('•').strip()
+                # Filtrar líneas vacías y keywords muy cortas
+                if keyword and len(keyword) > 2:
+                    keywords.append(keyword)
+
+            # Registrar métricas
+            LLM_REQUESTS.labels(operation='extract_keywords').inc()
+            LLM_LATENCY.labels(operation='extract_keywords').observe(duration)
+
+            logger.info(
+                "Extracted keywords from question",
+                keywords=keywords,
+                count=len(keywords),
+                duration_seconds=round(duration, 3)
+            )
+            return keywords
+
+        except Exception as e:
+            logger.warning("Failed to extract keywords", error=str(e))
+            # En caso de error, devolvemos lista vacía (fallback a búsqueda semántica pura)
+            return []

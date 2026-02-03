@@ -238,3 +238,33 @@ class LLMPort(ABC):
         - Logging y monitoreo
         """
         pass
+
+    @abstractmethod
+    async def extract_keywords(self, question: str) -> List[str]:
+        """
+        Extrae palabras clave y entidades de una pregunta (Query Expansion).
+
+        ¿Por qué Query Expansion?
+        - La búsqueda semántica pura puede fallar con nombres propios
+        - Ejemplo: "Blade Runner" vs "Blade Runner 2049"
+        - Extraer keywords permite filtrar documentos antes de buscar
+
+        Flujo:
+            Pregunta: "¿Quién dirigió Blade Runner 2049?"
+                ↓
+            Keywords: ["Blade Runner 2049", "dirigió", "director"]
+                ↓
+            Filtro por keywords + búsqueda semántica
+
+        Args:
+            question: Pregunta del usuario en lenguaje natural
+
+        Returns:
+            List[str]: Lista de keywords/entidades extraídas
+                      Lista vacía si no se pueden extraer
+
+        Ejemplo:
+            keywords = await llm.extract_keywords("¿Qué es Docker?")
+            # keywords = ["Docker"]
+        """
+        pass
