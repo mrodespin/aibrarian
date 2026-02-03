@@ -60,6 +60,7 @@ yarn-error.log
 # (Already covered by global 'build/' and 'dist/', but good to be explicit)
 # build/
 # dist/
+.vite/
 
 # === Project Specific ===
 # Data files (PDFs, generated files)
