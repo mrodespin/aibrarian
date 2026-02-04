@@ -238,7 +238,7 @@ curl -X POST "http://localhost:8000/sync/notion/database" \
 
 ---
 
-## 💬 Endpoint de Consultas (Fase 1: Chatbot RAG)
+## 💬 Endpoint de Consultas
 
 ### `POST /ask` - Hacer Pregunta al Sistema RAG
 
@@ -567,35 +567,4 @@ El frontend se configura mediante variables de entorno en `frontend/.env`:
 |----------|-------------------|-------------|
 | `VITE_API_URL` | `http://localhost:8000` | URL de la API FastAPI |
 
-### Funcionalidades
-
-- **Chat con RAG**: Interfaz para hacer preguntas sobre los documentos indexados
-- **Visualización de fuentes**: Muestra las fuentes citadas con su score de relevancia
-- **Historial de conversación**: Mantiene el historial durante la sesión
-- **Panel de estado**: Muestra el estado de los servicios (API, Ollama, ChromaDB)
-- **Sincronización de documentos**: Permite sincronizar PDFs y páginas de Notion
-
-### Arquitectura del Frontend
-
-```
-frontend/
-├── src/
-│   ├── api/           # Servicios que consumen la API FastAPI
-│   ├── components/    # Componentes React
-│   │   ├── chat/      # Interfaz de chat
-│   │   ├── layout/    # Header, Sidebar, Layout
-│   │   ├── stats/     # Panel de estadísticas
-│   │   ├── documents/ # Gestión de documentos
-│   │   └── common/    # Componentes reutilizables
-│   ├── context/       # Estado global (AppContext)
-│   ├── hooks/         # Custom hooks (useChat)
-│   └── utils/         # Utilidades (markdown)
-├── .env.example       # Template de configuración
-└── package.json       # Dependencias
-```
-
 ---
-
-**Parte del proyecto:** TFM Bibliotecario-IA
-**Versión API:** 0.1.0
-**Stack:** FastAPI + LangChain + Ollama + ChromaDB + React

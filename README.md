@@ -402,12 +402,6 @@ npm run dev
 # Abrir navegador en http://localhost:5173
 ```
 
-El frontend incluye:
-- 💬 **Chat Interface** con Dark Mode
-- 📊 **Panel de Estadísticas** en tiempo real
-- 📁 **Sincronización de Documentos** (PDF y Notion) desde la UI
-- 📈 **Visualización de Fuentes** con scores de relevancia
-
 **Opción B: Solo API (sin Frontend)**
 
 ```bash

@@ -354,15 +354,8 @@ jobs:
 - [ ] `pytest-benchmark`: Performance benchmarks
 - [ ] `pytest-html`: Reportes HTML bonitos
 
-## 📚 Recursos
-
-- [Pytest Documentation](https://docs.pytest.org/)
-- [Pytest-asyncio](https://pytest-asyncio.readthedocs.io/)
-- [FastAPI Testing](https://fastapi.tiangolo.com/tutorial/testing/)
-- [Python unittest.mock](https://docs.python.org/3/library/unittest.mock.html)
 
 ---
 
-**Actualizado:** Febrero 2026
 **Cobertura actual:** 60+ tests
 **Tiempo ejecución:** ~2s (unitarios), ~30s (integración)

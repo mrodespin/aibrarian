@@ -56,7 +56,7 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   ├── test_document.txt           # Texto fuente del PDF de ejemplo
 │   └── .gitkeep                    # Mantiene el directorio en Git
 │
-├── /frontend/                      # Frontend React (✅ IMPLEMENTADO)
+├── /frontend/                      # Frontend React
 │   ├── /src/                       # Código fuente
 │   │   ├── main.jsx                # Entry point
 │   │   ├── App.jsx                 # Root component
@@ -174,7 +174,7 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 
 ---
 
-### `/data` - Directorio de Documentos (MVP)
+### `/data` - Directorio de Documentos
 
 **Propósito:** Almacena PDFs locales para ingesta
 
@@ -196,7 +196,7 @@ Los archivos `test_document.*` y `create_test_pdf.py` están destinados a testin
 
 ---
 
-### `/frontend` - Interfaz Web ✅ **IMPLEMENTADO**
+### `/frontend` - Interfaz Web
 
 **Lenguaje:** JavaScript (React 18)
 **Framework:** React + Vite 5 + Tailwind CSS v4
@@ -254,34 +254,19 @@ frontend/src/
     └── markdown.jsx            # Markdown rendering
 ```
 
-**Funcionalidades implementadas:**
-- ✅ **Chat Interface**: Conversación completa con el RAG
-- ✅ **Dark Mode**: Diseño profesional
-- ✅ **Document Sync UI**: Sincronización de PDFs y Notion desde el frontend
-- ✅ **Real-time Stats**: Panel de estadísticas en vivo
-- ✅ **Source Visualization**: Fuentes con scores de relevancia y contenido expandible
-- ✅ **Responsive Design**: Mobile-first con sidebar colapsable
-- ✅ **Service Health**: Indicadores de estado de Ollama, ChromaDB y API
-
 **Integración:**
 - Consume todos los endpoints de la API (`/health`, `/stats`, `/ask`, `/sync/*`)
 - Polling automático para estadísticas en tiempo real
 - Manejo de errores y estados de carga
 
----
-
-## 🏗️ Arquitectura Hexagonal
-
-El proyecto sigue **Arquitectura Hexagonal (Puertos y Adaptadores)**. Ver diagrama completo en [README.md](../README.md#-arquitectura-del-sistema).
-
-**Capas principales:**
-- **Domain** (`core/domain/`): Entidades de negocio
-- **Ports** (`core/ports/`): Interfaces abstractas
-- **Services** (`core/services/`): Lógica de negocio
-- **Adapters** (`adapters/outbound/`): Implementaciones concretas
-- **Observability** (`core/observability/`): Logging, métricas y tracing
-
-**Beneficio clave**: Cambiar un adaptador (ej: ChromaDB → Pinecone) no requiere modificar la lógica de negocio
+**Funcionalidades implementadas:**
+- **Chat Interface**: Conversación completa con el RAG
+- **Dark Mode**: Diseño profesional
+- **Document Sync UI**: Sincronización de PDFs y Notion desde el frontend
+- **Real-time Stats**: Panel de estadísticas en vivo
+- **Source Visualization**: Fuentes con scores de relevancia y contenido expandible
+- **Responsive Design**: Mobile-first con sidebar colapsable
+- **Service Health**: Indicadores de estado de Ollama, ChromaDB y API
 
 ---
 
@@ -293,50 +278,6 @@ Orquesta los 3 servicios del proyecto:
 - **ollama**: LLM local (modelos llama3.2 y nomic-embed-text) - Puerto 11434
 - **chromadb**: Base de datos vectorial - Puerto 8001 (host) → 8000 (contenedor)
 - **api**: API FastAPI - Puerto 8000
-
-**Uso:**
-```bash
-# Iniciar todos los servicios
-docker-compose up -d
-
-# Primera vez: descargar modelos de Ollama
-docker exec ollama ollama pull llama3.2
-docker exec ollama ollama pull nomic-embed-text
-```
-
-> **Nota sobre networking:** dentro de Docker los servicios se comunican por nombre de contenedor (`ollama`, `chromadb`). El `docker-compose.yml` sobreescribe automáticamente las URLs en el servicio `api` para usar estos nombres internos, así que no hace falta cambiar nada en `.env`.
-
-### `.env` (no incluido - usar .env.example)
-
-Variables de entorno para configuración:
-```bash
-# Ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.2
-
-# ChromaDB (desarrollo local: puerto mapeado por docker-compose)
-CHROMADB_HOST=localhost
-CHROMADB_PORT=8001
-
-# Notion (opcional)
-NOTION_API_KEY=secret_xxxxx
-```
-
-### `README.md`
-
-Documentación principal del proyecto:
-- Descripción general
-- Diagramas de arquitectura (Mermaid)
-- Stack tecnológico
-- Instrucciones de setup
-
-### `USAGE.md`
-
-Documentación de API:
-- Todos los endpoints con ejemplos
-- Request/Response schemas
-- Scripts CLI
-- Troubleshooting
 
 ---
 
@@ -356,33 +297,3 @@ Documentación de API:
 Ver `api/requirements.txt` para versiones exactas
 
 ---
-
-## 🚀 Flujo de Uso
-
-Ver [README.md - Quick Start](../README.md#-quick-start) para instrucciones completas de instalación y uso.
-
-**Resumen:**
-1. **Instalar**: `python3 setup.py` (automático) o manual
-2. **Iniciar servicios**: Ollama + API + Frontend
-3. **Usar**: Interfaz web en `http://localhost:5173` o API REST
-
----
-
-## 📚 Documentación Adicional
-
-### Para Humanos
-- **[README.md](../README.md)**: Visión general y setup
-- **[docs/STRUCTURE.md](STRUCTURE.md)**: Este archivo - estructura y arquitectura
-- **[docs/USAGE.md](USAGE.md)**: API endpoints y uso
-- **[data/README.md](../data/README.md)**: Instrucciones para PDFs
-- **[api/.env.example](../api/.env.example)**: Variables de entorno
-
-### Para Agentes IA
-- **[.ai/context.md](../.ai/context.md)**: Contexto completo del proyecto (stack, arquitectura, comandos)
-- **[.ai/evaluation.md](../.ai/evaluation.md)**: Criterios de evaluación del TFM y estado de entrega
-
----
-
-**Proyecto:** TFM Bibliotecario-IA
-**Arquitectura:** Hexagonal (Puertos y Adaptadores)
-**Stack:** Python + FastAPI + LangChain + Ollama + ChromaDB + React + Observabilidad
