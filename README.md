@@ -425,8 +425,6 @@ curl -X POST http://localhost:8000/ask \
   -d '{"question": "¿De qué tratan los documentos?"}'
 ```
 
-Ver [docs/USAGE.md](docs/USAGE.md) para documentación completa de la API y scripts CLI.
-
 ---
 
 ## 📄 Licencia
@@ -434,7 +432,3 @@ Ver [docs/USAGE.md](docs/USAGE.md) para documentación completa de la API y scri
 Este proyecto está bajo la licencia MIT. Ver [LICENSE](LICENSE) para más detalles.
 
 ---
-
-**Proyecto:** TFM Bibliotecario-IA
-**Arquitectura:** Hexagonal (Puertos y Adaptadores)
-**Stack:** Python + FastAPI + LangChain + Ollama + ChromaDB
