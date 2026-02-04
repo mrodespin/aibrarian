@@ -69,7 +69,7 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 
 ## 🎥 Demo en Video
 
-### Demostración completa del sistema (2:32 min)
+### Demostración del sistema
 
 **[▶️ Ver Video Demo en Google Drive](https://drive.google.com/file/d/1nTfRfqYPkvdErhMkXMwcC0Q9M0WI8ksv/view?usp=sharing)**
 
