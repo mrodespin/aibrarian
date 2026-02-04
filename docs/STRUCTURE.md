@@ -60,7 +60,7 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   ├── /src/                       # Código fuente
 │   │   ├── main.jsx                # Entry point
 │   │   ├── App.jsx                 # Root component
-│   │   ├── index.css               # Global styles + Tailwind @theme (Linear Dark Mode)
+│   │   ├── index.css               # Global styles + Tailwind @theme (Dark Mode)
 │   │   ├── /api/                   # API client layer
 │   │   ├── /hooks/                 # Custom React hooks
 │   │   ├── /context/               # React context providers
@@ -200,7 +200,7 @@ Los archivos `test_document.*` y `create_test_pdf.py` están destinados a testin
 
 **Lenguaje:** JavaScript (React 18)
 **Framework:** React + Vite 5 + Tailwind CSS v4
-**Estado:** **Completamente funcional** con Linear Dark Mode
+**Estado:** **Completamente funcional** con Dark Mode
 
 **Estructura:**
 ```
@@ -256,7 +256,7 @@ frontend/src/
 
 **Funcionalidades implementadas:**
 - ✅ **Chat Interface**: Conversación completa con el RAG
-- ✅ **Linear Dark Mode**: Diseño profesional inspirado en Linear
+- ✅ **Dark Mode**: Diseño profesional
 - ✅ **Document Sync UI**: Sincronización de PDFs y Notion desde el frontend
 - ✅ **Real-time Stats**: Panel de estadísticas en vivo
 - ✅ **Source Visualization**: Fuentes con scores de relevancia y contenido expandible

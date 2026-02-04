@@ -2,19 +2,19 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @theme {
-  /* Linear Dark Mode Palette */
+  /* Dark Mode Palette */
 
   /* Background layers (darkest to lightest) */
   --color-bg-950: #0a0a0f;
-  --color-bg-900: #16161d;  /* Main Linear background (Woodsmoke) */
+  --color-bg-900: #16161d;  /* Main background */
   --color-bg-850: #1c1c24;  /* Elevated cards */
   --color-bg-800: #22222a;  /* Hover states */
   --color-bg-700: #2a2a32;  /* Borders */
 
-  /* Purple accent (Linear Dawn theme) */
+  /* Purple accent*/
   --color-accent-300: #d87eb8;
   --color-accent-400: #b855a0;
-  --color-accent-500: #a84376;  /* Main Linear accent */
+  --color-accent-500: #a84376;  /* Main accent */
   --color-accent-600: #963a68;
   --color-accent-700: #7d2f56;
 
@@ -60,9 +60,9 @@
   50% { box-shadow: 0 0 30px rgba(168, 67, 118, 0.5); }
 }
 
-/* Global styles - Linear Dark Mode */
+/* Global styles - Dark Mode */
 body {
-  background: #16161d;  /* Linear Woodsmoke background */
+  background: #16161d;
   color: #f5f5f7;  /* Light text */
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -70,7 +70,7 @@ body {
   min-height: 100vh;
 }
 
-/* Scrollbar styling - Linear Dark */
+/* Scrollbar styling - Dark */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

@@ -22,7 +22,7 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 * **Modelo de Lenguaje (LLM):** **Ollama** (ej. `llama3.2`)
 * **Base de Datos Vectorial:** **ChromaDB**
 * **Fuentes de Datos:** **PDFs locales** y **Notion API**
-* **Frontend:** **React 18** + **Vite 5** + **Tailwind CSS v4** (Linear Dark Mode)
+* **Frontend:** **React 18** + **Vite 5** + **Tailwind CSS v4** (Dark Mode)
 * **Observabilidad:** **Structlog** + **Prometheus** + **OpenTelemetry**
 * **Contenerización:** **Docker Compose**
 
@@ -52,7 +52,7 @@ graph TD
 
     %% --- Adaptadores de Entrada ---
     subgraph "Capa de Presentación"
-        UI["Frontend React<br>Chat + Sync UI<br>Linear Dark Mode"]
+        UI["Frontend React<br>Chat + Sync UI<br>Dark Mode"]
         CLI["Scripts CLI<br>ingest_pdfs.py<br>ingest_notion.py"]
         API["FastAPI REST<br>/sync, /ask, /health"]
     end
@@ -402,7 +402,7 @@ npm run dev
 ```
 
 El frontend incluye:
-- 💬 **Chat Interface** con Linear Dark Mode
+- 💬 **Chat Interface** con Dark Mode
 - 📊 **Panel de Estadísticas** en tiempo real
 - 📁 **Sincronización de Documentos** (PDF y Notion) desde la UI
 - 📈 **Visualización de Fuentes** con scores de relevancia
