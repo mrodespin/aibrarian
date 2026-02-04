@@ -313,6 +313,7 @@ VECTOR_SEARCH_LATENCY.observe(duration)
 
 | Documento | Descripción |
 |-----------|-------------|
+| **[docs/Bibliotecario-IA_Presentacion_TFM.pptx](docs/Bibliotecario-IA_Presentacion_TFM.pptx)** | Slides de presentación del proyecto |
 | **[docs/STRUCTURE.md](docs/STRUCTURE.md)** | Arquitectura y estructura del proyecto |
 | **[docs/USAGE.md](docs/USAGE.md)** | API endpoints y scripts CLI |
 | **[docs/USAGE_TESTING.md](docs/USAGE_TESTING.md)** | Suite de tests y guía de testing |
