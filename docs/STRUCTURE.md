@@ -259,15 +259,6 @@ frontend/src/
 - Polling automático para estadísticas en tiempo real
 - Manejo de errores y estados de carga
 
-**Funcionalidades implementadas:**
-- **Chat Interface**: Conversación completa con el RAG
-- **Dark Mode**: Diseño profesional
-- **Document Sync UI**: Sincronización de PDFs y Notion desde el frontend
-- **Real-time Stats**: Panel de estadísticas en vivo
-- **Source Visualization**: Fuentes con scores de relevancia y contenido expandible
-- **Responsive Design**: Mobile-first con sidebar colapsable
-- **Service Health**: Indicadores de estado de Ollama, ChromaDB y API
-
 ---
 
 ## 🔗 Archivos de Configuración Raíz

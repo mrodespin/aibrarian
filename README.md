@@ -15,6 +15,45 @@ El objetivo es crear un *chatbot* capaz de responder preguntas sobre una base de
 
 El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que los componentes (API, lógica de IA, bases de datos) estén desacoplados y sean fáciles de mantener o sustituir.
 
+---
+
+## ✨ Funcionalidades Principales
+
+### 🔄 Ingesta Multi-fuente
+- **PDFs Locales**: Upload desde navegador con drag & drop o sincronización masiva vía CLI
+- **Notion API**: Sincronización de páginas individuales y bases de datos completas
+- **Extracción Automática**: Propiedades de bases de datos Notion (title, rich_text, number, select, etc.)
+
+### 🧠 Sistema RAG Avanzado
+- **Búsqueda Híbrida**: Combinación de búsqueda semántica + keywords extraídos (Query Expansion)
+- **LLM Local**: Ollama (llama3.2) garantiza privacidad total de datos
+- **Respuestas Contextualizadas**: Citas con referencias a documentos fuente
+- **Prompt Engineering**: Instrucciones estrictas para evitar alucinaciones
+
+### 🎨 Interfaz de Usuario
+- **Chat Conversacional**: Interfaz intuitiva con historial de conversación
+- **Panel de Sincronización**: Gestión visual de documentos con estadísticas en tiempo real
+- **Dark Mode**: Diseño moderno con Tailwind CSS v4
+- **Responsive**: Adaptable a móvil y desktop
+
+### 📊 Observabilidad Integral
+- **Logging Estructurado**: Structlog con formato JSON para parsing automático
+- **Métricas Prometheus**: 8+ métricas clave (latencias, requests, operaciones LLM)
+- **Health Checks**: Monitoreo de estado de API, Ollama y ChromaDB
+- **Endpoint /metrics**: Exposición de métricas para scraping
+
+### 🧪 Testing Exhaustivo
+- **60+ Tests Unitarios**: Pytest con cobertura ~85%
+- **Tests de Integración**: End-to-end con servicios reales
+- **Mocks Configurados**: Para Ollama, ChromaDB y procesadores
+- **CI/CD Ready**: Suite de tests automatizable
+
+### 🏗️ Arquitectura de Calidad
+- **Patrón Hexagonal**: Separación clara entre dominio, puertos y adaptadores
+- **Código Documentado**: Docstrings en español con explicaciones detalladas
+- **Conventional Commits**: Historial de git limpio y semántico
+- **Configuración Flexible**: Variables de entorno para diferentes modos de deployment
+
 ## 🛠️ Stack Tecnológico
 
 * **Framework Backend:** **Python** con **FastAPI**
@@ -25,6 +64,22 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 * **Frontend:** **React 18** + **Vite 5** + **Tailwind CSS v4** (Dark Mode)
 * **Observabilidad:** **Structlog** + **Prometheus** + **OpenTelemetry**
 * **Contenerización:** **Docker Compose**
+
+---
+
+## 📸 Capturas de Pantalla
+
+### Chatbot en Acción
+![Chat Interface](docs/screenshots/chat.png)
+*Interfaz de chat con respuestas contextualizadas y citas a fuentes*
+
+### Panel de Sincronización
+![Sync Panel](docs/screenshots/sync.png)
+*Panel de sincronización con estadísticas del sistema en tiempo real*
+
+### Respuesta con Referencias
+![Response with Sources](docs/screenshots/sources.png)
+*Ejemplo de respuesta del RAG citando documentos fuente*
 
 ---
 
