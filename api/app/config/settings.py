@@ -106,7 +106,7 @@ class Settings(BaseSettings):
         description="ChromaDB host"
     )
     chromadb_port: int = Field(
-        default=8000,                      # Puerto por defecto de ChromaDB
+        default=8001,                      # Puerto por defecto de ChromaDB
         description="ChromaDB port"
     )
     chromadb_collection_name: str = Field(
