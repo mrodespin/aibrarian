@@ -3,10 +3,10 @@
  */
 
 import { useApp } from '../../context/AppContext';
-import { Card, Badge, Spinner } from '../common';
+import { Card, Badge, Spinner, Button } from '../common';
 
 export function StatsPanel() {
-  const { stats, health, isLoading, refreshAll } = useApp();
+  const { stats, health, isLoading, isRefreshing, refreshAll } = useApp();
 
   return (
     <Card title="Estado del Sistema">
@@ -84,12 +84,13 @@ export function StatsPanel() {
           )}
 
           {/* Refresh button */}
-          <button
+          <Button
             onClick={refreshAll}
-            className="w-full text-sm text-accent-400 hover:text-accent-300 transition-colors mt-2"
+            disabled={isRefreshing}
+            className="w-full"
           >
             Actualizar estado
-          </button>
+          </Button>
         </div>
       )}
     </Card>

@@ -26,6 +26,7 @@ export function AppProvider({ children }) {
   });
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const checkHealth = useCallback(async () => {
     try {
@@ -65,25 +66,35 @@ export function AppProvider({ children }) {
   }, []);
 
   const refreshAll = useCallback(async () => {
-    setIsLoading(true);
+    setIsRefreshing(true);
     await Promise.all([checkHealth(), fetchStats()]);
-    setIsLoading(false);
+    setIsRefreshing(false);
   }, [checkHealth, fetchStats]);
 
   // Initial fetch and polling
   useEffect(() => {
-    refreshAll();
+    // Carga inicial
+    const initialLoad = async () => {
+      setIsLoading(true);
+      await Promise.all([checkHealth(), fetchStats()]);
+      setIsLoading(false);
+    };
+    
+    initialLoad();
+    
+    // Polling silencioso (sin cambiar isLoading)
     const interval = setInterval(() => {
       checkHealth();
       fetchStats();
     }, POLL_INTERVAL);
     return () => clearInterval(interval);
-  }, [refreshAll, checkHealth, fetchStats]);
+  }, [checkHealth, fetchStats]);
 
   const value = {
     health,
     stats,
     isLoading,
+    isRefreshing,
     refreshAll,
     refreshStats: fetchStats,
   };
