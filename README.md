@@ -71,7 +71,7 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 
 ### Demostración completa del sistema (2:32 min)
 
-![Demo](https://drive.google.com/drive/folders/1vz35nWgZnhteoaEQ-eHkpbRTu17mcauQ)
+**[▶️ Ver Video Demo en Google Drive](https://drive.google.com/file/d/1nTfRfqYPkvdErhMkXMwcC0Q9M0WI8ksv/view?usp=sharing)**
 
 **Funcionalidades mostradas:**
 El video muestra el sistema funcionando con una base de conocimiento real:
