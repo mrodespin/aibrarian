@@ -67,19 +67,19 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 
 ---
 
-## 📸 Capturas de Pantalla
+## 🎥 Demo en Video
 
-### Chatbot en Acción
-![Chat Interface](docs/screenshots/chat.png)
-*Interfaz de chat con respuestas contextualizadas y citas a fuentes*
+### Demostración completa del sistema (2:32 min)
 
-### Panel de Sincronización
-![Sync Panel](docs/screenshots/sync.png)
-*Panel de sincronización con estadísticas del sistema en tiempo real*
+![Demo](https://drive.google.com/drive/folders/1vz35nWgZnhteoaEQ-eHkpbRTu17mcauQ)
 
-### Respuesta con Referencias
-![Response with Sources](docs/screenshots/sources.png)
-*Ejemplo de respuesta del RAG citando documentos fuente*
+**Funcionalidades mostradas:**
+El video muestra el sistema funcionando con una base de conocimiento real:
+- ✅ **Base de datos:** ~1900 documentos del curso ya indexados
+- ✅ **Consultas en tiempo real:** Búsqueda semántica sobre miles de chunks
+- ✅ **Respuestas contextualizadas:** Citas precisas a documentos fuente
+- ✅ **Panel de estadísticas:** Monitoreo del estado del sistema
+- ✅ **Sincronización de Notion:** Ingesta de páginas desde Notion API
 
 ---
 
