@@ -439,21 +439,22 @@ python scripts/verify_setup.py
 ### Uso
 
 ```bash
-# Terminal 1: Ollama (si no está corriendo)
+# Terminal 1: Ollama (mantener abierto)
 ollama serve
 
-# Terminal 2: ChromaDB
-docker-compose up -d chromadb
+# Terminal 2: Docker (ChromaDB + API)
+docker-compose up -d
 
-# Terminal 3: API Backend
-cd api && source venv/bin/activate
-uvicorn app.main:app --reload
-
-# Terminal 4: Frontend
+# Terminal 3: Frontend
 cd frontend && npm run dev
 
 # Abrir navegador en http://localhost:5173
 ```
+
+**Puertos:**
+- Frontend: http://localhost:5173
+- API: http://localhost:8000 (API Docs: http://localhost:8000/docs)
+- ChromaDB: http://localhost:8001
 
 ---
 

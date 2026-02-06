@@ -661,8 +661,8 @@ def print_summary(results, optional_results):
         # Todo correcto: mostrar los próximos pasos para usar el sistema
         print_success("🎉 ¡TODO ESTÁ CONFIGURADO CORRECTAMENTE!")
         print_info("\nPróximos pasos:")
-        print_info("1. Iniciar servicios: docker-compose up -d chromadb")
-        print_info("2. Iniciar API: cd api && source venv/bin/activate && uvicorn app.main:app --reload")
+        print_info("1. Iniciar Ollama: ollama serve")
+        print_info("2. Iniciar Docker: docker-compose up -d")
         print_info("3. Iniciar Frontend: cd frontend && npm run dev")
         print_info("4. Abrir en navegador: http://localhost:5173")
         print_info("5. Ingestar PDFs desde la interfaz o con: python scripts/ingest_pdfs.py")

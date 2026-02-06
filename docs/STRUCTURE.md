@@ -264,11 +264,16 @@ frontend/src/
 
 ### `docker-compose.yml`
 
-Solo contiene **ChromaDB** (base de datos vectorial) en puerto 8001.
+Contiene **2 servicios**:
+- **ChromaDB**: Base de datos vectorial en puerto 8001
+- **API**: Backend FastAPI en puerto 8000
 
-Ollama y la API corren **nativos** en macOS:
-- **Ollama**: `brew install ollama && ollama serve` (GPU Metal, ~10x más rápido)
-- **API**: `uvicorn app.main:app --reload` (hot-reload para desarrollo)
+**Ollama** corre **nativo** en macOS para aprovechar GPU Metal (~10x más rápido):
+- Instalación: `brew install ollama && ollama serve`
+
+**Arquitectura de red:**
+- La API en Docker se conecta a Ollama en el host via `host.docker.internal`
+- La API se conecta a ChromaDB via red interna de Docker (`chromadb:8000`)
 
 ---
 

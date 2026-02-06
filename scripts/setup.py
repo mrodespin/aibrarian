@@ -216,19 +216,21 @@ def install_docker():
         return False
 
 
-def setup_chromadb():
-    print_header("6. Iniciando ChromaDB (Docker)")
+def setup_docker_services():
+    print_header("6. Iniciando Servicios Docker (ChromaDB + API)")
 
     try:
+        # Build y start de todos los servicios
         subprocess.run(
-            ["docker-compose", "up", "-d", "chromadb"],
+            ["docker-compose", "up", "-d", "--build"],
             check=True,
             cwd=Path(__file__).parent.parent
         )
         print_success("ChromaDB iniciado en puerto 8001")
+        print_success("API iniciada en puerto 8000")
         return True
     except subprocess.CalledProcessError:
-        print_error("Falló al iniciar ChromaDB")
+        print_error("Falló al iniciar servicios Docker")
         return False
 
 
@@ -387,8 +389,7 @@ def main():
 
         print_info("Este script configura el entorno de desarrollo:")
         print_info("  - Ollama nativo (GPU Metal)")
-        print_info("  - ChromaDB en Docker")
-        print_info("  - API con uvicorn local")
+        print_info("  - ChromaDB + API en Docker")
         print_info("  - Frontend con npm\n")
 
         if not ask_yes_no("¿Continuar con la instalación?"):
@@ -401,7 +402,7 @@ def main():
         if not install_homebrew(): return
         if not install_ollama(): return
         if not install_docker(): return
-        if not setup_chromadb(): return
+        if not setup_docker_services(): return
         if not setup_python(): return
         if not setup_env_file(): return
         setup_frontend()
@@ -412,21 +413,18 @@ def main():
 
         print_success("El entorno está listo")
         print_info("\n📝 Para iniciar el sistema:\n")
-        print_info("  # Terminal 1: Ollama (si no está corriendo)")
+        print_info("  # Terminal 1: Ollama (mantener abierto)")
         print_info("  ollama serve")
         print_info("")
-        print_info("  # Terminal 2: ChromaDB (ya debería estar corriendo)")
-        print_info("  docker-compose up -d chromadb")
+        print_info("  # Terminal 2: Docker (ChromaDB + API)")
+        print_info("  docker-compose up -d")
         print_info("")
-        print_info("  # Terminal 3: API Backend")
-        print_info("  cd api && source venv/bin/activate")
-        print_info("  uvicorn app.main:app --reload")
-        print_info("")
-        print_info("  # Terminal 4: Frontend")
+        print_info("  # Terminal 3: Frontend")
         print_info("  cd frontend && npm run dev")
         print_info("")
         print_info("  🌐 Frontend: http://localhost:5173")
         print_info("  📚 API Docs: http://localhost:8000/docs")
+        print_info("  💾 ChromaDB: http://localhost:8001")
 
     except KeyboardInterrupt:
         print("\n")

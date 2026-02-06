@@ -1,12 +1,15 @@
 # /docker-compose.yml
-# ChromaDB - Base de datos vectorial para Bibliotecario-IA
+# Servicios Docker para Bibliotecario-IA
 #
 # Uso:
-#   docker-compose up -d chromadb
+#   docker-compose up -d
 #
-# Nota: Ollama y la API FastAPI corren de forma NATIVA en macOS:
-#   - Ollama: brew install ollama && ollama serve (GPU Metal)
-#   - API: cd api && uvicorn app.main:app --reload
+# Servicios:
+#   - chromadb: Base de datos vectorial (puerto 8001)
+#   - api: Backend FastAPI (puerto 8000)
+#
+# Nota: Ollama corre de forma NATIVA en macOS para aprovechar GPU Metal (~10x más rápido)
+#   Instalación: brew install ollama && ollama serve
 
 services:
   chromadb:
@@ -15,6 +18,46 @@ services:
       - "8001:8000"
     volumes:
       - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # Ollama corre en el host (macOS nativo para GPU Metal)
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=llama3.2
+      - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+      - OLLAMA_TIMEOUT=120
+      # ChromaDB corre en Docker (puerto interno)
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+      - CHROMADB_COLLECTION_NAME=bibliotecario_docs
+      # Document processing
+      - CHUNK_SIZE=1000
+      - CHUNK_OVERLAP=200
+      - DATA_DIRECTORY=/app/data
+      # RAG
+      - MAX_CONTEXT_CHUNKS=4
+      - LLM_TEMPERATURE=0.7
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
 volumes:
   chroma_data:
