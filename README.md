@@ -2,6 +2,9 @@
 
 ![TFM](https://img.shields.io/badge/Proyecto-TFM_MDEV_IA-blue.svg)
 ![Licencia](https://img.shields.io/badge/Licencia-MIT-green.svg)
+![Tests](https://img.shields.io/badge/Tests-66_passed-brightgreen.svg)
+![Coverage](https://img.shields.io/badge/Coverage-74%25-yellow.svg)
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)
 
 TFM que implementa un asistente RAG ('Bibliotecario IA') para consultar documentos (PDFs locales y Notion) usando Ollama y LangChain.
 
@@ -456,6 +459,24 @@ cd frontend && npm run dev
 - Frontend: http://localhost:5173
 - API: http://localhost:8000 (API Docs: http://localhost:8000/docs)
 - ChromaDB: http://localhost:8001
+
+---
+
+## ⚠️ Limitaciones Conocidas
+
+- **Solo macOS**: El entorno está optimizado para macOS con Apple Silicon (GPU Metal). Otros sistemas requerirían adaptar los scripts de instalación
+- **Modelos locales**: La calidad de las respuestas de llama3.2 (3B parámetros) es inferior a modelos cloud como GPT-4, pero suficiente para el caso de uso y garantiza privacidad total
+- **Sin autenticación**: En el MVP la API no implementa autenticación ni autorización
+- **Escalabilidad**: ChromaDB en modo standalone no escala horizontalmente. Adecuado para miles de documentos, no para millones
+
+## 🔮 Trabajo Futuro
+
+- **Streaming de respuestas**: Implementar Server-Sent Events (SSE) para mostrar la respuesta del LLM token a token en tiempo real
+- **Historial de conversación**: Mantener contexto entre preguntas para permitir preguntas de seguimiento ("¿puedes ampliar eso?")
+- **Más fuentes de datos**: Integrar Google Drive, Confluence, o páginas web como fuentes adicionales de documentos
+- **Evaluación del RAG**: Implementar métricas de calidad (faithfulness, relevance) con frameworks como RAGAS
+- **Autenticación y despliegue**: Añadir autenticación (JWT/OAuth) para exponer el sistema al exterior de forma segura
+- **Soporte multi-plataforma**: Adaptar scripts de instalación para Linux y Windows (WSL)
 
 ---
 
