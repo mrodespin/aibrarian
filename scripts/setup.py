@@ -217,7 +217,7 @@ def install_docker():
 
 
 def setup_docker_services():
-    print_header("6. Iniciando Servicios Docker (ChromaDB + API)")
+    print_header("8. Iniciando Servicios Docker (ChromaDB + API)")
 
     try:
         # Build y start de todos los servicios
@@ -238,7 +238,7 @@ def setup_docker_services():
 # CONFIGURACIÓN DE PYTHON
 # ============================================================================
 def setup_python():
-    print_header("7. Configurando Entorno Python")
+    print_header("6. Configurando Entorno Python")
 
     python_version = sys.version_info
     print_info(f"Python {python_version.major}.{python_version.minor}.{python_version.micro}")
@@ -279,7 +279,7 @@ def setup_python():
 
 
 def setup_env_file():
-    print_header("8. Configurando Variables de Entorno")
+    print_header("7. Configurando Variables de Entorno")
 
     api_dir = Path(__file__).parent.parent / "api"
     env_file = api_dir / ".env"
@@ -417,9 +417,9 @@ def main():
         if not install_homebrew(): return
         if not install_ollama(): return
         if not install_docker(): return
-        if not setup_docker_services(): return
         if not setup_python(): return
         if not setup_env_file(): return
+        if not setup_docker_services(): return
         setup_frontend()
         run_verification()
 
