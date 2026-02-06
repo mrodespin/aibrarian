@@ -82,7 +82,15 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │
 ├── /docs/                          # Documentación Técnica (Humanos)
 │   ├── STRUCTURE.md                # Este archivo - estructura y arquitectura
-│   └── USAGE.md                    # Documentación de API y uso
+│   ├── USAGE.md                    # Documentación de API y uso
+│   └── /adr/                       # Architecture Decision Records
+│       ├── INDEX.md                # Índice de decisiones
+│       ├── 001-arquitectura-hexagonal.md
+│       ├── 002-ollama-local.md
+│       ├── 003-chromadb-vector-store.md
+│       ├── 004-query-expansion-rag.md
+│       ├── 005-react-vite-frontend.md
+│       └── 006-docker-servicios-ollama-nativo.md
 │
 ├── docker-compose.yml              # Orquestación de servicios
 ├── .gitignore                      # Archivos ignorados por Git
