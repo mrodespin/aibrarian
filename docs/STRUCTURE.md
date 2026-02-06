@@ -73,7 +73,6 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   │   └── /utils/                 # Utilities (markdown, etc.)
 │   ├── package.json                # Dependencies
 │   ├── vite.config.js              # Vite configuration
-│   ├── tailwind.config.js          # Tailwind CSS configuration
 │   ├── postcss.config.js           # PostCSS configuration
 │   └── README.md                   # Frontend documentation
 │
@@ -198,8 +197,8 @@ Los archivos `test_document.*` y `create_test_pdf.py` están destinados a testin
 
 ### `/frontend` - Interfaz Web
 
-**Lenguaje:** JavaScript (React 18)
-**Framework:** React + Vite 5 + Tailwind CSS v4
+**Lenguaje:** JavaScript (React 19)
+**Framework:** React + Vite 7 + Tailwind CSS v4
 **Estado:** **Completamente funcional** con Dark Mode
 
 **Estructura:**
@@ -281,7 +280,7 @@ Orquesta los 3 servicios del proyecto:
 - Structlog, Prometheus-Client, OpenTelemetry
 
 **Frontend (JavaScript):**
-- React 18 + Vite 5
+- React 19 + Vite 7
 - Tailwind CSS v4 + @tailwindcss/postcss
 - Ver `frontend/package.json` para lista completa
 

@@ -510,8 +510,8 @@ def check_nodejs():
     Verifica que Node.js esté instalado y sea versión 18+.
 
     ¿Por qué Node.js 18+?
-    El frontend usa Vite 5 y React 18, que requieren Node.js 18 o superior.
-    Además, Node.js 18 es LTS (Long Term Support) hasta 2025.
+    El frontend usa Vite 7 y React 19, que requieren Node.js 18 o superior.
+    Node.js 18+ garantiza compatibilidad con ESModules y APIs modernas.
 
     Returns:
         bool: True si Node.js 18+ está instalado
@@ -630,24 +630,30 @@ def check_frontend():
 # ============================================================================
 # RESUMEN DE RESULTADOS
 # ============================================================================
-def print_summary(results):
+def print_summary(results, optional_results):
     """
     Imprime un resumen de todos los checks y las siguientes acciones.
 
     Args:
-        results: Diccionario {nombre_check: bool} con los resultados
-                 de cada verificación.
+        results: Diccionario {nombre_check: bool} con los resultados requeridos
+        optional_results: Diccionario {nombre_check: bool} con los resultados opcionales
     """
     print_header("Resumen de Verificación")
 
+    # Solo contar checks requeridos para pass/fail
     total = len(results)
     passed = sum(1 for r in results.values() if r)
     failed = total - passed
 
-    print(f"Total checks: {total}")
+    print(f"Checks requeridos: {total}")
     print_success(f"Pasados: {passed}")
     if failed > 0:
         print_error(f"Fallidos: {failed}")
+
+    # Mostrar checks opcionales por separado
+    if optional_results:
+        optional_passed = sum(1 for r in optional_results.values() if r)
+        print_info(f"Checks opcionales: {len(optional_results)} ({optional_passed} activos)")
 
     print("\n" + "="*60)
 
@@ -655,7 +661,7 @@ def print_summary(results):
         # Todo correcto: mostrar los próximos pasos para usar el sistema
         print_success("🎉 ¡TODO ESTÁ CONFIGURADO CORRECTAMENTE!")
         print_info("\nPróximos pasos:")
-        print_info("1. Iniciar servicios: docker-compose up -d")
+        print_info("1. Iniciar servicios: docker-compose up -d chromadb")
         print_info("2. Iniciar API: cd api && source venv/bin/activate && uvicorn app.main:app --reload")
         print_info("3. Iniciar Frontend: cd frontend && npm run dev")
         print_info("4. Abrir en navegador: http://localhost:5173")
@@ -692,11 +698,12 @@ async def main():
     print("╚═══════════════════════════════════════════════════════════╝")
     print(f"{Colors.ENDC}\n")
 
-    # Diccionario para almacenar resultados: nombre → True/False
-    results = {}
+    # Diccionarios para almacenar resultados: nombre → True/False
+    results = {}           # Checks requeridos
+    optional_results = {}  # Checks opcionales (no afectan el exit code)
 
     # Ejecutar checks en secuencia
-    # Backend checks
+    # Backend checks (requeridos)
     results['python'] = check_python_version()
     results['dependencies'] = check_dependencies()
     results['ollama'] = check_ollama()
@@ -704,18 +711,19 @@ async def main():
     results['chromadb'] = check_chromadb()
     results['structure'] = check_project_structure()
     results['data'] = check_data_directory()
-    results['api'] = await check_api_health()   # Único check async
 
-    # Frontend checks
+    # Check opcional: API (solo informativo)
+    optional_results['api'] = await check_api_health()
+
+    # Frontend checks (requeridos)
     results['nodejs'] = check_nodejs()
     results['frontend'] = check_frontend()
 
     # Resumen final con conteo de pasados/fallidos
-    print_summary(results)
+    print_summary(results, optional_results)
 
-    # Exit code: 0 = todo OK, 1 = hay errores.
-    # Permite usar el script en scripts de automatización:
-    #   python verify_setup.py && echo "Todo listo"
+    # Exit code: 0 = todo OK, 1 = hay errores en checks REQUERIDOS
+    # Los checks opcionales no afectan el exit code
     if all(results.values()):
         sys.exit(0)
     else:

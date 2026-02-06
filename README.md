@@ -61,7 +61,7 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 * **Modelo de Lenguaje (LLM):** **Ollama** (ej. `llama3.2`)
 * **Base de Datos Vectorial:** **ChromaDB**
 * **Fuentes de Datos:** **PDFs locales** y **Notion API**
-* **Frontend:** **React 18** + **Vite 5** + **Tailwind CSS v4** (Dark Mode)
+* **Frontend:** **React 19** + **Vite 7** + **Tailwind CSS v4** (Dark Mode)
 * **Observabilidad:** **Structlog** + **Prometheus** + **OpenTelemetry**
 * **Contenerización:** **Docker Compose**
 
