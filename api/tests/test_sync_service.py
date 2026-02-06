@@ -394,23 +394,3 @@ def test_chunk_size_configuration():
     # Assert: verificar que existen las configuraciones
     assert hasattr(settings, 'CHUNK_SIZE') or hasattr(settings, 'chunk_size')
     assert hasattr(settings, 'CHUNK_OVERLAP') or hasattr(settings, 'chunk_overlap')
-
-
-# ============================================================================
-# TESTS DE INTEGRACIÓN
-# ============================================================================
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_ingest_real_pdf_file():
-    """
-    Test de integración: ingesta de un PDF real.
-
-    Requiere:
-    - PDF real en /data
-    - Ollama corriendo
-    - ChromaDB corriendo
-
-    No se ejecuta por defecto (usa pytest -m integration)
-    """
-    pytest.skip("Requiere servicios reales - implementar cuando sea necesario")

@@ -407,26 +407,3 @@ def test_ask_endpoint_responds_within_reasonable_time(test_client):
     # Con mocks debe ser instantáneo, con servicios reales <30s
     if response.status_code == 200:
         assert elapsed < 30.0
-
-
-# ============================================================================
-# TESTS DE INTEGRACIÓN (requieren servicios reales)
-# ============================================================================
-
-@pytest.mark.integration
-def test_full_api_flow_with_real_services(test_client):
-    """
-    Test de integración: flujo completo ingesta → query.
-
-    Requiere:
-    - Ollama corriendo
-    - ChromaDB corriendo
-    - PDF de prueba
-
-    1. Ingesta un PDF
-    2. Hace una query
-    3. Verifica que la respuesta incluye información del PDF
-
-    No se ejecuta por defecto (usa pytest -m integration)
-    """
-    pytest.skip("Requiere servicios reales - implementar cuando sea necesario")
