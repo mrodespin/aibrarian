@@ -351,7 +351,7 @@ def check_chromadb():
     """
     Verifica que ChromaDB esté corriendo y responda al heartbeat.
 
-    ChromaDB expone un endpoint /api/v2/heartbeat que devuelve 200
+    ChromaDB expone un endpoint /api/v1/heartbeat que devuelve 200
     si el servicio está activo. Es el equivalente a un health check.
 
     Nota: ChromaDB corre en el puerto 8001 (no el por defecto 8000)
@@ -364,7 +364,7 @@ def check_chromadb():
 
     try:
         import httpx
-        response = httpx.get("http://localhost:8001/api/v2/heartbeat", timeout=5.0)
+        response = httpx.get("http://localhost:8001/api/v1/heartbeat", timeout=5.0)
         if response.status_code == 200:
             print_success("ChromaDB está corriendo y responde")
             return True
