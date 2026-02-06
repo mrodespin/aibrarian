@@ -1,45 +1,31 @@
 #!/usr/bin/env python3
-# /setup.py
+# /scripts/setup.py
 """
 Script de Instalación Automática - TFM Bibliotecario-IA
 
-Este script automatiza la instalación completa del entorno de desarrollo
-para el proyecto Bibliotecario-IA. Detecta qué está instalado y qué falta,
-luego instala sólo lo necesario.
+Este script automatiza la instalación completa del entorno de desarrollo.
+Detecta qué está instalado y qué falta, luego instala sólo lo necesario.
 
-Modos de instalación soportados:
-    - Modo A (Docker): Todo en contenedores (ollama, chromadb, api)
-    - Modo B (Local/Híbrido): Ollama nativo + ChromaDB en Docker
-
-¿Cuándo usar este script?
-- Primera instalación después de clonar el repositorio
-- Migración a un nuevo ordenador
-- Reinstalación completa del entorno
+Configuración:
+- Ollama: Nativo en macOS (acceso a GPU Metal, ~10x más rápido)
+- ChromaDB: Docker (persistencia simple con volúmenes)
+- API: Local con uvicorn (hot-reload para desarrollo)
+- Frontend: React + Vite (npm run dev)
 
 ¿Qué hace?
-1. Detecta el sistema operativo (sólo macOS soportado por ahora)
-2. Pregunta qué modo de instalación prefieres (A o B)
-3. Verifica/instala Homebrew (si es necesario)
-4. Instala Ollama y descarga modelos (si Modo B)
-5. Verifica/instala Docker
-6. Inicia servicios con docker-compose
-7. Configura entorno Python (venv + dependencias)
-8. Crea archivo .env con configuración correcta
-9. Configura entorno Frontend (Node.js + npm install)
-10. Ejecuta verify_setup.py para confirmar
-
-Requisitos previos:
-- macOS (soporte para Linux/Windows pendiente)
-- Conexión a internet (para descargar dependencias)
-- Permisos de administrador (para brew install)
+1. Verifica el sistema operativo (macOS)
+2. Verifica/instala Homebrew
+3. Instala Ollama y descarga modelos
+4. Verifica Docker y levanta ChromaDB
+5. Configura entorno Python (venv + dependencias)
+6. Crea archivo .env
+7. Configura Frontend (Node.js + npm install)
+8. Ejecuta verify_setup.py para confirmar
 
 Uso:
-    python3 setup.py
+    python3 scripts/setup.py
 """
 
-# ============================================================================
-# IMPORTS
-# ============================================================================
 import sys
 import subprocess
 import platform
@@ -50,189 +36,91 @@ from pathlib import Path
 # COLORES PARA TERMINAL
 # ============================================================================
 class Colors:
-    GREEN = '\033[92m'    # Verde (éxito)
-    RED = '\033[91m'      # Rojo (error)
-    YELLOW = '\033[93m'   # Amarillo (advertencia)
-    BLUE = '\033[94m'     # Azul (información)
-    CYAN = '\033[96m'     # Cian (prompts)
-    ENDC = '\033[0m'      # Reset
-    BOLD = '\033[1m'      # Negrita
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
 
 
-# ============================================================================
-# FUNCIONES DE FORMATO
-# ============================================================================
 def print_banner():
-    """Imprime el banner de inicio."""
     print(f"\n{Colors.BOLD}{Colors.BLUE}")
     print("╔═══════════════════════════════════════════════════════════╗")
-    print("║                                                           ║")
     print("║     🚀 INSTALACIÓN - BIBLIOTECARIO-IA 🚀                ║")
-    print("║                                                           ║")
     print("╚═══════════════════════════════════════════════════════════╝")
     print(Colors.ENDC)
 
 
 def print_header(text):
-    """Imprime un encabezado de sección."""
-    print(f"\n{Colors.BOLD}{Colors.BLUE}{'='*60}{Colors.ENDC}")
-    print(f"{Colors.BOLD}{Colors.BLUE}{text}{Colors.ENDC}")
-    print(f"{Colors.BOLD}{Colors.BLUE}{'='*60}{Colors.ENDC}\n")
+    print(f"\n{Colors.BOLD}{Colors.BLUE}{'='*60}")
+    print(f"{text}")
+    print(f"{'='*60}{Colors.ENDC}\n")
 
 
 def print_success(text):
-    """Mensaje de éxito."""
     print(f"{Colors.GREEN}✅ {text}{Colors.ENDC}")
 
 
 def print_error(text):
-    """Mensaje de error."""
     print(f"{Colors.RED}❌ {text}{Colors.ENDC}")
 
 
 def print_warning(text):
-    """Mensaje de advertencia."""
     print(f"{Colors.YELLOW}⚠️  {text}{Colors.ENDC}")
 
 
 def print_info(text):
-    """Mensaje informativo."""
     print(f"{Colors.BLUE}ℹ️  {text}{Colors.ENDC}")
 
 
-def print_step(step_num, total_steps, text):
-    """Imprime el paso actual."""
-    print(f"\n{Colors.CYAN}[{step_num}/{total_steps}] {text}{Colors.ENDC}")
-
-
-# ============================================================================
-# FUNCIONES DE UTILIDAD
-# ============================================================================
 def run_command(command, check=True, capture_output=True):
-    """
-    Ejecuta un comando shell y retorna el resultado.
-
-    Args:
-        command: Comando a ejecutar (string o lista)
-        check: Si True, lanza excepción en caso de error
-        capture_output: Si True, captura stdout/stderr
-
-    Returns:
-        subprocess.CompletedProcess con el resultado
-    """
     if isinstance(command, str):
         command = command.split()
-
-    return subprocess.run(
-        command,
-        check=check,
-        capture_output=capture_output,
-        text=True
-    )
+    return subprocess.run(command, check=check, capture_output=capture_output, text=True)
 
 
 def is_installed(program):
-    """Verifica si un programa está instalado en el PATH."""
     return shutil.which(program) is not None
 
 
 def ask_yes_no(question, default=True):
-    """
-    Pregunta sí/no al usuario.
-
-    Args:
-        question: Texto de la pregunta
-        default: Respuesta por defecto (True=sí, False=no)
-
-    Returns:
-        bool: True si la respuesta es sí
-    """
     choices = " [S/n]: " if default else " [s/N]: "
     choice = input(f"{Colors.CYAN}{question}{choices}{Colors.ENDC}").lower().strip()
-
     if choice == '':
         return default
-    elif choice in ['s', 'si', 'sí', 'y', 'yes']:
-        return True
-    elif choice in ['n', 'no']:
-        return False
-    else:
-        print_warning("Respuesta no válida. Usando respuesta por defecto.")
-        return default
-
-
-def ask_choice(question, options):
-    """
-    Pregunta múltiple opción al usuario.
-
-    Args:
-        question: Texto de la pregunta
-        options: Lista de tuplas (opción, descripción)
-
-    Returns:
-        str: La opción seleccionada
-    """
-    print(f"\n{Colors.CYAN}{question}{Colors.ENDC}")
-    for i, (option, description) in enumerate(options, 1):
-        print(f"  {i}. {Colors.BOLD}{option}{Colors.ENDC}")
-        print(f"     {description}")
-
-    while True:
-        try:
-            choice = int(input(f"\n{Colors.CYAN}Selecciona una opción [1-{len(options)}]: {Colors.ENDC}"))
-            if 1 <= choice <= len(options):
-                return options[choice - 1][0]
-            else:
-                print_warning(f"Por favor, elige un número entre 1 y {len(options)}")
-        except ValueError:
-            print_warning("Por favor, introduce un número válido")
-        except KeyboardInterrupt:
-            print("\n")
-            print_warning("Instalación cancelada por el usuario")
-            sys.exit(130)
+    return choice in ['s', 'si', 'sí', 'y', 'yes']
 
 
 # ============================================================================
 # CHECKS DE SISTEMA
 # ============================================================================
 def check_os():
-    """
-    Verifica que el sistema operativo sea soportado.
-    Por ahora sólo soporta macOS.
-    """
-    print_header("Verificando Sistema Operativo")
-
+    print_header("1. Verificando Sistema Operativo")
     os_name = platform.system()
     print_info(f"Sistema detectado: {os_name}")
 
-    if os_name != "Darwin":  # Darwin = macOS
-        print_error(f"Sistema operativo {os_name} no soportado todavía")
-        print_info("Este script actualmente sólo soporta macOS")
-        print_info("Para otros sistemas, consulta la documentación manual:")
-        print_info("  - README.md")
-        print_info("  - .ai/context.md")
-        sys.exit(1)
+    if os_name != "Darwin":
+        print_error(f"Sistema {os_name} no soportado. Este script es para macOS.")
+        print_info("Para otros sistemas, consulta README.md")
+        return False
 
-    print_success(f"macOS es soportado")
+    print_success("macOS detectado")
     return True
 
 
 def check_internet():
-    """Verifica conectividad a internet."""
-    print_header("Verificando Conexión a Internet")
-
+    print_header("2. Verificando Conexión a Internet")
     try:
-        # Ping a 8.8.8.8 (Google DNS)
         result = run_command(["ping", "-c", "1", "-W", "2000", "8.8.8.8"], check=False)
         if result.returncode == 0:
             print_success("Conexión a internet disponible")
             return True
-        else:
-            print_error("No se detecta conexión a internet")
-            print_info("Necesitas internet para descargar dependencias")
-            return False
+        print_error("Sin conexión a internet")
+        return False
     except Exception as e:
-        print_warning(f"No se pudo verificar conexión: {e}")
+        print_warning(f"No se pudo verificar: {e}")
         return ask_yes_no("¿Continuar de todos modos?", default=False)
 
 
@@ -240,326 +128,185 @@ def check_internet():
 # INSTALACIÓN DE PREREQUISITOS
 # ============================================================================
 def install_homebrew():
-    """Instala Homebrew si no está presente."""
-    print_header("Verificando Homebrew")
+    print_header("3. Verificando Homebrew")
 
     if is_installed("brew"):
         print_success("Homebrew ya está instalado")
         return True
 
     print_warning("Homebrew no está instalado")
-    print_info("Homebrew es necesario para instalar Ollama y otras dependencias")
-
-    if not ask_yes_no("¿Instalar Homebrew?", default=True):
-        print_error("No se puede continuar sin Homebrew")
+    if not ask_yes_no("¿Instalar Homebrew?"):
+        print_error("Homebrew es necesario para instalar Ollama")
         return False
 
-    print_info("Instalando Homebrew (esto puede tardar varios minutos)...")
-
+    print_info("Instalando Homebrew...")
     try:
-        # Script oficial de instalación de Homebrew
-        install_script = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
-        subprocess.run(install_script, shell=True, check=True)
-        print_success("Homebrew instalado correctamente")
+        subprocess.run(
+            '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+            shell=True, check=True
+        )
+        print_success("Homebrew instalado")
         return True
     except subprocess.CalledProcessError:
         print_error("Falló la instalación de Homebrew")
-        print_info("Intenta instalarlo manualmente desde: https://brew.sh")
         return False
 
 
 def install_ollama():
-    """Instala Ollama y descarga los modelos necesarios."""
-    print_header("Configurando Ollama")
+    print_header("4. Configurando Ollama (Nativo)")
+    print_info("Ollama corre nativo en macOS para aprovechar GPU Metal (~10x más rápido)")
 
-    # Check si ollama está instalado
     if is_installed("ollama"):
         print_success("Ollama ya está instalado")
-
-        # Check versión
-        try:
-            result = run_command("ollama --version")
-            version = result.stdout.strip()
-            print_info(f"Versión: {version}")
-        except:
-            pass
     else:
         print_warning("Ollama no está instalado")
-
-        if not ask_yes_no("¿Instalar Ollama?", default=True):
-            print_error("Ollama es necesario para el Modo B")
+        if not ask_yes_no("¿Instalar Ollama con Homebrew?"):
+            print_error("Ollama es necesario para el LLM")
             return False
 
-        print_info("Instalando Ollama con Homebrew...")
+        print_info("Instalando Ollama...")
         try:
             run_command("brew install ollama")
-            print_success("Ollama instalado correctamente")
+            print_success("Ollama instalado")
         except subprocess.CalledProcessError:
             print_error("Falló la instalación de Ollama")
             return False
 
-    # Iniciar servicio Ollama
+    # Iniciar servicio
     print_info("Iniciando servicio Ollama...")
-    try:
-        run_command("brew services start ollama", check=False)
-        print_success("Servicio Ollama iniciado")
-    except:
-        print_warning("No se pudo iniciar el servicio (puede que ya esté corriendo)")
+    run_command("brew services start ollama", check=False)
 
-    # Verificar modelos
-    print_info("Verificando modelos descargados...")
+    # Verificar y descargar modelos
+    print_info("Verificando modelos...")
     try:
         result = run_command("ollama list")
         models_output = result.stdout
 
-        models_needed = ["llama3.2", "nomic-embed-text"]
-        models_to_download = []
-
-        for model in models_needed:
+        for model in ["llama3.2", "nomic-embed-text"]:
             if model in models_output:
-                print_success(f"Modelo {model} ya descargado")
+                print_success(f"Modelo {model} disponible")
             else:
-                models_to_download.append(model)
+                print_warning(f"Descargando {model}...")
+                subprocess.run(["ollama", "pull", model], check=True)
+                print_success(f"Modelo {model} descargado")
 
-        if models_to_download:
-            print_warning(f"Faltan modelos: {', '.join(models_to_download)}")
-
-            if ask_yes_no("¿Descargar modelos ahora? (llama3.2: ~2GB, nomic-embed-text: ~275MB)", default=True):
-                for model in models_to_download:
-                    print_info(f"Descargando {model}...")
-                    try:
-                        # No capturamos output para que el usuario vea el progreso
-                        subprocess.run(["ollama", "pull", model], check=True)
-                        print_success(f"Modelo {model} descargado")
-                    except subprocess.CalledProcessError:
-                        print_error(f"Falló la descarga de {model}")
-                        return False
-
-        print_success("Todos los modelos necesarios están disponibles")
         return True
-
     except subprocess.CalledProcessError:
-        print_error("No se pudo verificar los modelos de Ollama")
+        print_error("Error verificando modelos de Ollama")
         return False
 
 
 def install_docker():
-    """Verifica que Docker esté instalado."""
-    print_header("Verificando Docker")
+    print_header("5. Verificando Docker")
 
     if not is_installed("docker"):
         print_error("Docker no está instalado")
-        print_info("Instala Docker Desktop desde: https://www.docker.com/products/docker-desktop")
-        print_info("Después de instalar, vuelve a ejecutar este script")
+        print_info("Instala Docker Desktop: https://www.docker.com/products/docker-desktop")
         return False
 
     print_success("Docker está instalado")
 
-    # Verificar que Docker esté corriendo
+    # Verificar daemon
     try:
-        run_command("docker ps", check=False, capture_output=True)
+        run_command("docker ps", check=True, capture_output=True)
         print_success("Docker daemon está corriendo")
         return True
     except:
-        print_error("Docker está instalado pero el daemon no está corriendo")
-        print_info("Inicia Docker Desktop y vuelve a ejecutar este script")
+        print_error("Docker no está corriendo. Inicia Docker Desktop.")
         return False
 
 
-def setup_docker_services(mode):
-    """
-    Inicia los servicios de Docker según el modo elegido.
+def setup_chromadb():
+    print_header("6. Iniciando ChromaDB (Docker)")
 
-    Args:
-        mode: "A" para todo en Docker, "B" para sólo ChromaDB
-    """
-    print_header("Configurando Servicios Docker")
-
-    if mode == "A":
-        print_info("Iniciando todos los servicios (ollama, chromadb, api)...")
-        try:
-            subprocess.run(
-                ["docker-compose", "up", "-d"],
-                check=True,
-                cwd=Path(__file__).parent.parent
-            )
-            print_success("Servicios Docker iniciados")
-
-            # Descargar modelos en el contenedor de Ollama
-            print_info("Descargando modelos en el contenedor de Ollama...")
-            print_warning("Esto puede tardar varios minutos...")
-
-            try:
-                subprocess.run(
-                    ["docker", "exec", "ollama", "ollama", "pull", "llama3.2"],
-                    check=True
-                )
-                subprocess.run(
-                    ["docker", "exec", "ollama", "ollama", "pull", "nomic-embed-text"],
-                    check=True
-                )
-                print_success("Modelos descargados en Ollama (Docker)")
-            except subprocess.CalledProcessError:
-                print_warning("No se pudieron descargar los modelos automáticamente")
-                print_info("Ejecuta manualmente:")
-                print_info("  docker exec ollama ollama pull llama3.2")
-                print_info("  docker exec ollama ollama pull nomic-embed-text")
-
-            return True
-
-        except subprocess.CalledProcessError:
-            print_error("Falló al iniciar servicios Docker")
-            return False
-
-    elif mode == "B":
-        print_info("Iniciando sólo ChromaDB...")
-        try:
-            subprocess.run(
-                ["docker-compose", "up", "-d", "chromadb"],
-                check=True,
-                cwd=Path(__file__).parent.parent
-            )
-            print_success("ChromaDB iniciado")
-            return True
-        except subprocess.CalledProcessError:
-            print_error("Falló al iniciar ChromaDB")
-            return False
+    try:
+        subprocess.run(
+            ["docker-compose", "up", "-d", "chromadb"],
+            check=True,
+            cwd=Path(__file__).parent.parent
+        )
+        print_success("ChromaDB iniciado en puerto 8001")
+        return True
+    except subprocess.CalledProcessError:
+        print_error("Falló al iniciar ChromaDB")
+        return False
 
 
 # ============================================================================
 # CONFIGURACIÓN DE PYTHON
 # ============================================================================
 def setup_python():
-    """Configura el entorno Python (venv + dependencias)."""
-    print_header("Configurando Entorno Python")
+    print_header("7. Configurando Entorno Python")
 
-    # Verificar versión de Python
     python_version = sys.version_info
     print_info(f"Python {python_version.major}.{python_version.minor}.{python_version.micro}")
 
     if python_version < (3, 11):
-        print_error(f"Se requiere Python 3.11+")
-        print_info("Instala una versión más reciente de Python")
+        print_error("Se requiere Python 3.11+")
         return False
 
     print_success("Versión de Python compatible")
 
-    # Directorio api (script está en scripts/, api/ está en root)
     project_root = Path(__file__).parent.parent
     api_dir = project_root / "api"
     venv_dir = api_dir / "venv"
 
-    # Crear venv si no existe
+    # Crear venv
     if venv_dir.exists():
-        print_success("Virtual environment ya existe")
+        print_success("Virtual environment existe")
     else:
         print_info("Creando virtual environment...")
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "venv", str(venv_dir)],
-                check=True
-            )
-            print_success("Virtual environment creado")
-        except subprocess.CalledProcessError:
-            print_error("Falló la creación del virtual environment")
-            return False
+        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+        print_success("Virtual environment creado")
 
     # Instalar dependencias
-    print_info("Instalando dependencias Python (esto puede tardar 1-2 minutos)...")
-
+    print_info("Instalando dependencias Python...")
     pip_executable = venv_dir / "bin" / "pip"
     requirements_file = api_dir / "requirements.txt"
 
     try:
         subprocess.run(
             [str(pip_executable), "install", "-r", str(requirements_file)],
-            check=True,
-            capture_output=True
+            check=True, capture_output=True
         )
-        print_success("Dependencias instaladas correctamente")
+        print_success("Dependencias instaladas")
         return True
     except subprocess.CalledProcessError as e:
-        print_error("Falló la instalación de dependencias")
-        print_info(f"Error: {e.stderr}")
+        print_error(f"Falló la instalación: {e.stderr}")
         return False
 
 
-def setup_env_file(mode):
-    """
-    Crea el archivo .env con la configuración correcta según el modo.
-
-    Args:
-        mode: "A" para Docker, "B" para local
-    """
-    print_header("Configurando Variables de Entorno")
+def setup_env_file():
+    print_header("8. Configurando Variables de Entorno")
 
     api_dir = Path(__file__).parent.parent / "api"
     env_file = api_dir / ".env"
     env_example = api_dir / ".env.example"
 
     if env_file.exists():
-        print_warning("Ya existe un archivo .env")
+        print_warning("Ya existe .env")
         if not ask_yes_no("¿Sobrescribirlo?", default=False):
             print_info("Conservando .env existente")
             return True
 
-    # Copiar .env.example
     try:
         shutil.copy(env_example, env_file)
         print_success("Archivo .env creado desde .env.example")
+        print_info("Configuración: Ollama en localhost:11434, ChromaDB en localhost:8001")
 
-        # Leer el archivo .env para modificarlo según el modo
-        with open(env_file, 'r') as f:
-            content = f.read()
-
-        # Configurar OLLAMA_BASE_URL según el modo elegido
-        if mode == "A":
-            # Modo A: Todo en Docker - Ollama también corre en Docker
-            ollama_url = "http://ollama:11434"
-            print_info("Modo A (Docker): Configurando Ollama para contenedor Docker")
-        else:
-            # Modo B: Híbrido - API en Docker, Ollama nativo en Mac (GPU)
-            ollama_url = "http://host.docker.internal:11434"
-            print_info("Modo B (Híbrido): Configurando Ollama para acceso desde Docker al host")
-
-        # Reemplazar la URL de Ollama en el .env
-        # El .env.example tiene: OLLAMA_BASE_URL=http://localhost:11434
-        content = content.replace(
-            "OLLAMA_BASE_URL=http://localhost:11434",
-            f"OLLAMA_BASE_URL={ollama_url}"
-        )
-
-        # Escribir los cambios
-        with open(env_file, 'w') as f:
-            f.write(content)
-
-        print_success(f"OLLAMA_BASE_URL configurado: {ollama_url}")
-
-        # Preguntar por credenciales de Notion
-        print_info("\n¿Quieres configurar las credenciales de Notion ahora?")
-        print_info("(Opcional - puedes editarlas después en api/.env)")
-
-        if ask_yes_no("¿Configurar Notion?", default=False):
+        # Preguntar por Notion (opcional)
+        if ask_yes_no("¿Configurar credenciales de Notion? (opcional)", default=False):
             notion_key = input(f"{Colors.CYAN}NOTION_API_KEY: {Colors.ENDC}").strip()
-            notion_db = input(f"{Colors.CYAN}NOTION_DATABASE_ID (opcional): {Colors.ENDC}").strip()
 
-            # Leer el archivo .env actualizado
             with open(env_file, 'r') as f:
                 content = f.read()
-
-            # Reemplazar valores de Notion
             content = content.replace("NOTION_API_KEY=", f"NOTION_API_KEY={notion_key}")
-            if notion_db:
-                content = content.replace("NOTION_DATABASE_ID=", f"NOTION_DATABASE_ID={notion_db}")
-
-            # Escribir de vuelta
             with open(env_file, 'w') as f:
                 f.write(content)
 
-            print_success("Credenciales de Notion configuradas")
+            print_success("Notion configurado")
 
         return True
-
     except Exception as e:
         print_error(f"Falló la creación del .env: {e}")
         return False
@@ -568,117 +315,41 @@ def setup_env_file(mode):
 # ============================================================================
 # CONFIGURACIÓN DEL FRONTEND
 # ============================================================================
-def check_nodejs():
-    """
-    Verifica que Node.js 18+ esté instalado.
-
-    Returns:
-        bool: True si Node.js 18+ está disponible
-    """
-    if not is_installed("node"):
-        return False
-
-    try:
-        result = run_command("node --version")
-        version_str = result.stdout.strip().lstrip('v')
-        major_version = int(version_str.split('.')[0])
-        return major_version >= 18
-    except:
-        return False
-
-
 def setup_frontend():
-    """
-    Configura el frontend: verifica Node.js e instala dependencias.
-
-    Returns:
-        bool: True si el frontend quedó configurado correctamente
-    """
-    print_header("Configurando Frontend")
+    print_header("9. Configurando Frontend")
 
     project_root = Path(__file__).parent.parent
     frontend_dir = project_root / "frontend"
 
-    # Verificar que el directorio frontend existe
     if not frontend_dir.exists():
         print_error("Directorio frontend/ no encontrado")
-        print_info("Asegúrate de haber clonado el repositorio completo")
         return False
-
-    print_success("Directorio frontend/ encontrado")
 
     # Verificar Node.js
     if not is_installed("node"):
-        print_error("Node.js NO está instalado")
-        print_info("El frontend requiere Node.js 18+")
-        print_info("")
-        print_info("Opciones de instalación:")
-        print_info("  1. Descarga desde: https://nodejs.org/")
-        print_info("  2. Con Homebrew: brew install node")
-        print_info("  3. Con nvm: nvm install 20")
-        print_info("")
-
-        if ask_yes_no("¿Instalar Node.js con Homebrew?", default=True):
-            try:
-                print_info("Instalando Node.js...")
-                run_command("brew install node")
-                print_success("Node.js instalado correctamente")
-            except subprocess.CalledProcessError:
-                print_error("Falló la instalación de Node.js")
-                print_info("Instálalo manualmente y vuelve a ejecutar setup.py")
-                return False
+        print_warning("Node.js no está instalado")
+        if ask_yes_no("¿Instalar Node.js con Homebrew?"):
+            run_command("brew install node")
+            print_success("Node.js instalado")
         else:
-            print_warning("Saltando configuración del frontend")
-            print_info("Puedes configurarlo manualmente después:")
-            print_info("  cd frontend && npm install")
+            print_info("Instala Node.js manualmente: https://nodejs.org/")
             return True
 
-    # Verificar versión de Node.js
-    try:
-        result = run_command("node --version")
-        version_str = result.stdout.strip()
-        print_info(f"Node.js version: {version_str}")
+    print_success("Node.js disponible")
 
-        major_version = int(version_str.lstrip('v').split('.')[0])
-        if major_version < 18:
-            print_warning(f"Node.js {version_str} es antiguo. Se recomienda 18+")
-            print_info("Actualiza con: brew upgrade node")
-    except:
-        pass
-
-    print_success("Node.js está instalado")
-
-    # Verificar npm
-    if is_installed("npm"):
-        try:
-            result = run_command("npm --version")
-            print_success(f"npm {result.stdout.strip()} disponible")
-        except:
-            pass
-
-    # Verificar si node_modules existe
+    # Instalar dependencias
     node_modules = frontend_dir / "node_modules"
     if node_modules.exists() and any(node_modules.iterdir()):
         print_success("Dependencias del frontend ya instaladas")
-
-        if not ask_yes_no("¿Reinstalar dependencias?", default=False):
-            return True
-
-    # Instalar dependencias
-    print_info("Instalando dependencias del frontend (npm install)...")
-    print_info("Esto puede tardar 1-2 minutos...")
-
-    try:
-        subprocess.run(
-            ["npm", "install"],
-            cwd=frontend_dir,
-            check=True
-        )
-        print_success("Dependencias del frontend instaladas correctamente")
         return True
-    except subprocess.CalledProcessError as e:
-        print_error("Falló la instalación de dependencias del frontend")
-        print_info("Intenta manualmente: cd frontend && npm install")
+
+    print_info("Instalando dependencias del frontend...")
+    try:
+        subprocess.run(["npm", "install"], cwd=frontend_dir, check=True)
+        print_success("Dependencias del frontend instaladas")
+        return True
+    except subprocess.CalledProcessError:
+        print_error("Falló npm install")
         return False
 
 
@@ -686,12 +357,10 @@ def setup_frontend():
 # VERIFICACIÓN FINAL
 # ============================================================================
 def run_verification():
-    """Ejecuta el script de verificación."""
-    print_header("Verificación Final del Setup")
+    print_header("10. Verificación Final")
 
     project_root = Path(__file__).parent.parent
-    scripts_dir = Path(__file__).parent
-    verify_script = scripts_dir / "verify_setup.py"
+    verify_script = Path(__file__).parent / "verify_setup.py"
     venv_python = project_root / "api" / "venv" / "bin" / "python"
 
     if not verify_script.exists():
@@ -699,156 +368,72 @@ def run_verification():
         return True
 
     print_info("Ejecutando verify_setup.py...\n")
+    result = subprocess.run([str(venv_python), str(verify_script)], cwd=project_root, check=False)
 
-    try:
-        # Ejecutar verify_setup.py sin capturar output para que el usuario lo vea
-        result = subprocess.run(
-            [str(venv_python), str(verify_script)],
-            cwd=project_root,
-            check=False
-        )
+    if result.returncode == 0:
+        print_success("\n✨ Todas las verificaciones pasaron ✨")
+    else:
+        print_warning("\nRevisa las advertencias arriba")
 
-        # El script retorna 0 si todo OK, 1 si hay advertencias
-        if result.returncode == 0:
-            print_success("\n✨ Todas las verificaciones pasaron ✨")
-        else:
-            print_warning("\nHay algunas advertencias (revisa el output arriba)")
-
-        return True
-
-    except Exception as e:
-        print_error(f"Falló la verificación: {e}")
-        return False
+    return True
 
 
 # ============================================================================
 # FUNCIÓN PRINCIPAL
 # ============================================================================
 def main():
-    """Orquesta todo el proceso de instalación."""
-
     try:
-        # Banner
         print_banner()
 
-        print_info("Este script instalará y configurará todo el entorno necesario")
-        print_info("para ejecutar Bibliotecario-IA en tu ordenador.\n")
+        print_info("Este script configura el entorno de desarrollo:")
+        print_info("  - Ollama nativo (GPU Metal)")
+        print_info("  - ChromaDB en Docker")
+        print_info("  - API con uvicorn local")
+        print_info("  - Frontend con npm\n")
 
-        if not ask_yes_no("¿Continuar con la instalación?", default=True):
+        if not ask_yes_no("¿Continuar con la instalación?"):
             print_info("Instalación cancelada")
             return
 
-        # 1. Verificar sistema operativo
-        if not check_os():
-            return
-
-        # 2. Verificar internet
-        if not check_internet():
-            print_error("No se puede continuar sin conexión a internet")
-            return
-
-        # 3. Seleccionar modo de instalación
-        mode = ask_choice(
-            "¿Qué modo de instalación prefieres?",
-            [
-                ("A", "Docker: Todo en contenedores (reproducible, más lento)"),
-                ("B", "Local/Híbrido: Ollama nativo + ChromaDB en Docker (más rápido, GPU)")
-            ]
-        )
-
-        print_info(f"\nModo seleccionado: {mode}")
-
-        if mode == "B":
-            print_info("Ollama nativo tendrá acceso a la GPU de Apple Silicon (Metal)")
-            print_info("Esto es ~10x más rápido que CPU para inferencia")
-        else:
-            print_warning("Ollama en Docker NO tendrá acceso a la GPU en macOS")
-            print_info("Pero el entorno será 100% reproducible")
-
-        # 4. Instalar Homebrew
-        if not install_homebrew():
-            return
-
-        # 5. Instalar Ollama (sólo si Modo B)
-        if mode == "B":
-            if not install_ollama():
-                print_error("Falló la configuración de Ollama")
-                return
-
-        # 6. Verificar Docker
-        if not install_docker():
-            return
-
-        # 7. Iniciar servicios Docker
-        if not setup_docker_services(mode):
-            return
-
-        # 8. Configurar Python
-        if not setup_python():
-            return
-
-        # 9. Crear archivo .env
-        if not setup_env_file(mode):
-            return
-
-        # 10. Configurar Frontend
-        setup_frontend()  # No fallamos si esto no funciona (es opcional para desarrollo)
-
-        # 11. Verificación final
+        # Ejecutar pasos
+        if not check_os(): return
+        if not check_internet(): return
+        if not install_homebrew(): return
+        if not install_ollama(): return
+        if not install_docker(): return
+        if not setup_chromadb(): return
+        if not setup_python(): return
+        if not setup_env_file(): return
+        setup_frontend()
         run_verification()
 
         # Resumen final
         print_header("✨ Instalación Completada ✨")
 
-        print_success("El entorno está listo para usar")
-        print_info(f"Modo configurado: {'A (Todo en Docker)' if mode == 'A' else 'B (Híbrido - Ollama nativo)'}")
-
-        print_info("\n📝 Próximos pasos:")
+        print_success("El entorno está listo")
+        print_info("\n📝 Para iniciar el sistema:\n")
+        print_info("  # Terminal 1: Ollama (si no está corriendo)")
+        print_info("  ollama serve")
         print_info("")
-
-        if mode == "A":
-            # Modo A: Todo en Docker
-            print_info("  1. Iniciar TODOS los servicios Docker (Ollama + ChromaDB + API):")
-            print_info("     docker-compose up -d")
-            print_info("")
-            print_info("  2. Descargar modelos en Ollama (primera vez):")
-            print_info("     docker exec ollama ollama pull llama3.2")
-            print_info("     docker exec ollama ollama pull nomic-embed-text")
-        else:
-            # Modo B: Híbrido (Ollama nativo + Docker para el resto)
-            print_info("  1. Asegurarse de que Ollama esté corriendo:")
-            print_info("     ollama serve  # o verificar que ya está activo")
-            print_info("")
-            print_info("  2. Iniciar servicios Docker (ChromaDB):")
-            print_info("     docker-compose up -d chromadb")
-
+        print_info("  # Terminal 2: ChromaDB (ya debería estar corriendo)")
+        print_info("  docker-compose up -d chromadb")
         print_info("")
-        print_info("  3. Iniciar la API (opción Docker o local):")
-        print_info("     # Opción A - Docker:")
-        print_info("     docker-compose up -d api")
-        print_info("     # Opción B - Local:")
-        print_info("     cd api && source venv/bin/activate && uvicorn app.main:app --reload")
+        print_info("  # Terminal 3: API Backend")
+        print_info("  cd api && source venv/bin/activate")
+        print_info("  uvicorn app.main:app --reload")
         print_info("")
-        print_info("  4. Iniciar el Frontend (en otra terminal):")
-        print_info("     cd frontend")
-        print_info("     npm run dev")
+        print_info("  # Terminal 4: Frontend")
+        print_info("  cd frontend && npm run dev")
         print_info("")
-        print_info("     - Frontend: http://localhost:5173")
-        print_info("     - API Docs: http://localhost:8000/docs")
-        print_info("")
-        print_info("📚 Recursos:")
-        print_info("  - README.md: Guía general")
-        print_info("  - docs/USAGE.md: Endpoints de la API y Frontend")
-        print_info("  - .ai/context.md: Contexto completo del proyecto")
+        print_info("  🌐 Frontend: http://localhost:5173")
+        print_info("  📚 API Docs: http://localhost:8000/docs")
 
     except KeyboardInterrupt:
         print("\n")
-        print_warning("Instalación interrumpida por el usuario")
+        print_warning("Instalación interrumpida")
         sys.exit(130)
     except Exception as e:
-        print_error(f"Error inesperado: {e}")
-        import traceback
-        traceback.print_exc()
+        print_error(f"Error: {e}")
         sys.exit(1)
 
 

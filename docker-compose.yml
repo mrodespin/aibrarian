@@ -1,70 +1,20 @@
 # /docker-compose.yml
-# Orquesta los 3 servicios del proyecto Bibliotecario-IA.
+# ChromaDB - Base de datos vectorial para Bibliotecario-IA
 #
-# 'version' tag removed as it is obsolete.
+# Uso:
+#   docker-compose up -d chromadb
+#
+# Nota: Ollama y la API FastAPI corren de forma NATIVA en macOS:
+#   - Ollama: brew install ollama && ollama serve (GPU Metal)
+#   - API: cd api && uvicorn app.main:app --reload
 
 services:
-  # --------------------------------------------------------------------
-  # Service 1: LLM local (Ollama)
-  # --------------------------------------------------------------------
-  # Ollama provee los modelos de LLM y embeddings.
-  # Los modelos se persisten en el volumen ollama_data para no
-  # tener que descarglos de nuevo al reiniciar.
-  #
-  # IMPORTANTE: al iniciar por primera vez se necesita hacer pull
-  # de los modelos:
-  #   docker exec ollama ollama pull llama3.2
-  #   docker exec ollama ollama pull nomic-embed-text
-  ollama:
-    image: ollama/ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-
-  # --------------------------------------------------------------------
-  # Service 2: Vector Database (ChromaDB)
-  # --------------------------------------------------------------------
   chromadb:
     image: chromadb/chroma:0.5.20
     ports:
-      - "8001:8000"     # Host 8001 → contenedor 8000 (evita conflicto con la API)
+      - "8001:8000"
     volumes:
       - chroma_data:/chroma/chroma
 
-  # --------------------------------------------------------------------
-  # Service 3: The API (FastAPI)
-  # --------------------------------------------------------------------
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./api/app:/app/app
-      - ./data:/app/data    # Monta el directorio de PDFs dentro del contenedor
-    env_file:
-      - ./api/.env          # Variables de la API (NOTION_API_KEY, etc.)
-    environment:
-      # Overrides de networking para Docker.
-      # NOTA: OLLAMA_BASE_URL se configura en api/.env para permitir dos modos:
-      #   - Modo Local (GPU en Mac): OLLAMA_BASE_URL=http://host.docker.internal:11434
-      #   - Modo Docker (Linux/prod): OLLAMA_BASE_URL=http://ollama:11434
-      # Ver api/.env.example para más detalles.
-      # ChromaDB siempre corre en Docker, por eso se fuerza aquí.
-      - CHROMADB_HOST=chromadb
-      - CHROMADB_PORT=8000
-      - DATA_DIRECTORY=/app/data
-    depends_on:
-      - chromadb
-      # Si usas Ollama en Docker, descomenta la siguiente línea:
-      # - ollama
-
-# --------------------------------------------------------------------
-# Named Volumes
-# --------------------------------------------------------------------
-# Persisten datos entre reinicios del contenedor.
 volumes:
-  ollama_data:    # Modelos descargados por Ollama (~4GB por modelo)
-  chroma_data:    # Base de datos vectorial
+  chroma_data:

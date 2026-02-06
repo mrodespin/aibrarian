@@ -381,9 +381,10 @@ VECTOR_SEARCH_LATENCY.observe(duration)
 
 ### Prerequisitos
 
-1. **Python 3.11+**
-2. **Docker** (para ChromaDB)
-3. **Ollama** instalado localmente (Para Mac/Desarrollo local) o en Docker (Para entornos productivos)
+1. **macOS** (con Apple Silicon para GPU Metal)
+2. **Python 3.11+**
+3. **Docker Desktop** (para ChromaDB)
+4. **Node.js 18+** (para el frontend)
 
 ### Instalación
 
@@ -395,15 +396,14 @@ git clone <URL_DEL_REPO>
 cd tfm-bibliotecario-ia
 
 # 2. Ejecutar script de instalación
-python3 setup.py
+python3 scripts/setup.py
 ```
 
-El script `setup.py` te guiará interactivamente por todo el proceso:
-- Detecta qué está instalado y qué falta
-- Te permite elegir entre Modo Docker o Modo Local/Híbrido
-- Instala sólo lo necesario
-- Configura el entorno automáticamente
-- Ejecuta verificación al final
+El script `setup.py` configura automáticamente:
+- Ollama nativo (aprovecha GPU Metal, ~10x más rápido)
+- ChromaDB en Docker
+- Entorno Python con dependencias
+- Frontend con npm
 
 **Opción 2: Instalación Manual**
 
@@ -413,34 +413,33 @@ git clone <URL_DEL_REPO>
 cd tfm-bibliotecario-ia
 
 # 2. Instalar Ollama y descargar modelos
-brew install ollama  # macOS
+brew install ollama
 ollama pull llama3.2
 ollama pull nomic-embed-text
 
 # 3. Setup Python
 cd api
 python -m venv venv
-source venv/bin/activate  # macOS/Linux
+source venv/bin/activate
 pip install -r requirements.txt
-
-# 4. Configurar variables de entorno
 cp .env.example .env
-# Editar .env con tus valores
 
-# 5. Iniciar ChromaDB
+# 4. Iniciar ChromaDB
 cd ..
 docker-compose up -d chromadb
+
+# 5. Setup Frontend
+cd frontend
+npm install
 
 # 6. Verificar setup
 python scripts/verify_setup.py
 ```
 
-### Uso Básico
-
-**Opción A: Con Frontend (Recomendado)**
+### Uso
 
 ```bash
-# Terminal 1: Ollama
+# Terminal 1: Ollama (si no está corriendo)
 ollama serve
 
 # Terminal 2: ChromaDB
@@ -450,29 +449,10 @@ docker-compose up -d chromadb
 cd api && source venv/bin/activate
 uvicorn app.main:app --reload
 
-# Terminal 4: Frontend React
-cd frontend
-npm install  # Solo la primera vez
-npm run dev
+# Terminal 4: Frontend
+cd frontend && npm run dev
 
 # Abrir navegador en http://localhost:5173
-```
-
-**Opción B: Solo API (sin Frontend)**
-
-```bash
-# Terminal 1: Ollama + API
-ollama serve &
-cd api && source venv/bin/activate
-uvicorn app.main:app --reload
-
-# Terminal 2: Ingestar documentos
-python scripts/ingest_pdfs.py
-
-# Terminal 3: Hacer consultas vía cURL
-curl -X POST http://localhost:8000/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question": "¿De qué tratan los documentos?"}'
 ```
 
 ---

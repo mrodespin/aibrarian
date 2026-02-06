@@ -264,10 +264,11 @@ frontend/src/
 
 ### `docker-compose.yml`
 
-Orquesta los 3 servicios del proyecto:
-- **ollama**: LLM local (modelos llama3.2 y nomic-embed-text) - Puerto 11434
-- **chromadb**: Base de datos vectorial - Puerto 8001 (host) → 8000 (contenedor)
-- **api**: API FastAPI - Puerto 8000
+Solo contiene **ChromaDB** (base de datos vectorial) en puerto 8001.
+
+Ollama y la API corren **nativos** en macOS:
+- **Ollama**: `brew install ollama && ollama serve` (GPU Metal, ~10x más rápido)
+- **API**: `uvicorn app.main:app --reload` (hot-reload para desarrollo)
 
 ---
 
