@@ -501,7 +501,7 @@ async def check_api_health():
     except Exception as e:
         # No es un error: la API simplemente no está corriendo
         print_warning("API NO está corriendo (esto es normal si no la has iniciado)")
-        print_info("Para iniciar: uvicorn app.main:app --reload")
+        print_info("Para iniciar: docker-compose up -d")
         return False
 
 

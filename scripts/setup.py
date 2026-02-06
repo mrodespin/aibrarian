@@ -8,18 +8,18 @@ Detecta qué está instalado y qué falta, luego instala sólo lo necesario.
 
 Configuración:
 - Ollama: Nativo en macOS (acceso a GPU Metal, ~10x más rápido)
-- ChromaDB: Docker (persistencia simple con volúmenes)
-- API: Local con uvicorn (hot-reload para desarrollo)
+- ChromaDB: Docker (persistencia con volúmenes)
+- API: Docker (hot-reload con volume mount)
 - Frontend: React + Vite (npm run dev)
 
 ¿Qué hace?
 1. Verifica el sistema operativo (macOS)
 2. Verifica/instala Homebrew
 3. Instala Ollama y descarga modelos
-4. Verifica Docker y levanta ChromaDB
-5. Configura entorno Python (venv + dependencias)
+4. Verifica Docker y levanta ChromaDB + API
+5. Configura entorno Python (venv + dependencias para scripts CLI)
 6. Crea archivo .env
-7. Configura Frontend (Node.js + npm install)
+7. Configura Frontend (Node.js 18+ + npm install)
 8. Ejecuta verify_setup.py para confirmar
 
 Uso:
@@ -330,6 +330,7 @@ def setup_frontend():
     # Verificar Node.js
     if not is_installed("node"):
         print_warning("Node.js no está instalado")
+        print_info("El frontend requiere Node.js 18+")
         if ask_yes_no("¿Instalar Node.js con Homebrew?"):
             run_command("brew install node")
             print_success("Node.js instalado")
@@ -337,7 +338,21 @@ def setup_frontend():
             print_info("Instala Node.js manualmente: https://nodejs.org/")
             return True
 
-    print_success("Node.js disponible")
+    # Verificar versión de Node.js (requiere 18+)
+    try:
+        result = run_command("node --version")
+        version_str = result.stdout.strip().lstrip('v')
+        major_version = int(version_str.split('.')[0])
+        print_info(f"Node.js v{version_str} detectado")
+
+        if major_version < 18:
+            print_warning(f"Node.js {major_version} es antiguo. Se requiere 18+")
+            print_info("Actualiza con: brew upgrade node")
+            return False
+
+        print_success("Node.js 18+ disponible")
+    except Exception as e:
+        print_warning(f"No se pudo verificar versión de Node.js: {e}")
 
     # Instalar dependencias
     node_modules = frontend_dir / "node_modules"
@@ -425,13 +440,20 @@ def main():
         print_info("  🌐 Frontend: http://localhost:5173")
         print_info("  📚 API Docs: http://localhost:8000/docs")
         print_info("  💾 ChromaDB: http://localhost:8001")
+        print_info("")
+        print_info("📚 Documentación:")
+        print_info("  - README.md: Guía general")
+        print_info("  - docs/USAGE.md: Endpoints de la API")
+        print_info("  - .ai/context.md: Contexto del proyecto")
 
     except KeyboardInterrupt:
         print("\n")
         print_warning("Instalación interrumpida")
         sys.exit(130)
     except Exception as e:
-        print_error(f"Error: {e}")
+        print_error(f"Error inesperado: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 

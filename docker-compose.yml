@@ -30,25 +30,19 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    volumes:
+      - ./api/app:/app/app      # Hot-reload para desarrollo
+      - ./data:/app/data:ro     # PDFs locales (solo lectura)
+    env_file:
+      - ./api/.env              # Variables de usuario (NOTION_API_KEY, etc.)
     environment:
+      # Overrides de networking para Docker
       # Ollama corre en el host (macOS nativo para GPU Metal)
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - OLLAMA_MODEL=llama3.2
-      - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
-      - OLLAMA_TIMEOUT=120
       # ChromaDB corre en Docker (puerto interno)
       - CHROMADB_HOST=chromadb
       - CHROMADB_PORT=8000
-      - CHROMADB_COLLECTION_NAME=bibliotecario_docs
-      # Document processing
-      - CHUNK_SIZE=1000
-      - CHUNK_OVERLAP=200
       - DATA_DIRECTORY=/app/data
-      # RAG
-      - MAX_CONTEXT_CHUNKS=4
-      - LLM_TEMPERATURE=0.7
-    volumes:
-      - ./data:/app/data:ro
     depends_on:
       chromadb:
         condition: service_healthy
