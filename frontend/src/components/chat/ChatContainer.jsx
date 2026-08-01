@@ -7,6 +7,7 @@ import { useApp } from '../../context/AppContext';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { Button } from '../common';
+import { llmProviderLabel, vectorDbProviderLabel } from '../../utils/providerLabels';
 
 function EmptyState() {
   return (
@@ -29,7 +30,12 @@ export function ChatContainer() {
   const { messages, isLoading, sendMessage, clearHistory } = useChat();
   const { health } = useApp();
 
-  const servicesAvailable = health.api && health.ollama && health.chromadb;
+  const servicesAvailable = health.api && health.llm && health.vectorDb;
+
+  const downServices = [
+    !health.llm && llmProviderLabel(health.llmProvider),
+    !health.vectorDb && vectorDbProviderLabel(health.vectorDbProvider),
+  ].filter(Boolean);
 
   return (
     <div className="h-full flex flex-col bg-transparent">
@@ -52,7 +58,7 @@ export function ChatContainer() {
       {/* Service warning */}
       {!servicesAvailable && (
         <div className="px-4 py-2 bg-error-500/10 border-t border-error-500/30 text-error-400 text-sm">
-          ⚠️ Algunos servicios no están disponibles. Verifica que Ollama y ChromaDB estén corriendo.
+          ⚠️ Servicio no disponible: {downServices.join(' y ')}.
         </div>
       )}
 

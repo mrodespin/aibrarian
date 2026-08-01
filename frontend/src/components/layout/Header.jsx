@@ -4,6 +4,7 @@
 
 import { useApp } from '../../context/AppContext';
 import { Badge } from '../common';
+import { llmProviderLabel, vectorDbProviderLabel } from '../../utils/providerLabels';
 
 export function Header({ onMenuClick }) {
   const { health } = useApp();
@@ -39,12 +40,12 @@ export function Header({ onMenuClick }) {
             <span className="text-sm font-medium text-text-200">API</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${health.ollama ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
-            <span className="text-sm font-medium text-text-200">Ollama</span>
+            <span className={`w-2 h-2 rounded-full ${health.llm ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
+            <span className="text-sm font-medium text-text-200">{llmProviderLabel(health.llmProvider)}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${health.chromadb ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
-            <span className="text-sm font-medium text-text-200">ChromaDB</span>
+            <span className={`w-2 h-2 rounded-full ${health.vectorDb ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
+            <span className="text-sm font-medium text-text-200">{vectorDbProviderLabel(health.vectorDbProvider)}</span>
           </div>
         </div>
       </div>

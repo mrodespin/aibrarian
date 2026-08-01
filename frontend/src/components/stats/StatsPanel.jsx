@@ -4,6 +4,7 @@
 
 import { useApp } from '../../context/AppContext';
 import { Card, Badge, Spinner, Button } from '../common';
+import { llmProviderLabel, vectorDbProviderLabel } from '../../utils/providerLabels';
 
 export function StatsPanel() {
   const { stats, health, isLoading, isRefreshing, refreshAll } = useApp();
@@ -27,15 +28,15 @@ export function StatsPanel() {
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-text-200">Ollama (LLM)</span>
-                <Badge variant={health.ollama ? 'success' : 'error'}>
-                  {health.ollama ? 'Conectado' : 'Desconectado'}
+                <span className="text-sm text-text-200">{llmProviderLabel(health.llmProvider)} (LLM)</span>
+                <Badge variant={health.llm ? 'success' : 'error'}>
+                  {health.llm ? 'Conectado' : 'Desconectado'}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-text-200">ChromaDB</span>
-                <Badge variant={health.chromadb ? 'success' : 'error'}>
-                  {health.chromadb ? 'Conectado' : 'Desconectado'}
+                <span className="text-sm text-text-200">{vectorDbProviderLabel(health.vectorDbProvider)}</span>
+                <Badge variant={health.vectorDb ? 'success' : 'error'}>
+                  {health.vectorDb ? 'Conectado' : 'Desconectado'}
                 </Badge>
               </div>
             </div>

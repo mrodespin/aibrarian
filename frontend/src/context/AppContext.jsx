@@ -14,8 +14,10 @@ export function AppProvider({ children }) {
   const [health, setHealth] = useState({
     status: 'unknown',
     api: false,
-    ollama: false,
-    chromadb: false,
+    llm: false,
+    vectorDb: false,
+    llmProvider: null,
+    vectorDbProvider: null,
     lastChecked: null,
   });
 
@@ -34,8 +36,10 @@ export function AppProvider({ children }) {
       setHealth({
         status: data.status || 'healthy',
         api: true, // Si llegamos aquí, la API responde
-        ollama: data.services?.ollama ?? false,
-        chromadb: data.services?.chromadb ?? false,
+        llm: data.services?.ollama ?? false,
+        vectorDb: data.services?.chromadb ?? false,
+        llmProvider: data.config?.llm_provider ?? null,
+        vectorDbProvider: data.config?.vector_db_provider ?? null,
         lastChecked: new Date(),
       });
     } catch (err) {
@@ -44,8 +48,8 @@ export function AppProvider({ children }) {
         ...prev,
         status: 'error',
         api: false,
-        ollama: false,
-        chromadb: false,
+        llm: false,
+        vectorDb: false,
         lastChecked: new Date(),
       }));
     }
