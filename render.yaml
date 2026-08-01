@@ -7,7 +7,7 @@
 #
 # Uso:
 #   1. Conecta este repo en Render → "New Blueprint Instance"
-#   2. Render detecta este fichero y crea los servicios "bibliotecario-ia-api"
+#   2. Render detecta este fichero y crea los servicios "tfm-bibliotecario-ia"
 #      y "bibliotecario-ia-frontend"
 #   3. Variables marcadas con "sync: false" NO se versionan aquí: Render
 #      pide rellenarlas en el dashboard (Environment) tras el primer deploy
@@ -26,7 +26,7 @@
 
 services:
   - type: web
-    name: bibliotecario-ia-api
+    name: tfm-bibliotecario-ia
     runtime: docker
     plan: free
     dockerfilePath: ./api/Dockerfile
@@ -82,7 +82,7 @@ services:
     staticPublishPath: ./frontend/dist
     envVars:
       # Rellena en el dashboard (Environment) con la URL pública de
-      # bibliotecario-ia-api, ver nota arriba. VITE_API_URL se hornea en
+      # tfm-bibliotecario-ia, ver nota arriba. VITE_API_URL se hornea en
       # el build (Vite la sustituye en tiempo de build, no de arranque),
       # así que cambiar este valor requiere un redeploy manual del
       # frontend para que surta efecto, no basta con reiniciar el servicio.
