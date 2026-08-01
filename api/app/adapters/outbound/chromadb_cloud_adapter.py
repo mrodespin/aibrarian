@@ -44,10 +44,22 @@ class ChromaCloudAdapter(ChromaDBAdapter):
 
     def _get_client(self) -> chromadb.CloudClient:
         if self._client is None:
-            if not settings.chroma_cloud_api_key:
+            missing = [
+                name for name, value in (
+                    ("CHROMA_CLOUD_API_KEY", settings.chroma_cloud_api_key),
+                    ("CHROMA_CLOUD_TENANT", settings.chroma_cloud_tenant),
+                    ("CHROMA_CLOUD_DATABASE", settings.chroma_cloud_database),
+                ) if not value
+            ]
+            if missing:
+                # Sin esta validación, chromadb.CloudClient() falla con un
+                # error genérico ("Could not connect to tenant None") que no
+                # deja claro cuál de las tres variables falta configurar
+                # (p.ej. en Render: Dashboard → servicio → Environment).
                 raise RuntimeError(
-                    "CHROMA_CLOUD_API_KEY no configurada. Añádela a api/.env "
-                    "(consíguela en https://www.trychroma.com tras crear tu base de datos)."
+                    f"Faltan variables de Chroma Cloud: {', '.join(missing)}. "
+                    "Añádelas a api/.env (o al Environment del servicio en Render); "
+                    "consíguelas en https://www.trychroma.com tras crear tu base de datos."
                 )
             try:
                 self._client = chromadb.CloudClient(

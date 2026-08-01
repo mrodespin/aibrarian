@@ -36,6 +36,7 @@ Relación con otros ficheros:
 # ============================================================================
 # IMPORTS
 # ============================================================================
+import asyncio                              # Para lanzar el warm-up del LLM en segundo plano
 from contextlib import asynccontextmanager  # Para definir el ciclo de vida (startup/shutdown)
 from pathlib import Path                    # Manejo de rutas de archivos
 
@@ -184,6 +185,16 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("LLM service is ready", provider=settings.llm_provider, model_info=llm_adapter.get_model_info())
 
+    # Warm-up en segundo plano: para GroqAdapter, precarga el modelo de
+    # embeddings local en memoria (no-op para otros adaptadores, ver
+    # LLMPort.warm_up). Se lanza con create_task (no se hace `await`)
+    # a propósito: uvicorn no abre el puerto hasta que este generador
+    # llega al `yield`, así que un warm-up bloqueante aquí reproduciría
+    # el mismo timeout de arranque en Render que causaba is_available()
+    # antes de este fix. Se guarda la referencia en app.state para que
+    # el garbage collector no la cancele a mitad de ejecución.
+    app.state.warm_up_task = asyncio.create_task(llm_adapter.warm_up())
+
     yield  # ← La app está activa y atiende peticiones desde aquí
 
     # --- SHUTDOWN ---
@@ -279,8 +290,10 @@ class HealthResponse(BaseModel):
     """
     status: str
     version: str
-    ollama_available: bool
-    chromadb_available: bool
+    llm_provider: str
+    llm_available: bool
+    vector_db_provider: str
+    vector_db_available: bool
 
 
 # ============================================================================
@@ -296,20 +309,25 @@ async def root():
     """
     Endpoint raíz — Health check básico.
 
-    Verifica en tiempo real si Ollama y ChromaDB están disponibles.
-    Útil para monitoreo y para que el frontend sepa si la API está lista.
+    Verifica en tiempo real si el LLM y la base vectorial configurados
+    (Ollama/Groq, ChromaDB local/Chroma Cloud, según settings.llm_provider
+    y settings.vector_db_provider) están disponibles. Útil para monitoreo
+    (p.ej. healthCheckPath de Render) y para que el frontend sepa si la
+    API está lista.
 
     @app.get("/"): registra esta función como handler de GET /
     response_model=HealthResponse: FastAPI valida la respuesta con ese schema
     """
-    ollama_ok = await llm_adapter.is_available()
-    chromadb_ok = await chromadb_adapter.collection_exists(settings.chromadb_collection_name)
+    llm_ok = await llm_adapter.is_available()
+    vector_db_ok = await chromadb_adapter.collection_exists(settings.chromadb_collection_name)
 
     return HealthResponse(
         status="running",
         version=settings.app_version,
-        ollama_available=ollama_ok,
-        chromadb_available=chromadb_ok
+        llm_provider=settings.llm_provider,
+        llm_available=llm_ok,
+        vector_db_provider=settings.vector_db_provider,
+        vector_db_available=vector_db_ok,
     )
 
 

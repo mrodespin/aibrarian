@@ -214,6 +214,24 @@ class LLMPort(ABC):
         """
         pass
 
+    async def warm_up(self) -> None:
+        """
+        Precarga en memoria lo que el adaptador necesite antes de la primera
+        petición real (p.ej. descargar/cargar un modelo local).
+
+        No es @abstractmethod: por defecto no hace nada (implementación
+        vacía), así que los adaptadores que no lo necesiten (OllamaAdapter,
+        cuyos embeddings los sirve el propio servidor Ollama) no tienen que
+        implementarlo. GroqAdapter lo sobreescribe para precargar el modelo
+        de sentence-transformers local.
+
+        Se llama como tarea en segundo plano DESPUÉS de que el startup de
+        FastAPI termine (ver lifespan en main.py) — nunca debe bloquear el
+        arranque, porque uvicorn no abre el puerto hasta que el startup
+        completa (ver is_available en groq_adapter.py para el porqué).
+        """
+        pass
+
     @abstractmethod
     def get_model_info(self) -> Dict[str, Any]:
         """

@@ -247,6 +247,21 @@ class GroqAdapter(LLMPort):
 
         return True
 
+    async def warm_up(self) -> None:
+        """
+        Precarga el modelo de embeddings local en un hilo aparte para que
+        la primera petición real (sync o chat) no pague el coste de
+        cargarlo. Se ejecuta como tarea en segundo plano tras el arranque
+        (ver main.py), así que un fallo aquí no debe tumbar la app: si algo
+        va mal, _get_embedder() se reintentará de forma lazy en el primer
+        uso real y ese error sí se propagará al endpoint correspondiente.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._get_embedder)
+        except Exception as e:
+            logger.warning("Embedding model warm-up failed, will retry lazily on first use", error=str(e))
+
     def get_model_info(self) -> Dict[str, Any]:
         return {
             "llm_model": settings.groq_model,

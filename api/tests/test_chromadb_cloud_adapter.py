@@ -32,6 +32,17 @@ def test_get_client_requires_api_key(monkeypatch):
 
 
 @pytest.mark.unit
+def test_get_client_requires_tenant_and_database(monkeypatch):
+    monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_api_key", "test-key")
+    monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_tenant", None)
+    monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_database", None)
+    adapter = ChromaCloudAdapter()
+
+    with pytest.raises(RuntimeError, match="CHROMA_CLOUD_TENANT, CHROMA_CLOUD_DATABASE"):
+        adapter._get_client()
+
+
+@pytest.mark.unit
 def test_get_client_uses_cloud_client_with_settings(monkeypatch):
     monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_api_key", "test-key")
     monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_tenant", "my-tenant")
@@ -58,8 +69,8 @@ def test_get_client_uses_cloud_client_with_settings(monkeypatch):
 def test_get_client_is_cached(monkeypatch):
     """Segunda llamada no debe reconectar (mismo patrón lazy-singleton que ChromaDBAdapter)."""
     monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_api_key", "test-key")
-    monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_tenant", None)
-    monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_database", None)
+    monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_tenant", "my-tenant")
+    monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_database", "my-db")
 
     adapter = ChromaCloudAdapter()
 
