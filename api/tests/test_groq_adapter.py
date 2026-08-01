@@ -1,10 +1,11 @@
 # /api/tests/test_groq_adapter.py
 """
-Tests de GroqAdapter - LLMPort compuesto por Groq (generación) +
-sentence-transformers local (embeddings). Ver ADR-007.
+Tests de GroqAdapter - LLMPort compuesto por Groq (generación) + embeddings
+locales (backend configurable: onnx por defecto, o sentence_transformers).
+Ver ADR-007 y settings.embedding_backend.
 
-Todos los clientes externos (AsyncGroq, SentenceTransformer, httpx) están
-mockeados: estos tests no llaman a Groq real ni descargan modelos.
+Todos los clientes externos (AsyncGroq, ONNXMiniLM_L6_V2/SentenceTransformer,
+httpx) están mockeados: estos tests no llaman a Groq real ni descargan modelos.
 """
 
 import pytest
@@ -19,6 +20,7 @@ def groq_settings(monkeypatch):
     monkeypatch.setattr("app.adapters.outbound.groq_adapter.settings.groq_api_key", "test-key")
     monkeypatch.setattr("app.adapters.outbound.groq_adapter.settings.groq_model", "openai/gpt-oss-120b")
     monkeypatch.setattr("app.adapters.outbound.groq_adapter.settings.embedding_model_name", "all-MiniLM-L6-v2")
+    monkeypatch.setattr("app.adapters.outbound.groq_adapter.settings.embedding_backend", "onnx")
 
 
 @pytest.mark.unit
@@ -94,8 +96,29 @@ async def test_extract_keywords_returns_empty_on_error(groq_settings):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_generate_embeddings_batch_uses_local_model(groq_settings):
-    """Los embeddings no llaman a Groq: usan el SentenceTransformer local vía executor."""
+async def test_generate_embeddings_batch_uses_onnx_by_default(groq_settings):
+    """Los embeddings no llaman a Groq: por defecto usan ONNXMiniLM_L6_V2 (llamable) vía executor."""
+    adapter = GroqAdapter()
+
+    fake_vector_1 = MagicMock()
+    fake_vector_1.tolist.return_value = [0.1, 0.2]
+    fake_vector_2 = MagicMock()
+    fake_vector_2.tolist.return_value = [0.3, 0.4]
+
+    mock_embedder = MagicMock(return_value=[fake_vector_1, fake_vector_2])
+
+    with patch.object(adapter, "_get_embedder", return_value=mock_embedder):
+        result = await adapter.generate_embeddings_batch(["texto uno", "texto dos"])
+
+    assert result == [[0.1, 0.2], [0.3, 0.4]]
+    mock_embedder.assert_called_once_with(["texto uno", "texto dos"])
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_generate_embeddings_batch_uses_sentence_transformers_when_configured(groq_settings, monkeypatch):
+    """Con EMBEDDING_BACKEND=sentence_transformers, usa .encode(...) en vez de llamar al embedder directamente."""
+    monkeypatch.setattr("app.adapters.outbound.groq_adapter.settings.embedding_backend", "sentence_transformers")
     adapter = GroqAdapter()
 
     fake_vectors = MagicMock()
@@ -110,6 +133,17 @@ async def test_generate_embeddings_batch_uses_local_model(groq_settings):
     assert result == [[0.1, 0.2], [0.3, 0.4]]
     mock_embedder.encode.assert_called_once()
     assert mock_embedder.encode.call_args.args[0] == ["texto uno", "texto dos"]
+
+
+@pytest.mark.unit
+def test_get_embedder_sentence_transformers_requires_package(groq_settings, monkeypatch):
+    """Si EMBEDDING_BACKEND=sentence_transformers pero el paquete no está instalado, error claro (no ImportError crudo)."""
+    monkeypatch.setattr("app.adapters.outbound.groq_adapter.settings.embedding_backend", "sentence_transformers")
+    adapter = GroqAdapter()
+
+    with patch.dict("sys.modules", {"sentence_transformers": None}):
+        with pytest.raises(RuntimeError, match="EMBEDDING_BACKEND=sentence_transformers"):
+            adapter._get_embedder()
 
 
 @pytest.mark.unit
@@ -163,4 +197,13 @@ def test_get_model_info_reports_both_engines(groq_settings):
     assert info["llm_provider"] == "groq"
     assert info["llm_model"] == "openai/gpt-oss-120b"
     assert info["embedding_model"] == "all-MiniLM-L6-v2"
+    assert "onnxruntime" in info["embedding_provider"]
+
+
+@pytest.mark.unit
+def test_get_model_info_reports_sentence_transformers_when_configured(groq_settings, monkeypatch):
+    monkeypatch.setattr("app.adapters.outbound.groq_adapter.settings.embedding_backend", "sentence_transformers")
+    adapter = GroqAdapter()
+    info = adapter.get_model_info()
+
     assert "sentence-transformers" in info["embedding_provider"]

@@ -14,21 +14,18 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 4b. Pre-download the local embedding model (used by GroqAdapter, see
-# app/adapters/outbound/groq_adapter.py) so it's baked into the image
-# instead of being fetched from Hugging Face on first container start.
-# Must match settings.embedding_model_name's default (app/config/settings.py)
-# and render.yaml's EMBEDDING_MODEL_NAME. HF_HOME pins the cache to the
-# default lookup path sentence-transformers uses at runtime.
-ENV HF_HOME=/root/.cache/huggingface
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-
-# HF_HUB_OFFLINE set AFTER the download above (not before, or the download
-# itself would fail): at runtime this stops sentence-transformers from
-# making Hugging Face network calls to check for updated metadata — it was
-# doing this on every warm-up despite the model already being cached from
-# the RUN step above. Runtime now loads purely from the baked-in cache.
-ENV HF_HUB_OFFLINE=1
-ENV TRANSFORMERS_OFFLINE=1
+# app/adapters/outbound/groq_adapter.py, EMBEDDING_BACKEND=onnx default) so
+# it's baked into the image instead of being fetched on first container
+# start. ONNXMiniLM_L6_V2 caches to ~/.cache/chroma/onnx_models — same
+# $HOME (root) at build time and at runtime, so this is picked up as-is,
+# no env var needed to point at it (unlike the sentence-transformers/HF
+# path this replaced, see git history: that one needed HF_HUB_OFFLINE to
+# stop it re-checking Hugging Face on every startup even when cached).
+# If you switch EMBEDDING_BACKEND=sentence_transformers (see settings.py),
+# add `pip install sentence-transformers` and a matching pre-download step
+# here — deliberately not the default, it adds ~650MB (torch+transformers)
+# and risks the same Render free-tier OOM this Dockerfile was fixed for.
+RUN python -c "from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; ONNXMiniLM_L6_V2()(['warmup'])"
 
 # 5. Copy the rest of the application code
 # It copies the local './app' folder into the container's '/app/app' folder

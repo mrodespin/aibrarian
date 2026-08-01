@@ -36,6 +36,11 @@ services:
         value: openai/gpt-oss-120b
 
       # --- Embeddings locales (CPU, sin API key) ---
+      # onnx = chromadb+onnxruntime (ligero, ver groq_adapter.py). NO cambiar
+      # a sentence_transformers aquí: añade ~650MB (torch) y provoca OOM en
+      # el free tier de Render (512MB RAM).
+      - key: EMBEDDING_BACKEND
+        value: onnx
       - key: EMBEDDING_MODEL_NAME
         value: all-MiniLM-L6-v2
 

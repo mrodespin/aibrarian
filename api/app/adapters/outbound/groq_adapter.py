@@ -59,18 +59,18 @@ REGLAS ESTRICTAS:
 
 class GroqAdapter(LLMPort):
     """
-    Implementación de LLMPort que combina Groq (generación) con
-    sentence-transformers local (embeddings).
+    Implementación de LLMPort que combina Groq (generación) con el
+    embedder ONNX local de ChromaDB (embeddings).
 
     Mismo patrón de Lazy Singleton que OllamaAdapter: los clientes
-    (AsyncGroq, SentenceTransformer) se crean en el primer uso, no en
+    (AsyncGroq, ONNXMiniLM_L6_V2) se crean en el primer uso, no en
     __init__, para que la app arranque aunque falte la API key o el
     modelo de embeddings aún no se haya descargado.
     """
 
     def __init__(self):
         self._client: Optional[AsyncGroq] = None
-        self._embedder = None  # SentenceTransformer, tipado perezoso para no importar torch en el arranque
+        self._embedder = None  # ONNXMiniLM_L6_V2, tipado perezoso para no importar onnxruntime en el arranque
 
     def _get_client(self) -> AsyncGroq:
         if self._client is None:
@@ -85,21 +85,44 @@ class GroqAdapter(LLMPort):
 
     def _get_embedder(self):
         """
-        Carga el modelo de embeddings local (lazy).
+        Carga el modelo de embeddings local (lazy), según settings.embedding_backend:
 
-        La primera llamada descarga el modelo (~80MB) desde Hugging Face
-        si no está en caché; llamadas siguientes reutilizan la instancia.
-        Import diferido de sentence_transformers: es una dependencia pesada
-        (arrastra torch) que solo hace falta si este adaptador está activo.
+        - 'onnx' (default): chromadb.utils.embedding_functions.ONNXMiniLM_L6_V2,
+          mismo modelo (all-MiniLM-L6-v2, 384 dims, mean pooling + normalización
+          L2) pero vía onnxruntime, que ya es dependencia transitiva de chromadb.
+          No añade nada a requirements.txt. Recomendado para Render free tier:
+          torch+transformers (backend 'sentence_transformers') por sí solos
+          añaden ~650MB en disco y suficiente RAM en el import como para
+          provocar un OOM (512MB) antes de atender ninguna petición real.
+        - 'sentence_transformers': requiere `pip install sentence-transformers`
+          aparte (deliberadamente fuera de requirements.txt, ver ahí el porqué).
+          Pensado para desarrollo local con más RAM disponible.
+
+        La primera llamada descarga el modelo si no está en caché (ver
+        Dockerfile, que lo pre-descarga en el build); llamadas siguientes
+        reutilizan la instancia.
         """
         if self._embedder is None:
-            from sentence_transformers import SentenceTransformer
-            self._embedder = SentenceTransformer(settings.embedding_model_name)
-            logger.info(
-                "Initialized local embedding model",
-                model=settings.embedding_model_name,
-                dimensions=self._embedder.get_sentence_embedding_dimension(),
-            )
+            if settings.embedding_backend == "sentence_transformers":
+                try:
+                    from sentence_transformers import SentenceTransformer
+                except ImportError as e:
+                    raise RuntimeError(
+                        "EMBEDDING_BACKEND=sentence_transformers pero el paquete "
+                        "no está instalado (deliberadamente no está en requirements.txt, "
+                        "ver comentario ahí). Instálalo con `pip install sentence-transformers` "
+                        "o cambia EMBEDDING_BACKEND=onnx."
+                    ) from e
+                self._embedder = SentenceTransformer(settings.embedding_model_name)
+                logger.info(
+                    "Initialized local embedding model (sentence-transformers)",
+                    model=settings.embedding_model_name,
+                    dimensions=self._embedder.get_sentence_embedding_dimension(),
+                )
+            else:
+                from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
+                self._embedder = ONNXMiniLM_L6_V2()
+                logger.info("Initialized local embedding model (ONNX)", model=settings.embedding_model_name)
         return self._embedder
 
     # ========================================================================
@@ -181,33 +204,41 @@ class GroqAdapter(LLMPort):
             return []
 
     # ========================================================================
-    # Embeddings (sentence-transformers local)
+    # Embeddings (local, backend configurable — ver _get_embedder)
     # ========================================================================
 
     async def generate_embedding(self, text: str) -> List[float]:
         vectors = await self.generate_embeddings_batch([text])
         return vectors[0]
 
+    @staticmethod
+    def _encode_sync(embedder, texts: List[str]) -> List[List[float]]:
+        """
+        Encapsula la llamada CPU-bound al embedder (se ejecuta en un executor,
+        ver generate_embeddings_batch). Las dos librerías exponen una API
+        distinta pese a producir el mismo tipo de vector (384 floats
+        normalizados): sentence-transformers usa .encode(...) y devuelve un
+        único array 2D; ONNXMiniLM_L6_V2 se invoca directamente (__call__) y
+        devuelve una lista de arrays 1D, uno por texto.
+        """
+        if settings.embedding_backend == "sentence_transformers":
+            vectors = embedder.encode(texts, batch_size=32, convert_to_numpy=True)
+            return vectors.tolist()
+        return [vector.tolist() for vector in embedder(texts)]
+
     async def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
-        """
-        model.encode() es CPU-bound y síncrono: se ejecuta en el executor
-        por defecto de asyncio para no bloquear el event loop de FastAPI
-        mientras corre (ver LLMPort.generate_embeddings_batch en llm_port.py).
-        """
         embedder = self._get_embedder()
 
         start_time = time.perf_counter()
         loop = asyncio.get_running_loop()
-        vectors = await loop.run_in_executor(
-            None, lambda: embedder.encode(texts, batch_size=32, convert_to_numpy=True)
-        )
+        vectors = await loop.run_in_executor(None, self._encode_sync, embedder, texts)
         duration = time.perf_counter() - start_time
 
         LLM_REQUESTS.labels(operation="embed_batch").inc()
         LLM_LATENCY.labels(operation="embed_batch").observe(duration)
         logger.info("Generated batch embeddings locally", count=len(texts), duration_seconds=round(duration, 3))
 
-        return vectors.tolist()
+        return vectors
 
     # ========================================================================
     # Utilidades
@@ -263,10 +294,15 @@ class GroqAdapter(LLMPort):
             logger.warning("Embedding model warm-up failed, will retry lazily on first use", error=str(e))
 
     def get_model_info(self) -> Dict[str, Any]:
+        embedding_provider = (
+            "sentence-transformers (local)"
+            if settings.embedding_backend == "sentence_transformers"
+            else "onnxruntime (local, via chromadb)"
+        )
         return {
             "llm_model": settings.groq_model,
             "llm_provider": "groq",
             "embedding_model": settings.embedding_model_name,
-            "embedding_provider": "sentence-transformers (local)",
+            "embedding_provider": embedding_provider,
             "base_url": "https://api.groq.com/openai/v1",
         }

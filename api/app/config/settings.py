@@ -187,8 +187,24 @@ class Settings(BaseSettings):
     # CONFIGURACIÓN DE EMBEDDINGS LOCALES (usado cuando llm_provider="groq")
     # ===================================
     embedding_model_name: str = Field(
-        default="all-MiniLM-L6-v2",        # sentence-transformers, 384 dims, corre en CPU
-        description="Modelo de sentence-transformers para embeddings locales"
+        default="all-MiniLM-L6-v2",        # 384 dims, corre en CPU (ambos backends usan este modelo)
+        description="Modelo de embeddings locales (mismo nombre en ambos backends)"
+    )
+    embedding_backend: str = Field(
+        default="onnx",
+        description=(
+            "Backend para generar embeddings locales (GroqAdapter, ver "
+            "adapters/outbound/groq_adapter.py):\n"
+            "- 'onnx' (default): chromadb.utils.embedding_functions.ONNXMiniLM_L6_V2, "
+            "vía onnxruntime (ya es dependencia de chromadb, no añade nada extra). "
+            "Recomendado para Render free tier (512MB RAM) — torch por sí solo "
+            "añade ~650MB en disco y suficiente RAM en el import como para "
+            "provocar un OOM antes de atender ninguna petición.\n"
+            "- 'sentence_transformers': más flexible/preciso pero requiere "
+            "`pip install sentence-transformers` aparte (no está en requirements.txt "
+            "por el motivo de arriba); pensado para desarrollo local con más RAM "
+            "disponible, no para el deploy en Render."
+        )
     )
 
     # ===================================
