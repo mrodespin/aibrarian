@@ -17,6 +17,7 @@
 | [ADR-004](004-query-expansion-rag.md) | Query Expansion en el pipeline RAG | Aceptada | 2025-12 |
 | [ADR-005](005-react-vite-frontend.md) | React + Vite + Tailwind para el frontend | Aceptada | 2025-12 |
 | [ADR-006](006-docker-servicios-ollama-nativo.md) | Docker para servicios, Ollama nativo | Aceptada | 2026-02 |
+| [ADR-007](007-despliegue-cloud-groq-chroma.md) | Despliegue cloud gratuito con Groq y Chroma Cloud | Aceptada | 2026-08 |
 
 ---
 

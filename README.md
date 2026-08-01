@@ -376,6 +376,7 @@ VECTOR_SEARCH_LATENCY.observe(duration)
 | **[docs/USAGE.md](docs/USAGE.md)** | API endpoints y scripts CLI |
 | **[docs/USAGE_TESTING.md](docs/USAGE_TESTING.md)** | Suite de tests y guía de testing |
 | **[docs/adr/INDEX.md](docs/adr/INDEX.md)** | Decisiones arquitectónicas (ADRs) |
+| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Despliegue de la demo pública en Render (Groq + Chroma Cloud) |
 | **[.ai/context.md](.ai/context.md)** | Contexto para agentes IA |
 | **[.ai/evaluation.md](.ai/evaluation.md)** | Contexto sobre los criterios de evaluacion del TFM para agentes IA |
 

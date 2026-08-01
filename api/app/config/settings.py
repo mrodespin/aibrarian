@@ -79,6 +79,22 @@ class Settings(BaseSettings):
     # En desarrollo: debug=True (muestra stack traces completos)
 
     # ===================================
+    # SELECCIÓN DE PROVEEDORES (local vs. cloud deployment)
+    # ===================================
+    # Permite elegir en tiempo de arranque qué adaptador concreto usa main.py,
+    # sin tocar código. Los defaults reproducen el setup local de siempre
+    # (Ollama nativo + ChromaDB en Docker); en Render se sobreescriben por
+    # variables de entorno a "groq" / "chroma_cloud".
+    llm_provider: str = Field(
+        default="ollama",
+        description="Proveedor de LLM: 'ollama' (local, GPU Metal) o 'groq' (cloud, gratuito)"
+    )
+    vector_db_provider: str = Field(
+        default="chromadb_local",
+        description="Proveedor de vector DB: 'chromadb_local' (Docker) o 'chroma_cloud' (gestionado)"
+    )
+
+    # ===================================
     # CONFIGURACIÓN DE OLLAMA
     # ===================================
     ollama_base_url: str = Field(
@@ -154,6 +170,42 @@ class Settings(BaseSettings):
     )
     # Optional[int] = puede ser int o None
     # Equivalente TypeScript: number | null
+
+    # ===================================
+    # CONFIGURACIÓN DE GROQ (llm_provider="groq")
+    # ===================================
+    groq_api_key: Optional[str] = Field(
+        default=None,                      # Se configura en .env (dato sensible)
+        description="Groq API key (console.groq.com/keys)"
+    )
+    groq_model: str = Field(
+        default="openai/gpt-oss-120b",     # Groq deprecó los modelos llama-3.x en 2026
+        description="Groq model to use for chat completions"
+    )
+
+    # ===================================
+    # CONFIGURACIÓN DE EMBEDDINGS LOCALES (usado cuando llm_provider="groq")
+    # ===================================
+    embedding_model_name: str = Field(
+        default="all-MiniLM-L6-v2",        # sentence-transformers, 384 dims, corre en CPU
+        description="Modelo de sentence-transformers para embeddings locales"
+    )
+
+    # ===================================
+    # CONFIGURACIÓN DE CHROMA CLOUD (vector_db_provider="chroma_cloud")
+    # ===================================
+    chroma_cloud_api_key: Optional[str] = Field(
+        default=None,
+        description="Chroma Cloud API key (trychroma.com)"
+    )
+    chroma_cloud_tenant: Optional[str] = Field(
+        default=None,                      # None = se resuelve automáticamente desde la API key
+        description="Chroma Cloud tenant ID (opcional si la API key está ligada a una sola BD)"
+    )
+    chroma_cloud_database: Optional[str] = Field(
+        default=None,                      # None = se resuelve automáticamente desde la API key
+        description="Chroma Cloud database name (opcional si la API key está ligada a una sola BD)"
+    )
 
     # ===================================
     # CONFIGURACIÓN DE NOTION

@@ -64,6 +64,11 @@ from app.core.observability import (
 from app.core.services.sync_service import SyncService
 from app.core.services.rag_service import RAGService
 # Adaptadores concretos (las únicas implementaciones que conoce este fichero)
+# Nota: ChromaCloudAdapter y GroqAdapter se importan más abajo, dentro de sus
+# respectivos "if settings...", no aquí arriba. Sus paquetes (groq,
+# sentence-transformers → torch) son dependencias pesadas que solo hacen
+# falta si esos proveedores están activos; importarlas aquí obligaría a
+# instalarlas incluso para el flujo local con Ollama (ADR-007).
 from app.adapters.outbound.chromadb_adapter import ChromaDBAdapter
 from app.adapters.outbound.ollama_adapter import OllamaAdapter
 from app.adapters.outbound.pdf_processor_adapter import PDFProcessorAdapter
@@ -98,8 +103,23 @@ logger = get_logger(__name__)
 #   const syncSvc   = new SyncService(pdfProcessor, ollama, chromaDb);
 
 # --- Adaptadores (implementaciones concretas de los puertos) ---
-chromadb_adapter = ChromaDBAdapter()
-ollama_adapter = OllamaAdapter()
+# La clase concreta de LLMPort/VectorDBPort se elige por configuración
+# (settings.llm_provider / settings.vector_db_provider), no por código.
+# Default = setup local de siempre (Ollama nativo + ChromaDB en Docker).
+# En Render, LLM_PROVIDER=groq y VECTOR_DB_PROVIDER=chroma_cloud vía env vars.
+# Ninguno de los dos adaptadores nuevos toca OllamaAdapter/ChromaDBAdapter.
+if settings.llm_provider == "groq":
+    from app.adapters.outbound.groq_adapter import GroqAdapter
+    llm_adapter = GroqAdapter()
+else:
+    llm_adapter = OllamaAdapter()
+
+if settings.vector_db_provider == "chroma_cloud":
+    from app.adapters.outbound.chromadb_cloud_adapter import ChromaCloudAdapter
+    chromadb_adapter = ChromaCloudAdapter()
+else:
+    chromadb_adapter = ChromaDBAdapter()
+
 pdf_processor = PDFProcessorAdapter()
 notion_processor = NotionProcessorAdapter()
 
@@ -112,19 +132,19 @@ notion_processor = NotionProcessorAdapter()
 # SyncService no sabe si procesa PDFs o Notion, solo habla con el puerto.
 sync_service = SyncService(
     document_processor=pdf_processor,
-    llm=ollama_adapter,
+    llm=llm_adapter,
     vector_db=chromadb_adapter
 )
 
 notion_sync_service = SyncService(
     document_processor=notion_processor,
-    llm=ollama_adapter,
+    llm=llm_adapter,
     vector_db=chromadb_adapter
 )
 
 # RAGService solo necesita LLM + VectorDB (no procesa documentos nuevos)
 rag_service = RAGService(
-    llm=ollama_adapter,
+    llm=llm_adapter,
     vector_db=chromadb_adapter
 )
 
@@ -150,18 +170,19 @@ async def lifespan(app: FastAPI):
         "Starting application",
         app_name=settings.app_name,
         version=settings.app_version,
-        ollama_url=settings.ollama_base_url,
-        chromadb_url=settings.chromadb_url
+        llm_provider=settings.llm_provider,
+        vector_db_provider=settings.vector_db_provider,
     )
 
-    # Verificar que Ollama está corriendo antes de atender peticiones.
-    # Si no está disponible, la app inicia de todas formas pero los
-    # endpoints que necesitan al LLM fallarán con error descriptivo.
-    is_available = await ollama_adapter.is_available()
+    # Verificar que el LLM (Ollama o Groq, según settings.llm_provider) está
+    # disponible antes de atender peticiones. Si no lo está, la app inicia
+    # de todas formas pero los endpoints que necesitan al LLM fallarán con
+    # error descriptivo.
+    is_available = await llm_adapter.is_available()
     if not is_available:
-        logger.warning("Ollama service is not available")
+        logger.warning("LLM service is not available", provider=settings.llm_provider)
     else:
-        logger.info("Ollama service is ready", model=settings.ollama_model)
+        logger.info("LLM service is ready", provider=settings.llm_provider, model_info=llm_adapter.get_model_info())
 
     yield  # ← La app está activa y atiende peticiones desde aquí
 
@@ -281,7 +302,7 @@ async def root():
     @app.get("/"): registra esta función como handler de GET /
     response_model=HealthResponse: FastAPI valida la respuesta con ese schema
     """
-    ollama_ok = await ollama_adapter.is_available()
+    ollama_ok = await llm_adapter.is_available()
     chromadb_ok = await chromadb_adapter.collection_exists(settings.chromadb_collection_name)
 
     return HealthResponse(
@@ -305,12 +326,16 @@ async def health_check():
     return {
         "status": "healthy",
         "services": {
-            "ollama": await ollama_adapter.is_available(),
+            # La clave se mantiene "ollama" por compatibilidad con el frontend
+            # (health.services.ollama), aunque con llm_provider="groq" refleja
+            # la disponibilidad de Groq, no de un Ollama real.
+            "ollama": await llm_adapter.is_available(),
             "chromadb": await chromadb_adapter.collection_exists(settings.chromadb_collection_name)
         },
         "config": {
-            "ollama_model": settings.ollama_model,
-            "embedding_model": settings.ollama_embedding_model,
+            "llm_provider": settings.llm_provider,
+            "vector_db_provider": settings.vector_db_provider,
+            **llm_adapter.get_model_info(),
             "collection": settings.chromadb_collection_name,
             "data_directory": settings.data_directory
         }
@@ -661,7 +686,7 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
 
             # Generar embeddings en batch (más eficiente que uno por uno)
             chunk_texts = [chunk.content for chunk in chunks]
-            embeddings = await ollama_adapter.generate_embeddings_batch(chunk_texts)
+            embeddings = await llm_adapter.generate_embeddings_batch(chunk_texts)
 
             # Asignar embeddings a los chunks
             # zip() empareja chunks[i] con embeddings[i]

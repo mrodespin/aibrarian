@@ -1,0 +1,58 @@
+# /render.yaml
+# Blueprint de despliegue para Render (https://render.com/docs/blueprint-spec)
+#
+# Despliega SOLO la API (Groq + Chroma Cloud, ver ADR-007). El frontend y
+# ChromaDB local no forman parte de este blueprint: el frontend se sirve
+# aparte (o se apunta a esta API vía VITE_API_URL) y ChromaDB local solo
+# se usa en desarrollo (docker-compose).
+#
+# Uso:
+#   1. Conecta este repo en Render → "New Blueprint Instance"
+#   2. Render detecta este fichero y crea el servicio "bibliotecario-ia-api"
+#   3. Variables marcadas con "sync: false" NO se versionan aquí: Render
+#      pide rellenarlas en el dashboard (Environment) tras el primer deploy
+#   4. Primer arranque: usa POST /sync/upload o /sync/notion para indexar
+#      documentos en la colección de Chroma Cloud (empieza vacía)
+
+services:
+  - type: web
+    name: bibliotecario-ia-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: ./api
+    healthCheckPath: /
+    envVars:
+      # --- Selección de proveedores (ver ADR-007) ---
+      - key: LLM_PROVIDER
+        value: groq
+      - key: VECTOR_DB_PROVIDER
+        value: chroma_cloud
+
+      # --- Groq (gratuito, sin tarjeta): console.groq.com/keys ---
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+
+      # --- Embeddings locales (CPU, sin API key) ---
+      - key: EMBEDDING_MODEL_NAME
+        value: all-MiniLM-L6-v2
+
+      # --- Chroma Cloud (gratuito, sin tarjeta): trychroma.com ---
+      - key: CHROMA_CLOUD_API_KEY
+        sync: false
+      - key: CHROMA_CLOUD_TENANT
+        sync: false
+      - key: CHROMA_CLOUD_DATABASE
+        sync: false
+
+      # --- Notion (opcional) ---
+      - key: NOTION_API_KEY
+        sync: false
+      - key: NOTION_DATABASE_ID
+        sync: false
+
+      # --- Resto de configuración (valores por defecto de settings.py) ---
+      - key: DATA_DIRECTORY
+        value: /app/data

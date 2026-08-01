@@ -23,7 +23,13 @@ langchain-ollama==0.2.0      # Ollama LLM & Embeddings
 langchain-chroma==0.1.4      # ChromaDB integration
 
 # --- Vector Database ---
-chromadb==0.5.20             # ChromaDB client
+chromadb==0.5.20             # ChromaDB client (local Docker + Chroma Cloud, mismo cliente)
+
+# --- Cloud LLM provider (llm_provider="groq") ---
+# Versión mínima, no fijada exacta: verificar `pip install groq` en el momento
+# del deploy, la API de chat.completions es estable entre versiones recientes.
+groq>=1.1.0                  # Cliente oficial de Groq (OpenAI-compatible chat API)
+sentence-transformers>=3.0.0 # Embeddings locales en CPU (usado junto a Groq, que no ofrece embeddings)
 
 # --- Document Processing ---
 pypdf==5.1.0                 # PDF reading and parsing
