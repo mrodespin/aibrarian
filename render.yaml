@@ -1,18 +1,28 @@
 # /render.yaml
 # Blueprint de despliegue para Render (https://render.com/docs/blueprint-spec)
 #
-# Despliega SOLO la API (Groq + Chroma Cloud, ver ADR-007). El frontend y
-# ChromaDB local no forman parte de este blueprint: el frontend se sirve
-# aparte (o se apunta a esta API vía VITE_API_URL) y ChromaDB local solo
-# se usa en desarrollo (docker-compose).
+# Despliega la API (Groq + Chroma Cloud, ver ADR-007) y el frontend (React +
+# Vite, servido como Static Site). ChromaDB local no forma parte de este
+# blueprint: solo se usa en desarrollo (docker-compose).
 #
 # Uso:
 #   1. Conecta este repo en Render → "New Blueprint Instance"
-#   2. Render detecta este fichero y crea el servicio "bibliotecario-ia-api"
+#   2. Render detecta este fichero y crea los servicios "bibliotecario-ia-api"
+#      y "bibliotecario-ia-frontend"
 #   3. Variables marcadas con "sync: false" NO se versionan aquí: Render
 #      pide rellenarlas en el dashboard (Environment) tras el primer deploy
 #   4. Primer arranque: usa POST /sync/upload o /sync/notion para indexar
 #      documentos en la colección de Chroma Cloud (empieza vacía)
+#
+# Nota sobre VITE_API_URL (abajo, servicio del frontend): Render no permite
+# referenciar la URL PÚBLICA de un servicio desde otro vía `fromService`
+# (esa propiedad solo expone el hostname de la red PRIVADA interna, inútil
+# aquí porque quien llama a la API es el navegador del usuario, no otro
+# servicio de Render). Por eso va como "sync: false", igual que las API
+# keys: la rellenas tú a mano en el dashboard (bibliotecario-ia-frontend →
+# Environment) con la URL pública que Render le asignó a la API — así no
+# queda hardcodeada en el repo ni hay que tocar este fichero si la API
+# cambia de nombre o le pones dominio propio.
 
 services:
   - type: web
@@ -61,3 +71,26 @@ services:
       # --- Resto de configuración (valores por defecto de settings.py) ---
       - key: DATA_DIRECTORY
         value: /app/data
+
+  # --- Frontend (React + Vite, servido como Static Site: gratis, sin
+  # "sleep" ni límite de RAM porque no ejecuta ningún proceso, solo sirve
+  # los ficheros estáticos de `npm run build` vía CDN) ---
+  - type: web
+    name: bibliotecario-ia-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      # Rellena en el dashboard (Environment) con la URL pública de
+      # bibliotecario-ia-api, ver nota arriba. VITE_API_URL se hornea en
+      # el build (Vite la sustituye en tiempo de build, no de arranque),
+      # así que cambiar este valor requiere un redeploy manual del
+      # frontend para que surta efecto, no basta con reiniciar el servicio.
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      # SPA sin backend propio: cualquier ruta debe servir index.html para
+      # que el enrutado (si lo hay) lo resuelva React en el cliente.
+      - type: rewrite
+        source: /*
+        destination: /index.html
