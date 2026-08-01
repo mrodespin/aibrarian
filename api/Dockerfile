@@ -20,5 +20,7 @@ COPY ./app /app/app
 # 6. Expose the port the API will run on
 EXPOSE 8000
 
-# 7. Command to run the application (will be run by docker-compose)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 7. Command to run the application (will be run by docker-compose, or by
+# Render with $PORT set to whatever port it assigns — defaults to 8000
+# for local/docker-compose use where PORT isn't set).
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
