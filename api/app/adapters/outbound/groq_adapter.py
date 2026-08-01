@@ -215,9 +215,17 @@ class GroqAdapter(LLMPort):
 
     async def is_available(self) -> bool:
         """
-        Comprueba Groq (llamada ligera a /models) Y que el modelo de
-        embeddings local pueda cargarse. Si cualquiera de los dos falla,
-        el sistema RAG no puede completar un ciclo pregunta-respuesta.
+        Comprueba solo Groq (llamada ligera a /models).
+
+        Deliberadamente NO carga aquí el modelo de embeddings local: esta
+        función se llama en el startup de FastAPI (ver lifespan en main.py),
+        y uvicorn no empieza a escuchar en el puerto hasta que el startup
+        termina. Cargar sentence-transformers aquí (síncrono, sin timeout,
+        puede implicar descargar el modelo de Hugging Face) bloqueaba el
+        arranque el tiempo suficiente para que Render diera el deploy por
+        timeout ("no open ports detected") antes de que el puerto llegara
+        a abrirse. El modelo de embeddings se sigue cargando de forma lazy
+        en el primer uso real (_get_embedder), como indica su docstring.
         """
         if not settings.groq_api_key:
             logger.warning("Groq service unavailable: GROQ_API_KEY not set")
@@ -235,12 +243,6 @@ class GroqAdapter(LLMPort):
                 return False
         except Exception as e:
             logger.error("Groq service unavailable", error=str(e))
-            return False
-
-        try:
-            self._get_embedder()
-        except Exception as e:
-            logger.error("Local embedding model unavailable", error=str(e))
             return False
 
         return True

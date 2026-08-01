@@ -136,7 +136,7 @@ async def test_is_available_false_without_api_key(monkeypatch):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_is_available_true_when_groq_and_embedder_ok(groq_settings):
+async def test_is_available_true_when_groq_ok(groq_settings):
     adapter = GroqAdapter()
 
     mock_response = MagicMock(status_code=200)
@@ -146,8 +146,13 @@ async def test_is_available_true_when_groq_and_embedder_ok(groq_settings):
     mock_async_client.get = AsyncMock(return_value=mock_response)
 
     with patch("app.adapters.outbound.groq_adapter.httpx.AsyncClient", return_value=mock_async_client):
-        with patch.object(adapter, "_get_embedder", return_value=MagicMock()):
+        with patch.object(adapter, "_get_embedder", return_value=MagicMock()) as mock_get_embedder:
             assert await adapter.is_available() is True
+
+    # is_available() no debe cargar el modelo de embeddings: se llama en el
+    # startup de FastAPI y bloquearía la apertura del puerto (ver docstring
+    # de is_available en groq_adapter.py).
+    mock_get_embedder.assert_not_called()
 
 
 @pytest.mark.unit
