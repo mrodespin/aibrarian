@@ -270,7 +270,7 @@ ollama serve
 **Error: "ChromaDB connection failed"**
 ```bash
 # Verificar ChromaDB
-curl http://localhost:8001/api/v1/heartbeat
+curl http://localhost:8001/api/v2/heartbeat
 
 # Si no responde, iniciarlo
 docker-compose up -d chromadb

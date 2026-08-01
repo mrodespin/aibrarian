@@ -20,10 +20,20 @@ langchain-text-splitters==0.3.2
 
 # --- LangChain Integrations ---
 langchain-ollama==0.2.0      # Ollama LLM & Embeddings
-langchain-chroma==0.1.4      # ChromaDB integration
+# (langchain-chroma NO se usa en el código — chromadb_adapter.py habla con
+# `chromadb` directamente — y además fijaba chromadb<0.6.0, bloqueando el
+# upgrade de abajo. Se quitó por eso, no por descuido.)
 
 # --- Vector Database ---
-chromadb==0.5.20             # ChromaDB client (local Docker + Chroma Cloud, mismo cliente)
+# 0.5.20 -> 1.5.9: Chroma Cloud corre una versión de servidor más nueva que
+# ya no es compatible con el formato de respuesta que este cliente antiguo
+# esperaba al listar colecciones (KeyError: '_type' en list_collections(),
+# reproducido y confirmado contra la instancia real). La imagen Docker de
+# ChromaDB local (docker-compose.yml) se subió a la misma versión por lo
+# mismo — y su endpoint de healthcheck cambió de /api/v1/heartbeat (410
+# Gone en 1.5.9) a /api/v2/heartbeat, actualizado en docker-compose.yml y
+# scripts/verify_setup.py.
+chromadb==1.5.9              # ChromaDB client (local Docker + Chroma Cloud, mismo cliente)
 
 # --- Cloud LLM provider (llm_provider="groq") ---
 # Versión mínima, no fijada exacta: verificar `pip install groq` en el momento

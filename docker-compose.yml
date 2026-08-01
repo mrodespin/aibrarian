@@ -13,13 +13,15 @@
 
 services:
   chromadb:
-    image: chromadb/chroma:0.5.20
+    image: chromadb/chroma:1.5.9
     ports:
       - "8001:8000"
     volumes:
       - chroma_data:/chroma/chroma
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      # /api/v1/heartbeat da 410 Gone desde que se subió la imagen a 1.5.9
+      # (v1 de la API retirada); usar /api/v2/heartbeat en su lugar.
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
       interval: 10s
       timeout: 5s
       retries: 3
