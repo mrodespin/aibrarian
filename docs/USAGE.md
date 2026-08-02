@@ -2,6 +2,8 @@
 
 Esta documentación detalla todos los servicios, puertos y endpoints de la API del proyecto Bibliotecario-IA.
 
+> **Autenticación:** desde que se añadió login, todos los endpoints salvo `/`, `/health` y `/metrics` requieren una sesión válida (cookie `httpOnly` emitida por `POST /auth/login`). Los ejemplos cURL de esta guía asumen que ya has hecho login y estás reutilizando la cookie (`-c cookies.txt` / `-b cookies.txt`) — sin eso, cualquier llamada a `/ask`, `/sync*`, `/stats` o `/documents/*` devuelve `401 Not authenticated`. Ver la sección [Autenticación](#-autenticación) más abajo.
+
 ---
 
 ## 🌐 Servicios del Proyecto
@@ -13,6 +15,7 @@ Cuando ejecutas el sistema, estos son los servicios que necesitas:
 | **FastAPI API** | `http://localhost:8000` | `http://api:8000` | API principal del proyecto (ingesta y consultas) |
 | **ChromaDB** | `http://localhost:8001` | `http://chromadb:8000` | Base de datos vectorial para embeddings |
 | **Ollama** | `http://localhost:11434` | `http://ollama:11434` | LLM local (generación de texto y embeddings) |
+| **Postgres** | `localhost:5432` | `postgres:5432` | Usuarios/autenticación |
 
 **Nota sobre puertos:** ChromaDB expone el puerto 8001 en el host para evitar conflicto con la API (que usa 8000). Internamente en Docker, ChromaDB usa el puerto 8000.
 
@@ -20,21 +23,90 @@ Cuando ejecutas el sistema, estos son los servicios que necesitas:
 
 ## 🤖 Endpoints de la API FastAPI
 
-API principal del proyecto ejecutándose en `http://localhost:8000`.
+API principal del proyecto ejecutándose en `http://localhost:8000`. Los endpoints marcados con 🔒 requieren sesión (cookie de `/auth/login`).
+
+### 🔐 Autenticación
+
+No hay registro público — los usuarios se crean con `scripts/create_user.py` (ver [Scripts CLI](#-scripts-cli)).
+
+#### `POST /auth/login` - Iniciar Sesión
+
+Verifica credenciales y, si son correctas, deja una cookie `httpOnly` con un JWT de sesión (24h por defecto).
+
+**Request Body:**
+```json
+{
+  "email": "tu@email.com",
+  "password": "..."
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 1,
+  "email": "tu@email.com"
+}
+```
+
+**Response (401):** credenciales incorrectas.
+
+**Ejemplo cURL** (`-c cookies.txt` guarda la cookie para reutilizarla en el resto de peticiones):
+```bash
+curl -c cookies.txt -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "tu@email.com", "password": "..."}'
+```
+
+---
+
+#### `POST /auth/logout` - Cerrar Sesión
+
+Borra la cookie de sesión.
+
+**Response (200 OK):**
+```json
+{"status": "success"}
+```
+
+---
+
+#### `GET /auth/me` - Usuario Actual 🔒
+
+Devuelve el usuario de la sesión activa. Útil para comprobar si una cookie sigue siendo válida.
+
+**Response (200 OK):**
+```json
+{
+  "id": 1,
+  "email": "tu@email.com"
+}
+```
+
+**Response (401):** sin cookie o cookie inválida/expirada.
+
+**Ejemplo cURL** (`-b cookies.txt` reutiliza la cookie guardada en el login):
+```bash
+curl -b cookies.txt "http://localhost:8000/auth/me"
+```
+
+---
 
 ### 📊 Endpoints de Utilidad
 
 #### `GET /` - Health Check Básico
 
-Verifica que la API esté ejecutándose.
+Verifica que la API esté ejecutándose. **Sin autenticación** — es el endpoint que usa Render como healthcheck del servicio.
 
 **Response (200 OK):**
 ```json
 {
   "status": "running",
   "version": "0.1.0",
-  "ollama_available": true,
-  "chromadb_available": true
+  "llm_provider": "ollama",
+  "llm_available": true,
+  "vector_db_provider": "chromadb_local",
+  "vector_db_available": true
 }
 ```
 
@@ -42,7 +114,7 @@ Verifica que la API esté ejecutándose.
 
 #### `GET /health` - Health Check Detallado
 
-Verifica el estado de todos los servicios y configuración.
+Verifica el estado de todos los servicios y configuración. **Sin autenticación.**
 
 **Response (200 OK):**
 ```json
@@ -53,6 +125,8 @@ Verifica el estado de todos los servicios y configuración.
     "chromadb": true
   },
   "config": {
+    "llm_provider": "ollama",
+    "vector_db_provider": "chromadb_local",
     "ollama_model": "llama3.2",
     "embedding_model": "nomic-embed-text",
     "collection": "bibliotecario_docs",
@@ -61,19 +135,22 @@ Verifica el estado de todos los servicios y configuración.
 }
 ```
 
+> La clave `services.ollama` refleja la disponibilidad del LLM activo aunque sea Groq (se mantiene el nombre por compatibilidad con el frontend, ver ADR-007).
+
 ---
 
-#### `GET /stats` - Estadísticas de la Colección
+#### `GET /stats` - Estadísticas de la Colección 🔒
 
-Obtiene información sobre la base de conocimientos.
+Obtiene información sobre la base de conocimientos. **Requiere sesión.**
 
 **Response (200 OK):**
 ```json
 {
   "collection": "bibliotecario_docs",
   "stats": {
-    "document_count": 42,
-    "status": "active"
+    "count": 42,
+    "dimensions": 768,
+    "collection_name": "bibliotecario_docs"
   },
   "model_info": {
     "llm_model": "llama3.2",
@@ -86,7 +163,7 @@ Obtiene información sobre la base de conocimientos.
 
 ## 📥 Endpoints de Ingesta (MVP)
 
-### `POST /sync` - Sincronizar PDF Individual
+### `POST /sync` - Sincronizar PDF Individual 🔒
 
 Procesa un archivo PDF y lo indexa en la base de datos vectorial.
 
@@ -111,7 +188,7 @@ Procesa un archivo PDF y lo indexa en la base de datos vectorial.
 
 **Ejemplo cURL:**
 ```bash
-curl -X POST "http://localhost:8000/sync" \
+curl -b cookies.txt -X POST "http://localhost:8000/sync" \
   -H "Content-Type: application/json" \
   -d '{
     "file_path": "./data/manual.pdf"
@@ -120,7 +197,19 @@ curl -X POST "http://localhost:8000/sync" \
 
 ---
 
-### `POST /sync/directory` - Sincronizar Directorio de PDFs
+### `POST /sync/upload` - Subir y Sincronizar PDF 🔒
+
+Como `/sync`, pero acepta el archivo directamente (`multipart/form-data`) en vez de una ruta local — es lo que usa el panel de sincronización del frontend, y el único que funciona en producción (donde el servidor no tiene acceso al filesystem del cliente).
+
+**Ejemplo cURL:**
+```bash
+curl -b cookies.txt -X POST "http://localhost:8000/sync/upload" \
+  -F "file=@documento.pdf"
+```
+
+---
+
+### `POST /sync/directory` - Sincronizar Directorio de PDFs 🔒
 
 Procesa todos los archivos PDF de un directorio.
 
@@ -148,17 +237,17 @@ Procesa todos los archivos PDF de un directorio.
 **Ejemplo cURL:**
 ```bash
 # Usar directorio por defecto (./data)
-curl -X POST "http://localhost:8000/sync/directory"
+curl -b cookies.txt -X POST "http://localhost:8000/sync/directory"
 
 # Especificar directorio
-curl -X POST "http://localhost:8000/sync/directory?directory_path=/ruta/a/pdfs"
+curl -b cookies.txt -X POST "http://localhost:8000/sync/directory?directory_path=/ruta/a/pdfs"
 ```
 
 ---
 
 ## 🔗 Endpoints de Integración con Notion
 
-### `POST /sync/notion` - Sincronizar Página de Notion
+### `POST /sync/notion` - Sincronizar Página de Notion 🔒
 
 Procesa una página de Notion y la indexa en la base de datos vectorial.
 
@@ -187,7 +276,7 @@ Procesa una página de Notion y la indexa en la base de datos vectorial.
 
 **Ejemplo cURL:**
 ```bash
-curl -X POST "http://localhost:8000/sync/notion" \
+curl -b cookies.txt -X POST "http://localhost:8000/sync/notion" \
   -H "Content-Type: application/json" \
   -d '{
     "page_id": "https://www.notion.so/Mi-Pagina-abc123..."
@@ -196,7 +285,7 @@ curl -X POST "http://localhost:8000/sync/notion" \
 
 ---
 
-### `POST /sync/notion/database` - Sincronizar Base de Datos de Notion
+### `POST /sync/notion/database` - Sincronizar Base de Datos de Notion 🔒
 
 Procesa todas las páginas de una base de datos de Notion.
 
@@ -228,7 +317,7 @@ Procesa todas las páginas de una base de datos de Notion.
 
 **Ejemplo cURL:**
 ```bash
-curl -X POST "http://localhost:8000/sync/notion/database" \
+curl -b cookies.txt -X POST "http://localhost:8000/sync/notion/database" \
   -H "Content-Type: application/json" \
   -d '{
     "database_id": "abc123...",
@@ -240,7 +329,7 @@ curl -X POST "http://localhost:8000/sync/notion/database" \
 
 ## 💬 Endpoint de Consultas
 
-### `POST /ask` - Hacer Pregunta al Sistema RAG
+### `POST /ask` - Hacer Pregunta al Sistema RAG 🔒
 
 Realiza una pregunta sobre los documentos indexados y obtiene una respuesta generada por IA.
 
@@ -277,7 +366,7 @@ Realiza una pregunta sobre los documentos indexados y obtiene una respuesta gene
 
 **Ejemplo cURL:**
 ```bash
-curl -X POST "http://localhost:8000/ask" \
+curl -b cookies.txt -X POST "http://localhost:8000/ask" \
   -H "Content-Type: application/json" \
   -d '{
     "question": "¿Qué es RAG?"
@@ -288,7 +377,7 @@ curl -X POST "http://localhost:8000/ask" \
 
 ## 🗑️ Endpoint de Eliminación
 
-### `DELETE /documents/{document_id}` - Eliminar Documento
+### `DELETE /documents/{document_id}` - Eliminar Documento 🔒
 
 Elimina todos los chunks de un documento de la base de datos vectorial.
 
@@ -305,7 +394,7 @@ Elimina todos los chunks de un documento de la base de datos vectorial.
 
 **Ejemplo cURL:**
 ```bash
-curl -X DELETE "http://localhost:8000/documents/pdf_a1b2c3d4"
+curl -b cookies.txt -X DELETE "http://localhost:8000/documents/pdf_a1b2c3d4"
 ```
 
 ---
@@ -393,6 +482,22 @@ python scripts/generate_test_pdf.py
 
 ---
 
+### 6. `create_user.py` - Crear Usuario de Login
+
+No hay UI de registro — es la única forma de dar de alta un usuario. Pide la contraseña de forma interactiva (`getpass`, dos veces para confirmar) en vez de como argumento, para que no quede en el historial de la shell.
+
+```bash
+python scripts/create_user.py --email tu@email.com
+```
+
+**Prerequisito:**
+- `DATABASE_URL` configurada en `api/.env` (local) o como variable de entorno (p. ej. para crear el primer usuario contra Neon en producción)
+- `source api/venv/bin/activate`
+
+**Salida:** `✅ User created: tu@email.com (id=1)`. Crea también la tabla `users` si no existe todavía (idempotente).
+
+---
+
 ## 🔐 Configuración de Notion
 
 Para usar los endpoints de Notion:
@@ -431,28 +536,38 @@ Desde estas interfaces puedes:
 
 ## 🚀 Flujo de Trabajo Típico
 
-### 1. Indexar Documentos
+### 1. Crear usuario e iniciar sesión (una vez)
+
+```bash
+python scripts/create_user.py --email tu@email.com
+
+curl -c cookies.txt -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "tu@email.com", "password": "..."}'
+```
+
+### 2. Indexar Documentos
 
 ```bash
 # Opción A: PDFs locales
-curl -X POST "http://localhost:8000/sync/directory"
+curl -b cookies.txt -X POST "http://localhost:8000/sync/directory"
 
 # Opción B: Página de Notion
-curl -X POST "http://localhost:8000/sync/notion" \
+curl -b cookies.txt -X POST "http://localhost:8000/sync/notion" \
   -H "Content-Type: application/json" \
   -d '{"page_id": "abc123..."}'
 ```
 
-### 2. Verificar Ingesta
+### 3. Verificar Ingesta
 
 ```bash
-curl http://localhost:8000/stats
+curl -b cookies.txt http://localhost:8000/stats
 ```
 
-### 3. Hacer Preguntas
+### 4. Hacer Preguntas
 
 ```bash
-curl -X POST "http://localhost:8000/ask" \
+curl -b cookies.txt -X POST "http://localhost:8000/ask" \
   -H "Content-Type: application/json" \
   -d '{
     "question": "¿De qué tratan los documentos indexados?"
@@ -462,6 +577,24 @@ curl -X POST "http://localhost:8000/ask" \
 ---
 
 ## 🐛 Solución de Problemas
+
+### `401 Not authenticated`
+
+```json
+{
+  "detail": "Not authenticated"
+}
+```
+
+**Solución:** falta la cookie de sesión (o expiró, dura 24h por defecto). Repite el login y reutiliza la cookie guardada:
+```bash
+curl -c cookies.txt -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "tu@email.com", "password": "..."}'
+# ...y usa -b cookies.txt en las siguientes peticiones
+```
+
+Si no tienes usuario todavía: `python scripts/create_user.py --email tu@email.com`.
 
 ### Ollama no disponible
 

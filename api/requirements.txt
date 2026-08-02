@@ -72,3 +72,4 @@ bcrypt==4.2.0                 # Hashing de contraseñas (directo, no via passlib
 # --- Testing ---
 pytest==8.3.4                # Testing framework
 pytest-asyncio==0.24.0       # Async support for pytest
+pytest-cov==7.1.0             # Coverage reports (--cov=app, documentado en CLAUDE.md/docs/ pero no instalado hasta ahora)

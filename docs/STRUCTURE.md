@@ -11,30 +11,32 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │
 ├── /api/                           # Backend Python (FastAPI)
 │   ├── /app/                       # Código de aplicación
-│   │   ├── main.py                 # Entry point de FastAPI
+│   │   ├── main.py                 # Entry point de FastAPI (DI manual + endpoints)
 │   │   │
 │   │   ├── /core/                  # Núcleo Hexagonal (Lógica de Negocio)
 │   │   │   ├── /domain/
-│   │   │   │   └── models.py       # Entidades de dominio (Document, Chunk, Query)
+│   │   │   │   └── models.py       # Entidades de dominio (Document, Chunk, Query, User...)
 │   │   │   ├── /ports/             # Interfaces (contratos)
 │   │   │   │   ├── vector_db_port.py
 │   │   │   │   ├── llm_port.py
-│   │   │   │   └── document_processor_port.py
+│   │   │   │   ├── document_processor_port.py
+│   │   │   │   └── user_repository_port.py
 │   │   │   ├── /services/          # Servicios de lógica de negocio
 │   │   │   │   ├── sync_service.py      # Pipeline de ingesta
-│   │   │   │   └── rag_service.py       # Sistema RAG (consultas)
+│   │   │   │   ├── rag_service.py       # Sistema RAG (consultas)
+│   │   │   │   └── auth_service.py      # Login + emisión/validación de JWT
 │   │   │   │
-│   │   │   └── /observability/     # Capa de observabilidad
-│   │   │       ├── __init__.py          # Configuración de logging (Structlog)
-│   │   │       ├── metrics.py           # Métricas Prometheus
-│   │   │       └── tracing.py           # OpenTelemetry tracing
+│   │   │   └── observability.py    # Structlog + métricas Prometheus + MetricsMiddleware (un solo fichero)
 │   │   │
 │   │   ├── /adapters/              # Adaptadores (implementaciones)
 │   │   │   └── /outbound/          # Adaptadores de salida
-│   │   │       ├── chromadb_adapter.py
-│   │   │       ├── ollama_adapter.py
+│   │   │       ├── chromadb_adapter.py        # VectorDBPort — ChromaDB local (Docker)
+│   │   │       ├── chromadb_cloud_adapter.py  # VectorDBPort — Chroma Cloud (hereda del anterior)
+│   │   │       ├── ollama_adapter.py          # LLMPort — Ollama local
+│   │   │       ├── groq_adapter.py            # LLMPort — Groq (cloud)
 │   │   │       ├── pdf_processor_adapter.py
-│   │   │       └── notion_processor_adapter.py
+│   │   │       ├── notion_processor_adapter.py
+│   │   │       └── postgres_user_adapter.py   # UserRepositoryPort — Postgres/Neon
 │   │   │
 │   │   └── /config/
 │   │       └── settings.py         # Configuración con Pydantic Settings
@@ -48,6 +50,7 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   ├── verify_setup.py             # Verificación del entorno (8 checks)
 │   ├── ingest_pdfs.py              # Ingesta de PDFs (CLI alternativa a API)
 │   ├── ingest_notion.py            # Ingesta de Notion (CLI alternativa a API)
+│   ├── create_user.py              # Alta de usuarios de login (sin UI de registro)
 │   └── generate_test_pdf.py        # Genera PDF de prueba en /data
 │
 ├── /data/                          # Directorio para PDFs locales (MVP)
@@ -61,14 +64,15 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   │   ├── main.jsx                # Entry point
 │   │   ├── App.jsx                 # Root component
 │   │   ├── index.css               # Global styles + Tailwind @theme (Dark Mode)
-│   │   ├── /api/                   # API client layer
+│   │   ├── /api/                   # API client layer (incl. auth.js)
 │   │   ├── /hooks/                 # Custom React hooks
-│   │   ├── /context/               # React context providers
+│   │   ├── /context/               # React context providers (App, Auth)
 │   │   ├── /components/            # Componentes React
 │   │   │   ├── /layout/            # Layout components
 │   │   │   ├── /chat/              # Chat interface
 │   │   │   ├── /documents/         # Document management
 │   │   │   ├── /stats/             # Statistics panel
+│   │   │   ├── /auth/              # LoginPage
 │   │   │   └── /common/            # Reusable components
 │   │   └── /utils/                 # Utilities (markdown, etc.)
 │   ├── package.json                # Dependencies
@@ -76,13 +80,15 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   ├── postcss.config.js           # PostCSS configuration
 │   └── README.md                   # Frontend documentation
 │
-├── /.ai/                           # Contexto para Agentes IA (Universal)
+├── /.ai/                           # Contexto para Agentes IA
 │   ├── context.md                  # Contexto completo del proyecto (stack, arquitectura, comandos)
-│   └── evaluation.md               # Criterios de evaluación del TFM y estado de entrega
+│   └── evaluation.md               # Notas internas de evaluación TFM — solo local, gitignored
 │
 ├── /docs/                          # Documentación Técnica (Humanos)
 │   ├── STRUCTURE.md                # Este archivo - estructura y arquitectura
 │   ├── USAGE.md                    # Documentación de API y uso
+│   ├── USAGE_TESTING.md            # Suite de tests y guía de testing
+│   ├── DEPLOYMENT.md               # Despliegue opcional en Render (Groq + Chroma Cloud)
 │   └── /adr/                       # Architecture Decision Records
 │       ├── INDEX.md                # Índice de decisiones
 │       ├── 001-arquitectura-hexagonal.md
@@ -90,9 +96,11 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │       ├── 003-chromadb-vector-store.md
 │       ├── 004-query-expansion-rag.md
 │       ├── 005-react-vite-frontend.md
-│       └── 006-docker-servicios-ollama-nativo.md
+│       ├── 006-docker-servicios-ollama-nativo.md
+│       └── 007-despliegue-cloud-groq-chroma.md
 │
-├── docker-compose.yml              # Orquestación de servicios
+├── docker-compose.yml              # Orquestación de servicios (ChromaDB + Postgres + API)
+├── render.yaml                     # Blueprint de despliegue en Render (API + frontend)
 ├── .gitignore                      # Archivos ignorados por Git
 ├── LICENSE                         # Licencia MIT
 │
@@ -113,19 +121,21 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 
 **🔷 Core (Núcleo Hexagonal)**
 - `domain/models.py`: Entidades de dominio independientes de infraestructura
-  - `Document`, `Chunk`, `Query`, `QueryResult`, `SyncResult`
+  - `Document`, `Chunk`, `Query`, `QueryResult`, `SyncResult`, `User`
 - `ports/`: Interfaces abstractas (contratos)
   - Define CÓMO interactuar con servicios externos sin implementar el CÓMO
 - `services/`: Lógica de negocio pura
   - `sync_service.py`: Orquesta la ingesta (load → split → embed → store)
   - `rag_service.py`: Orquesta las consultas (embed query → search → generate)
+  - `auth_service.py`: Verifica credenciales, emite/valida JWT de sesión
 
 **🔌 Adapters (Adaptadores)**
-- `outbound/`: Implementaciones concretas de los puertos
-  - `chromadb_adapter.py`: Implementa VectorDBPort para ChromaDB
-  - `ollama_adapter.py`: Implementa LLMPort para Ollama
-  - `pdf_processor_adapter.py`: Implementa DocumentProcessorPort para PDFs
-  - `notion_processor_adapter.py`: Implementa DocumentProcessorPort para Notion
+- `outbound/`: Implementaciones concretas de los puertos. La clase concreta de LLM/VectorDB se elige por configuración (`LLM_PROVIDER`/`VECTOR_DB_PROVIDER`), no por código:
+  - `chromadb_adapter.py` / `chromadb_cloud_adapter.py`: VectorDBPort (ChromaDB local vs Chroma Cloud)
+  - `ollama_adapter.py` / `groq_adapter.py`: LLMPort (Ollama local vs Groq cloud)
+  - `pdf_processor_adapter.py`: DocumentProcessorPort para PDFs
+  - `notion_processor_adapter.py`: DocumentProcessorPort para Notion
+  - `postgres_user_adapter.py`: UserRepositoryPort (Postgres/Neon)
 
 **⚙️ Config**
 - `settings.py`: Configuración centralizada usando Pydantic Settings
@@ -134,10 +144,7 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
   - Validación de tipos
 
 **📊 Observability (Observabilidad)**
-- `observability/`: Capa de observabilidad completa
-  - `__init__.py`: Configuración de logging (Structlog)
-  - `metrics.py`: Métricas Prometheus (histogramas, contadores)
-  - `tracing.py`: OpenTelemetry tracing setup
+- `observability.py`: un único fichero — configuración de logging estructurado (Structlog), métricas Prometheus y `MetricsMiddleware`. No hay tracing distribuido (OpenTelemetry) implementado.
 
 **Métricas disponibles:**
 - `vector_search_latency_seconds`: Latencia de búsquedas vectoriales
@@ -147,17 +154,24 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 
 #### **Endpoints Principales:**
 
+🔒 = requiere sesión (cookie de `POST /auth/login`)
+
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
-| `/` | GET | Health check básico |
-| `/health` | GET | Health check detallado |
-| `/stats` | GET | Estadísticas de la colección |
-| `/sync` | POST | Sincronizar PDF individual |
-| `/sync/directory` | POST | Sincronizar directorio de PDFs |
-| `/sync/notion` | POST | Sincronizar página de Notion |
-| `/sync/notion/database` | POST | Sincronizar base de datos Notion |
-| `/ask` | POST | Hacer pregunta al sistema RAG |
-| `/documents/{id}` | DELETE | Eliminar documento |
+| `/` | GET | Health check básico (público, usado por Render) |
+| `/health` | GET | Health check detallado (público) |
+| `/metrics` | GET | Métricas Prometheus (público) |
+| `/auth/login` | POST | Iniciar sesión |
+| `/auth/logout` | POST | Cerrar sesión |
+| `/auth/me` | GET | Usuario de la sesión actual 🔒 |
+| `/stats` | GET | Estadísticas de la colección 🔒 |
+| `/sync` | POST | Sincronizar PDF individual (ruta local) 🔒 |
+| `/sync/upload` | POST | Subir y sincronizar PDF (multipart) 🔒 |
+| `/sync/directory` | POST | Sincronizar directorio de PDFs 🔒 |
+| `/sync/notion` | POST | Sincronizar página de Notion 🔒 |
+| `/sync/notion/database` | POST | Sincronizar base de datos Notion 🔒 |
+| `/ask` | POST | Hacer pregunta al sistema RAG 🔒 |
+| `/documents/{id}` | DELETE | Eliminar documento 🔒 |
 
 #### **Scripts CLI:**
 
@@ -170,6 +184,10 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
   - Procesa páginas individuales o bases de datos
   - Requiere NOTION_API_KEY configurado
   - Manejo de errores robusto
+
+- `create_user.py`: Alta de usuarios de login (sin UI de registro)
+  - Contraseña interactiva vía `getpass` (no queda en el historial de la shell)
+  - Crea la tabla `users` si no existe (idempotente)
 
 - `verify_setup.py`: Script de verificación del entorno de desarrollo
   - Comprueba versión de Python (3.11+)
@@ -217,7 +235,8 @@ frontend/src/
 ├── index.css                   # Global styles + Tailwind @theme
 │
 ├── /api/                       # API Client Layer
-│   ├── client.js               # Base fetch wrapper
+│   ├── client.js               # Base fetch wrapper (credentials: 'include' para la cookie de sesión)
+│   ├── auth.js                 # POST /auth/login, /auth/logout, GET /auth/me
 │   ├── health.js               # GET /health, /stats
 │   ├── chat.js                 # POST /ask
 │   ├── sync.js                 # POST /sync/*
@@ -227,11 +246,12 @@ frontend/src/
 │   └── useChat.js              # Chat state management
 │
 ├── /context/
-│   └── AppContext.jsx          # Global app state (health, stats)
+│   ├── AppContext.jsx          # Global app state (health, stats)
+│   └── AuthContext.jsx         # Sesión actual (login/logout/isAuthenticated)
 │
 ├── /components/
 │   ├── /layout/
-│   │   ├── Header.jsx          # Top bar + service status
+│   │   ├── Header.jsx          # Top bar + service status + usuario/logout
 │   │   ├── Sidebar.jsx         # Stats + Documents panel
 │   │   └── Layout.jsx          # Main layout grid
 │   │
@@ -249,6 +269,9 @@ frontend/src/
 │   ├── /stats/
 │   │   └── StatsPanel.jsx      # Service stats + collection info
 │   │
+│   ├── /auth/
+│   │   └── LoginPage.jsx       # Pantalla de login (sin sesión activa)
+│   │
 │   └── /common/
 │       ├── Button.jsx          # Reusable button component
 │       ├── Input.jsx           # Reusable input component
@@ -258,11 +281,13 @@ frontend/src/
 │       └── Alert.jsx           # Alert/notification
 │
 └── /utils/
-    └── markdown.jsx            # Markdown rendering
+    ├── markdown.jsx            # Markdown rendering
+    └── providerLabels.js       # Etiquetas legibles para llm_provider/vector_db_provider
 ```
 
 **Integración:**
-- Consume todos los endpoints de la API (`/health`, `/stats`, `/ask`, `/sync/*`)
+- Consume todos los endpoints de la API (`/auth/*`, `/health`, `/stats`, `/ask`, `/sync/*`)
+- `App.jsx` gatea el árbol autenticado: sin sesión válida muestra `LoginPage`, no monta `AppProvider` (evita pollear `/stats` sin login)
 - Polling automático para estadísticas en tiempo real
 - Manejo de errores y estados de carga
 
@@ -272,8 +297,9 @@ frontend/src/
 
 ### `docker-compose.yml`
 
-Contiene **2 servicios**:
+Contiene **3 servicios**:
 - **ChromaDB**: Base de datos vectorial en puerto 8001
+- **Postgres**: Usuarios/autenticación en puerto 5432
 - **API**: Backend FastAPI en puerto 8000
 
 **Ollama** corre **nativo** en macOS para aprovechar GPU Metal (~10x más rápido):
@@ -282,6 +308,11 @@ Contiene **2 servicios**:
 **Arquitectura de red:**
 - La API en Docker se conecta a Ollama en el host via `host.docker.internal`
 - La API se conecta a ChromaDB via red interna de Docker (`chromadb:8000`)
+- La API se conecta a Postgres via red interna de Docker (`postgres:5432`)
+
+### `render.yaml`
+
+Blueprint de despliegue en Render (opcional, no reemplaza el desarrollo local): crea `bibliotecario-ia-api` (Docker) y `bibliotecario-ia-frontend` (Static Site). La API usa Groq + Chroma Cloud en vez de Ollama + ChromaDB local — ver [ADR-007](adr/007-despliegue-cloud-groq-chroma.md) y [docs/DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 
@@ -289,9 +320,11 @@ Contiene **2 servicios**:
 
 **Backend (Python):**
 - FastAPI + Uvicorn + Pydantic Settings
-- LangChain + LangChain-Ollama + LangChain-Chroma
+- LangChain (solo `PyPDFLoader`, `NotionDBLoader`, `RecursiveCharacterTextSplitter` — no orquesta el pipeline RAG, eso es código propio) + LangChain-Ollama
 - ChromaDB, PyPDF, Notion-Client
-- Structlog, Prometheus-Client, OpenTelemetry
+- Groq (cliente oficial, cuando `LLM_PROVIDER=groq`)
+- asyncpg, PyJWT, bcrypt (autenticación)
+- Structlog, Prometheus-Client (sin tracing distribuido / OpenTelemetry)
 
 **Frontend (JavaScript):**
 - React 19 + Vite 7

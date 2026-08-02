@@ -14,9 +14,9 @@ TFM que implementa un asistente RAG multiusuario ('Bibliotecario IA') para consu
 
 **`bibliotecario-ia`** es un Trabajo Final de Máster que demuestra la implementación de un sistema RAG (Retrieval-Augmented Generation) de principio a fin, enfocado en la privacidad y la arquitectura de software desacoplada.
 
-El objetivo es crear un *chatbot* capaz de responder preguntas sobre una base de conocimiento privada (PDFs locales y páginas de **Notion**). Gracias a la **Arquitectura Hexagonal**, el LLM y la base vectorial son intercambiables sin tocar la lógica de negocio: un modo 100% local (**Ollama** + ChromaDB) donde los datos sensibles nunca abandonan la máquina, y un modo cloud (**Groq** + Chroma Cloud) usado en la demo pública desplegada en Render.
+El objetivo es crear un *chatbot* capaz de responder preguntas sobre una base de conocimiento privada (PDFs locales y páginas de **Notion**). Gracias a la **Arquitectura Hexagonal**, el LLM y la base vectorial son intercambiables sin tocar la lógica de negocio: un modo 100% local (**Ollama** + ChromaDB) donde los datos sensibles nunca abandonan la máquina, y un modo cloud opcional (**Groq** + Chroma Cloud) para desplegar en Render sin depender de hardware local.
 
-El acceso está protegido con **autenticación JWT multiusuario** (cookie `httpOnly`, sin registro público — los usuarios se dan de alta por CLI), necesaria desde que el sistema dejó de ser solo local para tener también una instancia pública.
+El acceso está protegido con **autenticación JWT multiusuario** (cookie `httpOnly`, sin registro público — los usuarios se dan de alta por CLI), necesaria para poder exponer el sistema fuera de `localhost` sin dejarlo abierto a cualquiera.
 
 ---
 
@@ -29,7 +29,7 @@ El acceso está protegido con **autenticación JWT multiusuario** (cookie `httpO
 
 ### 🧠 Sistema RAG Avanzado
 - **Búsqueda Híbrida**: Combinación de búsqueda semántica + keywords extraídos (Query Expansion, implementación propia)
-- **LLM Intercambiable**: Ollama local (`llama3.2`, privacidad total) o Groq cloud (`openai/gpt-oss-120b`, usado en la demo pública) — mismo código, se elige por variable de entorno
+- **LLM Intercambiable**: Ollama local (`llama3.2`, privacidad total) o Groq cloud (`openai/gpt-oss-120b`, para despliegues sin GPU local) — mismo código, se elige por variable de entorno
 - **Respuestas Contextualizadas**: Citas con referencias a documentos fuente
 - **Prompt Engineering**: Instrucciones estrictas para evitar alucinaciones
 
@@ -74,7 +74,7 @@ El acceso está protegido con **autenticación JWT multiusuario** (cookie `httpO
 * **Autenticación:** **JWT** + **Postgres** (Neon en producción)
 * **Observabilidad:** **Structlog** + **Prometheus**
 * **Contenerización:** **Docker Compose** (ChromaDB + Postgres + API)
-* **Despliegue cloud (demo pública):** **Render** + **Groq** + **Chroma Cloud** — ver [ADR-007](docs/adr/007-despliegue-cloud-groq-chroma.md) y [guía de despliegue](docs/DEPLOYMENT.md). El desarrollo local (Ollama + ChromaDB) sigue siendo el flujo por defecto de `docker-compose up`.
+* **Despliegue cloud (opcional):** **Render** + **Groq** + **Chroma Cloud** — ver [ADR-007](docs/adr/007-despliegue-cloud-groq-chroma.md) y [guía de despliegue](docs/DEPLOYMENT.md). El desarrollo local (Ollama + ChromaDB) sigue siendo el flujo por defecto de `docker-compose up`.
 
 ---
 
@@ -378,7 +378,7 @@ VECTOR_SEARCH_LATENCY.observe(duration)
 | **[docs/USAGE.md](docs/USAGE.md)** | API endpoints y scripts CLI |
 | **[docs/USAGE_TESTING.md](docs/USAGE_TESTING.md)** | Suite de tests y guía de testing |
 | **[docs/adr/INDEX.md](docs/adr/INDEX.md)** | Decisiones arquitectónicas (ADRs) |
-| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Despliegue de la demo pública en Render (Groq + Chroma Cloud) |
+| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Despliegue opcional en Render (Groq + Chroma Cloud) |
 | **[.ai/context.md](.ai/context.md)** | Contexto para agentes IA |
 | **[.ai/evaluation.md](.ai/evaluation.md)** | Contexto sobre los criterios de evaluacion del TFM para agentes IA |
 
@@ -484,7 +484,7 @@ cd frontend && npm run dev
 
 - **Solo macOS (desarrollo local)**: El entorno con Ollama nativo está optimizado para macOS con Apple Silicon (GPU Metal). El modo cloud (Groq + Chroma Cloud, ver despliegue) no tiene esta limitación
 - **Modelos locales**: La calidad de las respuestas de llama3.2 (3B parámetros) es inferior a modelos cloud como GPT-4, pero suficiente para el caso de uso y garantiza privacidad total
-- **Cookies de sesión y navegadores**: en el despliegue de demo pública (subdominios `.onrender.com` distintos para frontend y API), Safari y otros navegadores con bloqueo de cookies de terceros activado por defecto descartan la cookie de sesión — el login "parece" funcionar pero las peticiones protegidas posteriores dan 401. Se soluciona sirviendo frontend y API bajo el mismo dominio raíz (pendiente, ver Trabajo Futuro)
+- **Cookies de sesión y navegadores**: si despliegas frontend y API en subdominios `.onrender.com` distintos (lo normal si no configuras un dominio propio), Safari y otros navegadores con bloqueo de cookies de terceros activado por defecto descartan la cookie de sesión — el login "parece" funcionar pero las peticiones protegidas posteriores dan 401. Se soluciona sirviendo frontend y API bajo el mismo dominio raíz (pendiente, ver Trabajo Futuro)
 - **Escalabilidad**: ChromaDB en modo standalone no escala horizontalmente. Adecuado para miles de documentos, no para millones
 
 ## 🔮 Trabajo Futuro

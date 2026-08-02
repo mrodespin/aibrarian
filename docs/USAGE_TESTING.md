@@ -6,14 +6,19 @@ Documentación completa de la suite de tests del backend.
 
 ```
 api/tests/
-├── conftest.py            # Fixtures compartidas (mocks, test data)
-├── test_rag_service.py    # Tests del servicio RAG (20+ tests)
-├── test_sync_service.py   # Tests del pipeline de ingesta (15+ tests)
-├── test_api.py            # Tests de endpoints FastAPI (25+ tests)
-└── test_integration.py    # Tests E2E con servicios reales (4 tests)
+├── conftest.py                     # Fixtures compartidas (mocks, test data)
+├── test_rag_service.py             # Tests del servicio RAG
+├── test_sync_service.py            # Tests del pipeline de ingesta
+├── test_api.py                     # Tests de endpoints FastAPI
+├── test_auth_service.py            # Tests de AuthService (login, JWT)
+├── test_auth_endpoints.py          # Tests de /auth/* y protección de endpoints
+├── test_notion_service.py          # Tests del adaptador/endpoints de Notion
+├── test_groq_adapter.py            # Tests del adaptador Groq (LLMPort cloud)
+├── test_chromadb_cloud_adapter.py  # Tests del adaptador Chroma Cloud (VectorDBPort cloud)
+└── test_integration.py             # Tests E2E con servicios reales (Ollama + ChromaDB)
 ```
 
-**Total:** 60+ tests unitarios + 4 tests de integración
+**Total:** 90 tests unitarios (`pytest -m unit`, lo que corre CI) + tests de integración marcados aparte (necesitan Ollama/ChromaDB reales)
 
 ## 🚀 Quick Start
 
@@ -146,61 +151,19 @@ pytest --cov=app --cov-report=html tests/
 
 ## 📊 Cobertura de Tests
 
-### test_rag_service.py - RAGService
+| Fichero | Qué testea |
+|---------|------------|
+| `test_rag_service.py` | RAGService: query feliz, embeddings, vector search, generación, validación, límite de contexto, errores de Ollama/ChromaDB, edge cases |
+| `test_sync_service.py` | SyncService: ingesta completa, validación de paths, errores de processor/embedding/ChromaDB, chunking |
+| `test_api.py` | Endpoints FastAPI (con `test_client` ya autenticado, ver conftest.py): validación de requests, códigos de error HTTP, CORS |
+| `test_auth_service.py` | AuthService: login correcto/incorrecto, propagación de errores del repositorio (no se confunden con credenciales inválidas), emisión/validación de JWT, token expirado, token con secreto distinto |
+| `test_auth_endpoints.py` | `/auth/login`, `/auth/logout`, `/auth/me`, y que endpoints protegidos devuelvan 401 sin sesión / no-401 con `dependency_overrides` |
+| `test_notion_service.py` | Adaptador de Notion + endpoints `/sync/notion*` |
+| `test_groq_adapter.py` | Adaptador Groq (LLMPort cloud): generación, extracción de keywords, embeddings locales (ONNX/sentence-transformers) |
+| `test_chromadb_cloud_adapter.py` | Adaptador Chroma Cloud (VectorDBPort cloud): validación de credenciales, caché de cliente |
+| `test_integration.py` | E2E con Ollama + ChromaDB reales: pipeline completo, conectividad |
 
-| Funcionalidad | Tests | Descripción |
-|---------------|-------|-------------|
-| Query básica | ✅ 3 tests | Query exitosa, respuesta con sources |
-| Embeddings | ✅ 1 test | Generación de embedding de query |
-| Vector search | ✅ 1 test | Búsqueda en ChromaDB |
-| LLM generation | ✅ 1 test | Generación de respuesta |
-| Validación | ✅ 2 tests | Query vacía, query None |
-| Sin resultados | ✅ 1 test | BD sin chunks relevantes |
-| Límite contexto | ✅ 1 test | max_chunks respetado |
-| Metadata | ✅ 1 test | Sources con metadata |
-| Errores | ✅ 2 tests | Error Ollama, error ChromaDB |
-| Edge cases | ✅ 3 tests | Query larga, caracteres especiales |
-
-**Total:** 16+ tests
-
-### test_sync_service.py - SyncService
-
-| Funcionalidad | Tests | Descripción |
-|---------------|-------|-------------|
-| Ingesta básica | ✅ 4 tests | Flujo completo, chunks, embeddings |
-| Validación | ✅ 3 tests | Path vacío, None, inexistente |
-| Errores | ✅ 3 tests | Processor, embedding, ChromaDB |
-| Edge cases | ✅ 3 tests | Doc vacío, muy largo, caracteres especiales |
-| Chunking | ✅ 1 test | Configuración CHUNK_SIZE |
-
-**Total:** 14+ tests
-
-### test_api.py - Endpoints FastAPI
-
-| Endpoint | Tests | Descripción |
-|----------|-------|-------------|
-| GET /health | ✅ 2 tests | Status 200, JSON response |
-| POST /ask | ✅ 5 tests | Accept POST, validación, response |
-| POST /sync | ✅ 3 tests | Accept POST, validación |
-| POST /sync/directory | ✅ 2 tests | Accept POST, default path |
-| POST /sync/notion | ✅ 2 tests | Validación page_id, database_id |
-| GET /stats | ✅ 2 tests | Status 200, collection info |
-| CORS/Headers | ✅ 2 tests | CORS, Content-Type |
-| Errores HTTP | ✅ 3 tests | 404, 405, 422 |
-| Performance | ✅ 1 test | Timeout razonable |
-
-**Total:** 22+ tests
-
-### test_integration.py - Tests E2E
-
-| Test | Descripción |
-|------|-------------|
-| `test_full_rag_pipeline` | Flujo completo: ingest PDF → query → verify |
-| `test_rag_with_empty_database` | Manejo de BD vacía |
-| `test_ollama_connectivity` | Pre-check Ollama |
-| `test_chromadb_connectivity` | Pre-check ChromaDB |
-
-**Total:** 4 tests E2E
+Conteo exacto y actualizado: `pytest --collect-only -q` (90 tests unitarios a fecha de este documento, ver badge del [README](../README.md)).
 
 ## 🔧 Configuración
 
@@ -230,19 +193,23 @@ Fixtures compartidas automáticamente disponibles:
 - `mock_ollama`: Mock del adaptador Ollama
 - `mock_chromadb`: Mock de ChromaDB
 - `mock_pdf_processor`: Mock del procesador PDF
+- `mock_user_repository`: Mock de UserRepositoryPort (un usuario de prueba: `test@example.com` / `testpass123`)
 
 **Servicios con mocks:**
 - `rag_service_with_mocks`: RAGService listo para tests
 - `sync_service_with_mocks`: SyncService listo para tests
+- `auth_service_with_mocks`: AuthService listo para tests
 
 **Cliente API:**
-- `test_client`: TestClient de FastAPI
+- `test_client`: TestClient de FastAPI, **ya autenticado** (override de `get_current_user` con un usuario de prueba) — pensado para tests que verifican lógica de negocio, no el login en sí. Los tests que sí prueban autenticación (`test_auth_endpoints.py`) usan su propio fixture `client`, sin este override.
 
 **Datos de prueba:**
 - `sample_document`: Document de ejemplo
 - `sample_chunks`: Lista de Chunks
 - `sample_query`: Query de ejemplo
 - `sample_query_response`: QueryResponse de ejemplo
+
+> `JWT_SECRET_KEY` se fija a un valor de test (`os.environ.setdefault(...)`) al principio de `conftest.py`, antes de importar `app.main` — necesario porque `Settings()` se instancia en el import y los tests de auth necesitan un secreto real para firmar/verificar tokens.
 
 ## 🐛 Debugging Tests
 
@@ -349,13 +316,12 @@ jobs:
 
 ### Herramientas Adicionales
 
-- [ ] `pytest-cov`: Coverage reports
+- [x] `pytest-cov`: Coverage reports (ya en `requirements.txt`)
 - [ ] `pytest-xdist`: Tests en paralelo (`pytest -n auto`)
 - [ ] `pytest-benchmark`: Performance benchmarks
 - [ ] `pytest-html`: Reportes HTML bonitos
 
-
 ---
 
-**Cobertura actual:** 60+ tests
-**Tiempo ejecución:** ~2s (unitarios), ~30s (integración)
+**Cobertura actual:** 90 tests unitarios, 62% de cobertura (concentrada en los *services*, mockeados — los adapters que hablan con servicios reales están peor cubiertos, ver [README](../README.md#-trabajo-futuro))
+**Tiempo ejecución:** ~7-12s (unitarios, según máquina), variable en integración (dependen de Ollama/ChromaDB reales)

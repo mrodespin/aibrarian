@@ -2,13 +2,13 @@
 
 **Estado:** Aceptada
 **Fecha:** Agosto 2026
-**Contexto adicional:** El TFM ya fue entregado y evaluado (ADR-001 a ADR-006 documentan el diseño original). Esta decisión aplica solo a una instancia pública de demo desplegada en Render, no cambia el modo de desarrollo local.
+**Contexto adicional:** El TFM ya fue entregado y evaluado (ADR-001 a ADR-006 documentan el diseño original). Esta decisión aplica solo a una instancia desplegada en Render (accesible fuera de `localhost` para pruebas propias), no cambia el modo de desarrollo local.
 
 ---
 
 ## Contexto
 
-Tras la evaluación del TFM, se quiere alojar una demo pública en un servicio cloud gratuito (Render) que acepte imágenes Docker. El obstáculo principal es que la arquitectura original depende de dos componentes que no encajan en un free tier:
+Tras la evaluación del TFM, se quiere tener una instancia accesible en un servicio cloud gratuito (Render) que acepte imágenes Docker, sin depender de tener el portátil encendido con Ollama corriendo. El obstáculo principal es que la arquitectura original depende de dos componentes que no encajan en un free tier:
 
 1. **Ollama nativo con GPU Metal** (ADR-002, ADR-006): requiere macOS con Apple Silicon corriendo permanentemente. Render no ofrece GPU ni acceso a hardware nativo — solo contenedores Linux.
 2. **ChromaDB self-hosted con volumen Docker** (ADR-003): los servicios gratuitos de Render no tienen disco persistente. Un contenedor de ChromaDB ahí perdería los datos en cada redeploy o cada vez que el servicio "duerme" por inactividad (~15 min sin tráfico en el free tier).
@@ -44,7 +44,7 @@ Se necesitan sustitutos gratuitos para ambos, sin romper el setup local existent
 
 ### Trade-off de privacidad (revisita ADR-003)
 
-ADR-003 rechazó explícitamente Pinecone porque "los datos salen de la máquina". Esta decisión reintroduce ese mismo trade-off deliberadamente, pero **solo para la instancia pública de demo**: el desarrollo local (`docker-compose up`, `LLM_PROVIDER=ollama`, `VECTOR_DB_PROVIDER=chromadb_local`) sigue funcionando exactamente igual que antes, 100% en la máquina del usuario. La app en Render, por su propia naturaleza de demo pública, no tiene la misma necesidad de privacidad total que motivó la elección original.
+ADR-003 rechazó explícitamente Pinecone porque "los datos salen de la máquina". Esta decisión reintroduce ese mismo trade-off deliberadamente, pero **solo para la instancia desplegada en Render**: el desarrollo local (`docker-compose up`, `LLM_PROVIDER=ollama`, `VECTOR_DB_PROVIDER=chromadb_local`) sigue funcionando exactamente igual que antes, 100% en la máquina del usuario. La instancia en Render, al ser solo para pruebas propias (no un servicio con usuarios reales), no tiene la misma necesidad de privacidad total que motivó la elección original.
 
 ## Consecuencias
 
