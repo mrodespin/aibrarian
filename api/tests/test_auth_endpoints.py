@@ -42,7 +42,7 @@ def _clear_dependency_overrides():
 # ============================================================================
 
 @pytest.mark.unit
-def test_login_success_sets_cookie(client, monkeypatch, mock_user_repository):
+def test_login_success_returns_access_token(client, monkeypatch, mock_user_repository):
     monkeypatch.setattr("app.main.auth_service", AuthService(user_repository=mock_user_repository))
 
     response = client.post(
@@ -51,8 +51,11 @@ def test_login_success_sets_cookie(client, monkeypatch, mock_user_repository):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"id": 1, "email": "test@example.com"}
-    assert "bibliotecario_session" in response.cookies
+    body = response.json()
+    assert body["id"] == 1
+    assert body["email"] == "test@example.com"
+    assert body["token_type"] == "bearer"
+    assert body["access_token"]
 
 
 @pytest.mark.unit
@@ -68,13 +71,11 @@ def test_login_wrong_password(client, monkeypatch, mock_user_repository):
 
 
 @pytest.mark.unit
-def test_logout_clears_cookie(client):
+def test_logout_returns_success(client):
     response = client.post("/auth/logout")
 
     assert response.status_code == 200
-    # TestClient descarta cookies con Max-Age=0 automáticamente del jar;
-    # comprobamos el header Set-Cookie directamente.
-    assert "bibliotecario_session=" in response.headers.get("set-cookie", "")
+    assert response.json() == {"status": "success"}
 
 
 # ============================================================================
@@ -82,7 +83,7 @@ def test_logout_clears_cookie(client):
 # ============================================================================
 
 @pytest.mark.unit
-def test_me_without_cookie_returns_401(client):
+def test_me_without_auth_header_returns_401(client):
     response = client.get("/auth/me")
     assert response.status_code == 401
 

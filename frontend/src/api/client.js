@@ -2,6 +2,8 @@
  * Base API client with error handling
  */
 
+import { tokenStorage } from './tokenStorage';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 /**
@@ -21,15 +23,16 @@ export class ApiError extends Error {
  */
 async function request(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
+  const token = tokenStorage.get();
 
   const config = {
     headers: {
       'Content-Type': 'application/json',
+      // Adjunta el JWT de sesión a mano (en vez de cookie) — ver
+      // tokenStorage.js para el porqué (Safari ITP + cross-site).
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
-    // Necesario para que la cookie httpOnly de sesión viaje en cada
-    // petición (login la deja, el resto de endpoints protegidos la leen).
-    credentials: 'include',
     ...options,
   };
 

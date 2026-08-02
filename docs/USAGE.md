@@ -2,7 +2,7 @@
 
 Esta documentación detalla todos los servicios, puertos y endpoints de la API del proyecto Bibliotecario-IA.
 
-> **Autenticación:** desde que se añadió login, todos los endpoints salvo `/`, `/health` y `/metrics` requieren una sesión válida (cookie `httpOnly` emitida por `POST /auth/login`). Los ejemplos cURL de esta guía asumen que ya has hecho login y estás reutilizando la cookie (`-c cookies.txt` / `-b cookies.txt`) — sin eso, cualquier llamada a `/ask`, `/sync*`, `/stats` o `/documents/*` devuelve `401 Not authenticated`. Ver la sección [Autenticación](#-autenticación) más abajo.
+> **Autenticación:** desde que se añadió login, todos los endpoints salvo `/`, `/health` y `/metrics` requieren una sesión válida (JWT emitido por `POST /auth/login`, enviado como `Authorization: Bearer <token>` en el resto de peticiones — no como cookie, para evitar el bloqueo de cookies cross-site del ITP de Safari cuando frontend y API están en dominios distintos). Los ejemplos cURL de esta guía asumen que ya has hecho login y estás reutilizando el token. Ver la sección [Autenticación](#-autenticación) más abajo.
 
 ---
 
@@ -23,7 +23,7 @@ Cuando ejecutas el sistema, estos son los servicios que necesitas:
 
 ## 🤖 Endpoints de la API FastAPI
 
-API principal del proyecto ejecutándose en `http://localhost:8000`. Los endpoints marcados con 🔒 requieren sesión (cookie de `/auth/login`).
+API principal del proyecto ejecutándose en `http://localhost:8000`. Los endpoints marcados con 🔒 requieren sesión (token de `/auth/login` enviado como header `Authorization: Bearer <token>`).
 
 ### 🔐 Autenticación
 
@@ -31,7 +31,7 @@ No hay registro público — los usuarios se crean con `scripts/create_user.py` 
 
 #### `POST /auth/login` - Iniciar Sesión
 
-Verifica credenciales y, si son correctas, deja una cookie `httpOnly` con un JWT de sesión (24h por defecto).
+Verifica credenciales y, si son correctas, devuelve un JWT de sesión (24h por defecto) en el cuerpo de la respuesta. El cliente debe guardarlo y reenviarlo como header `Authorization: Bearer <access_token>` en el resto de peticiones.
 
 **Request Body:**
 ```json
@@ -45,24 +45,26 @@ Verifica credenciales y, si son correctas, deja una cookie `httpOnly` con un JWT
 ```json
 {
   "id": 1,
-  "email": "tu@email.com"
+  "email": "tu@email.com",
+  "access_token": "eyJhbGciOi...",
+  "token_type": "bearer"
 }
 ```
 
 **Response (401):** credenciales incorrectas.
 
-**Ejemplo cURL** (`-c cookies.txt` guarda la cookie para reutilizarla en el resto de peticiones):
+**Ejemplo cURL:**
 ```bash
-curl -c cookies.txt -X POST "http://localhost:8000/auth/login" \
+TOKEN=$(curl -s -X POST "http://localhost:8000/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"email": "tu@email.com", "password": "..."}'
+  -d '{"email": "tu@email.com", "password": "..."}' | jq -r .access_token)
 ```
 
 ---
 
 #### `POST /auth/logout` - Cerrar Sesión
 
-Borra la cookie de sesión.
+El JWT es stateless (sin blocklist server-side): este endpoint no invalida nada, es el cliente quien debe descartar el token guardado.
 
 **Response (200 OK):**
 ```json
@@ -73,7 +75,7 @@ Borra la cookie de sesión.
 
 #### `GET /auth/me` - Usuario Actual 🔒
 
-Devuelve el usuario de la sesión activa. Útil para comprobar si una cookie sigue siendo válida.
+Devuelve el usuario de la sesión activa. Útil para comprobar si un token sigue siendo válido.
 
 **Response (200 OK):**
 ```json
@@ -83,11 +85,11 @@ Devuelve el usuario de la sesión activa. Útil para comprobar si una cookie sig
 }
 ```
 
-**Response (401):** sin cookie o cookie inválida/expirada.
+**Response (401):** sin token o token inválido/expirado.
 
-**Ejemplo cURL** (`-b cookies.txt` reutiliza la cookie guardada en el login):
+**Ejemplo cURL** (reutiliza el `access_token` obtenido en el login):
 ```bash
-curl -b cookies.txt "http://localhost:8000/auth/me"
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8000/auth/me"
 ```
 
 ---
@@ -188,7 +190,7 @@ Procesa un archivo PDF y lo indexa en la base de datos vectorial.
 
 **Ejemplo cURL:**
 ```bash
-curl -b cookies.txt -X POST "http://localhost:8000/sync" \
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync" \
   -H "Content-Type: application/json" \
   -d '{
     "file_path": "./data/manual.pdf"
@@ -203,7 +205,7 @@ Como `/sync`, pero acepta el archivo directamente (`multipart/form-data`) en vez
 
 **Ejemplo cURL:**
 ```bash
-curl -b cookies.txt -X POST "http://localhost:8000/sync/upload" \
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/upload" \
   -F "file=@documento.pdf"
 ```
 
@@ -237,10 +239,10 @@ Procesa todos los archivos PDF de un directorio.
 **Ejemplo cURL:**
 ```bash
 # Usar directorio por defecto (./data)
-curl -b cookies.txt -X POST "http://localhost:8000/sync/directory"
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/directory"
 
 # Especificar directorio
-curl -b cookies.txt -X POST "http://localhost:8000/sync/directory?directory_path=/ruta/a/pdfs"
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/directory?directory_path=/ruta/a/pdfs"
 ```
 
 ---
@@ -276,7 +278,7 @@ Procesa una página de Notion y la indexa en la base de datos vectorial.
 
 **Ejemplo cURL:**
 ```bash
-curl -b cookies.txt -X POST "http://localhost:8000/sync/notion" \
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/notion" \
   -H "Content-Type: application/json" \
   -d '{
     "page_id": "https://www.notion.so/Mi-Pagina-abc123..."
@@ -317,7 +319,7 @@ Procesa todas las páginas de una base de datos de Notion.
 
 **Ejemplo cURL:**
 ```bash
-curl -b cookies.txt -X POST "http://localhost:8000/sync/notion/database" \
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/notion/database" \
   -H "Content-Type: application/json" \
   -d '{
     "database_id": "abc123...",
@@ -366,7 +368,7 @@ Realiza una pregunta sobre los documentos indexados y obtiene una respuesta gene
 
 **Ejemplo cURL:**
 ```bash
-curl -b cookies.txt -X POST "http://localhost:8000/ask" \
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/ask" \
   -H "Content-Type: application/json" \
   -d '{
     "question": "¿Qué es RAG?"
@@ -394,7 +396,7 @@ Elimina todos los chunks de un documento de la base de datos vectorial.
 
 **Ejemplo cURL:**
 ```bash
-curl -b cookies.txt -X DELETE "http://localhost:8000/documents/pdf_a1b2c3d4"
+curl -H "Authorization: Bearer $TOKEN" -X DELETE "http://localhost:8000/documents/pdf_a1b2c3d4"
 ```
 
 ---
@@ -541,19 +543,19 @@ Desde estas interfaces puedes:
 ```bash
 python scripts/create_user.py --email tu@email.com
 
-curl -c cookies.txt -X POST "http://localhost:8000/auth/login" \
+TOKEN=$(curl -s -X POST "http://localhost:8000/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"email": "tu@email.com", "password": "..."}'
+  -d '{"email": "tu@email.com", "password": "..."}' | jq -r .access_token)
 ```
 
 ### 2. Indexar Documentos
 
 ```bash
 # Opción A: PDFs locales
-curl -b cookies.txt -X POST "http://localhost:8000/sync/directory"
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/directory"
 
 # Opción B: Página de Notion
-curl -b cookies.txt -X POST "http://localhost:8000/sync/notion" \
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/notion" \
   -H "Content-Type: application/json" \
   -d '{"page_id": "abc123..."}'
 ```
@@ -561,13 +563,13 @@ curl -b cookies.txt -X POST "http://localhost:8000/sync/notion" \
 ### 3. Verificar Ingesta
 
 ```bash
-curl -b cookies.txt http://localhost:8000/stats
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/stats
 ```
 
 ### 4. Hacer Preguntas
 
 ```bash
-curl -b cookies.txt -X POST "http://localhost:8000/ask" \
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/ask" \
   -H "Content-Type: application/json" \
   -d '{
     "question": "¿De qué tratan los documentos indexados?"
@@ -586,12 +588,12 @@ curl -b cookies.txt -X POST "http://localhost:8000/ask" \
 }
 ```
 
-**Solución:** falta la cookie de sesión (o expiró, dura 24h por defecto). Repite el login y reutiliza la cookie guardada:
+**Solución:** falta el token (o expiró, dura 24h por defecto). Repite el login y reutiliza el `access_token` devuelto:
 ```bash
-curl -c cookies.txt -X POST "http://localhost:8000/auth/login" \
+TOKEN=$(curl -s -X POST "http://localhost:8000/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"email": "tu@email.com", "password": "..."}'
-# ...y usa -b cookies.txt en las siguientes peticiones
+  -d '{"email": "tu@email.com", "password": "..."}' | jq -r .access_token)
+# ...y usa -H "Authorization: Bearer $TOKEN" en las siguientes peticiones
 ```
 
 Si no tienes usuario todavía: `python scripts/create_user.py --email tu@email.com`.

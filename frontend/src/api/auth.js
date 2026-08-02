@@ -1,14 +1,25 @@
 /**
  * Auth API — login/logout/me
- * La sesión viaja en una cookie httpOnly (ver client.js: credentials: 'include'),
- * el frontend nunca ve ni maneja el token directamente.
+ * La sesión viaja como JWT en el header Authorization (ver client.js),
+ * guardado en localStorage (ver tokenStorage.js) tras el login.
  */
 
 import { api } from './client';
+import { tokenStorage } from './tokenStorage';
 
 export const authApi = {
-  login: (email, password) => api.post('/auth/login', { email, password }),
-  logout: () => api.post('/auth/logout'),
+  login: async (email, password) => {
+    const data = await api.post('/auth/login', { email, password });
+    tokenStorage.set(data.access_token);
+    return data;
+  },
+  logout: async () => {
+    try {
+      await api.post('/auth/logout');
+    } finally {
+      tokenStorage.clear();
+    }
+  },
   me: () => api.get('/auth/me'),
 };
 

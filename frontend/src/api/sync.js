@@ -4,6 +4,7 @@
  */
 
 import { api, ApiError } from './client';
+import { tokenStorage } from './tokenStorage';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -33,10 +34,12 @@ export const syncApi = {
       formData.append('collection_name', collectionName);
     }
 
+    const token = tokenStorage.get();
     const response = await fetch(`${API_BASE_URL}/sync/upload`, {
       method: 'POST',
       body: formData,
       // Note: Don't set Content-Type header - browser sets it with boundary
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
 
     if (!response.ok) {

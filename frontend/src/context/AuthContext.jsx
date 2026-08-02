@@ -1,7 +1,8 @@
 /**
  * Auth context
- * Determina si hay sesión activa (cookie httpOnly) llamando a /auth/me
- * al montar. El frontend nunca ve el token: solo sabe "hay usuario o no".
+ * Determina si hay sesión activa llamando a /auth/me al montar (el
+ * JWT guardado en localStorage viaja como header Authorization, ver
+ * api/client.js y api/tokenStorage.js).
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -32,7 +33,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const data = await authApi.login(email, password);
-    setUser(data);
+    setUser({ id: data.id, email: data.email });
     return data;
   }, []);
 

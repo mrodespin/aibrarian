@@ -40,7 +40,8 @@ import asyncio                              # Para lanzar el warm-up del LLM en 
 from contextlib import asynccontextmanager  # Para definir el ciclo de vida (startup/shutdown)
 from pathlib import Path                    # Manejo de rutas de archivos
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Response, Cookie  # Framework web + excepciones HTTP
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends  # Framework web + excepciones HTTP
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials  # Para leer el JWT del header Authorization
 import tempfile
 import shutil
 from fastapi.middleware.cors import CORSMiddleware  # Middleware para permitir origen cruzado
@@ -237,13 +238,13 @@ app = FastAPI(
 
 # Middleware CORS: permite que el frontend (otro origen) haga peticiones a esta API.
 # allow_origins=[settings.frontend_url]: SOLO el origen exacto del frontend.
-# "*" + allow_credentials=True ya era inválido para peticiones con cookies
-# según el spec (los navegadores lo rechazan) — con sesión basada en cookie
-# httpOnly esto deja de ser solo un endurecimiento, es un requisito.
+# allow_credentials=False porque la sesión ya no viaja en cookie: el JWT va
+# en el header Authorization, que el cliente adjunta explícitamente y que
+# "*" en allow_headers ya cubre.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -254,27 +255,24 @@ app.add_middleware(MetricsMiddleware)
 
 
 # ============================================================================
-# AUTENTICACIÓN — COOKIE DE SESIÓN Y DEPENDENCIA DE FASTAPI
+# AUTENTICACIÓN — HEADER AUTHORIZATION Y DEPENDENCIA DE FASTAPI
 # ============================================================================
-# Nombre de la cookie que guarda el JWT de sesión.
-COOKIE_NAME = "bibliotecario_session"
-
-# Secure requiere HTTPS. En prod (Render) todo va sobre HTTPS → True.
-# En dev local (uvicorn/vite sobre HTTP) → False, o el navegador
-# descartaría la cookie silenciosamente. Reutilizamos settings.debug
-# (ya usado para decidir si se muestran stack traces) en vez de crear
-# una variable nueva.
-COOKIE_SECURE = not settings.debug
-
-# SameSite=None es necesario en prod porque frontend y API viven en
-# subdominios distintos de Render (cross-site) — y SameSite=None exige
-# Secure=True. En dev local, mismo "site" (localhost) → Lax basta y
-# funciona sobre HTTP plano.
-COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
+# El JWT viaja en el header `Authorization: Bearer <token>`, adjuntado a
+# mano por el frontend (ver frontend/src/api/client.js), en vez de en una
+# cookie. Motivo: en prod, frontend y API viven en subdominios distintos
+# de Render (cross-site) y Safari (ITP) bloquea/descarta agresivamente las
+# cookies cross-site incluso con SameSite=None; Secure=True — el resto de
+# peticiones autenticadas (stats, documentos, /ask) fallaban en Safari
+# mientras funcionaban en Chrome/Brave. El header no sufre ese bloqueo
+# porque no es una cookie del navegador.
+#
+# auto_error=False: queremos lanzar nuestro propio 401 con mensaje
+# consistente en vez del 403 genérico que HTTPBearer daría por defecto.
+_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    access_token: str | None = Cookie(default=None, alias=COOKIE_NAME)
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme)
 ) -> TokenPayload:
     """
     Dependencia de FastAPI que exige una sesión válida.
@@ -283,12 +281,13 @@ def get_current_user(
     que deba requerir login (ver el resto del fichero).
 
     Raises:
-        HTTPException(401): si falta la cookie o el token no es válido/expiró.
+        HTTPException(401): si falta el header Authorization o el token
+            no es válido/expiró.
     """
-    if not access_token:
+    if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
-        return auth_service.decode_access_token(access_token)
+        return auth_service.decode_access_token(credentials.credentials)
     except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
@@ -368,6 +367,16 @@ class UserResponse(BaseModel):
     """
     id: int
     email: str
+
+
+class LoginResponse(UserResponse):
+    """
+    Response de /auth/login: datos del usuario + el JWT que el frontend
+    debe guardar (localStorage) y reenviar como
+    `Authorization: Bearer <access_token>` en cada petición posterior.
+    """
+    access_token: str
+    token_type: str = "bearer"
 
 
 class HealthResponse(BaseModel):
@@ -496,16 +505,17 @@ async def get_metrics():
 # Autenticación
 # ----------------------------------------------------------------------------
 
-@app.post("/auth/login", response_model=UserResponse)
-async def login(request: LoginRequest, response: Response):
+@app.post("/auth/login", response_model=LoginResponse)
+async def login(request: LoginRequest):
     """
-    Inicia sesión: verifica credenciales y, si son correctas, deja una
-    cookie httpOnly con un JWT de sesión (válida durante
-    settings.jwt_expiration_minutes).
+    Inicia sesión: verifica credenciales y, si son correctas, devuelve un
+    JWT de sesión (válido durante settings.jwt_expiration_minutes) en el
+    cuerpo de la respuesta.
 
-    La cookie es httpOnly + Secure (en prod) para que ni el JS del
-    frontend ni un XSS puedan leer el token — solo el navegador la
-    adjunta automáticamente en cada petición (credentials: 'include').
+    El frontend guarda ese token (localStorage) y lo reenvía a mano como
+    `Authorization: Bearer <token>` en cada petición posterior — ver
+    get_current_user() más arriba para el porqué de este diseño en vez
+    de una cookie de sesión.
     """
     try:
         user = await auth_service.authenticate(request.email, request.password)
@@ -518,28 +528,15 @@ async def login(request: LoginRequest, response: Response):
         raise HTTPException(status_code=500, detail=str(e))
 
     token = auth_service.create_access_token(user)
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=token,
-        httponly=True,
-        secure=COOKIE_SECURE,
-        samesite=COOKIE_SAMESITE,
-        max_age=settings.jwt_expiration_minutes * 60,
-        path="/",
-    )
-    return UserResponse(id=user.id, email=user.email)
+    return LoginResponse(id=user.id, email=user.email, access_token=token)
 
 
 @app.post("/auth/logout")
-async def logout(response: Response):
-    """Cierra sesión: borra la cookie de sesión."""
-    response.delete_cookie(
-        key=COOKIE_NAME,
-        path="/",
-        httponly=True,
-        secure=COOKIE_SECURE,
-        samesite=COOKIE_SAMESITE,
-    )
+async def logout():
+    """
+    Cierra sesión. El JWT es stateless (sin blocklist server-side): el
+    cliente simplemente descarta el token guardado en localStorage.
+    """
     return {"status": "success"}
 
 

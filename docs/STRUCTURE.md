@@ -154,7 +154,7 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 
 #### **Endpoints Principales:**
 
-🔒 = requiere sesión (cookie de `POST /auth/login`)
+🔒 = requiere sesión (token de `POST /auth/login`, enviado como header `Authorization: Bearer`)
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
@@ -235,7 +235,8 @@ frontend/src/
 ├── index.css                   # Global styles + Tailwind @theme
 │
 ├── /api/                       # API Client Layer
-│   ├── client.js               # Base fetch wrapper (credentials: 'include' para la cookie de sesión)
+│   ├── client.js               # Base fetch wrapper (adjunta el JWT como header Authorization, ver tokenStorage.js)
+│   ├── tokenStorage.js         # Guarda/lee el JWT en localStorage
 │   ├── auth.js                 # POST /auth/login, /auth/logout, GET /auth/me
 │   ├── health.js               # GET /health, /stats
 │   ├── chat.js                 # POST /ask

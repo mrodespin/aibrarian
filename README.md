@@ -16,7 +16,7 @@ TFM que implementa un asistente RAG multiusuario ('Bibliotecario IA') para consu
 
 El objetivo es crear un *chatbot* capaz de responder preguntas sobre una base de conocimiento privada (PDFs locales y páginas de **Notion**). Gracias a la **Arquitectura Hexagonal**, el LLM y la base vectorial son intercambiables sin tocar la lógica de negocio: un modo 100% local (**Ollama** + ChromaDB) donde los datos sensibles nunca abandonan la máquina, y un modo cloud opcional (**Groq** + Chroma Cloud) para desplegar en Render sin depender de hardware local.
 
-El acceso está protegido con **autenticación JWT multiusuario** (cookie `httpOnly`, sin registro público — los usuarios se dan de alta por CLI), necesaria para poder exponer el sistema fuera de `localhost` sin dejarlo abierto a cualquiera.
+El acceso está protegido con **autenticación JWT multiusuario** (token enviado en el header `Authorization`, sin registro público — los usuarios se dan de alta por CLI), necesaria para poder exponer el sistema fuera de `localhost` sin dejarlo abierto a cualquiera.
 
 ---
 
@@ -40,7 +40,7 @@ El acceso está protegido con **autenticación JWT multiusuario** (cookie `httpO
 - **Responsive**: Adaptable a móvil y desktop
 
 ### 🔐 Autenticación y Seguridad
-- **Multiusuario vía JWT**: sesión de 24h en cookie `httpOnly` + `Secure` (nunca expuesta al JS del frontend)
+- **Multiusuario vía JWT**: sesión de 24h, token en localStorage enviado como header `Authorization: Bearer` (no cookie — evita el bloqueo de cookies cross-site del ITP de Safari cuando frontend y API viven en dominios distintos)
 - **Alta de usuarios por CLI**: sin registro público — `scripts/create_user.py`, contraseña vía `getpass`
 - **Endpoints protegidos**: todos salvo los healthchecks públicos requeridos por el despliegue
 - **Persistencia en Postgres**: Neon en producción, contenedor local en desarrollo (`docker-compose`)

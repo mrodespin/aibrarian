@@ -3,10 +3,23 @@
  * For full markdown support, consider adding react-markdown
  */
 
+/**
+ * Escapa entidades HTML para que el texto no pueda inyectar markup/scripts
+ * cuando se inserta luego vía dangerouslySetInnerHTML.
+ */
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function renderMarkdown(text) {
   if (!text) return '';
 
-  return text
+  return escapeHtml(text)
     // Code blocks (```...```)
     .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre class="bg-gray-800 text-gray-100 p-3 rounded-lg overflow-x-auto my-2 text-sm"><code>$2</code></pre>')
     // Inline code (`...`)
