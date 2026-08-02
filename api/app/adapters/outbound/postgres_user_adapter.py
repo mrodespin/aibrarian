@@ -37,6 +37,7 @@ Equivalente en TypeScript:
 """
 
 from typing import Optional
+from urllib.parse import urlsplit, urlunsplit
 
 import asyncpg
 
@@ -46,6 +47,31 @@ from app.config.settings import settings
 from app.core.observability import get_logger
 
 logger = get_logger(__name__)
+
+
+def _prepare_dsn(dsn: str) -> tuple[str, "bool | str"]:
+    """
+    Separa la DSN de Postgres en (dsn_sin_query, modo_ssl) listos para
+    asyncpg.create_pool().
+
+    Por qué: según desde qué pestaña/herramienta se copie la connection
+    string en el dashboard de Neon, el parámetro SSL en la query puede
+    venir como sslmode=require, ssl=true, o ir acompañado de
+    channel_binding=require, etc. asyncpg solo reconoce 'sslmode' como
+    campo de query válido y lanza "bad query field" ante cualquier otro
+    (visto en producción con 'ssl'). En vez de intentar enumerar todas
+    las variantes posibles, se quita la query entera y se decide el SSL
+    explícitamente vía el kwarg `ssl` de create_pool(), que sí es fiable
+    y no depende del formato de la URL.
+
+    Heurística: host local (docker-compose/localhost) → sin SSL (el
+    Postgres local no tiene certificados configurados). Cualquier otro
+    host (Neon u otro Postgres gestionado) → SSL obligatorio.
+    """
+    parts = urlsplit(dsn)
+    clean_dsn = urlunsplit((parts.scheme, parts.netloc, parts.path, "", parts.fragment))
+    is_local = parts.hostname in ("localhost", "127.0.0.1", "postgres")
+    return clean_dsn, (False if is_local else "require")
 
 
 CREATE_USERS_TABLE = """
@@ -93,7 +119,8 @@ class PostgresUserAdapter(UserRepositoryPort):
             )
 
         try:
-            self._pool = await asyncpg.create_pool(dsn=settings.database_url, min_size=1, max_size=5)
+            dsn, ssl_mode = _prepare_dsn(settings.database_url)
+            self._pool = await asyncpg.create_pool(dsn=dsn, ssl=ssl_mode, min_size=1, max_size=5)
             async with self._pool.acquire() as conn:
                 await conn.execute(CREATE_USERS_TABLE)
             logger.info("Connected to Postgres (users)")
