@@ -22,7 +22,11 @@ services:
       - POSTGRES_PASSWORD=bibliotecario
       - POSTGRES_DB=bibliotecario
     ports:
-      - "5432:5432"
+      # 127.0.0.1, no 0.0.0.0: estas credenciales son fijas y triviales
+      # (solo valen para dev local). Sin este bind explícito, Docker publica
+      # el puerto en todas las interfaces — en una máquina con IP pública y
+      # sin firewall, cualquiera en internet podría conectarse.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,7 +38,13 @@ services:
   chromadb:
     image: chromadb/chroma:1.5.9
     ports:
-      - "8001:8000"
+      # 127.0.0.1, no 0.0.0.0: ChromaDB no tiene auth propia en este setup,
+      # y hay una RCE pre-auth conocida (PYSEC-2026-311, sin versión
+      # parcheada todavía) si su API queda expuesta en red. El contenedor
+      # `api` sigue llegando a este servicio por la red interna de Docker
+      # (`chromadb:8000`) sin que esto le afecte — este bind solo limita el
+      # acceso desde el host.
+      - "127.0.0.1:8001:8000"
     volumes:
       - chroma_data:/chroma/chroma
     healthcheck:
