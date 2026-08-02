@@ -12,12 +12,22 @@ Fixtures principales:
 - sample_document: Documento de ejemplo para tests
 """
 
+import os
+
+# JWT_SECRET_KEY debe existir ANTES de "from app.main import app": Settings()
+# se instancia al importar app.main (vía app.config.settings), y aunque
+# jwt_secret_key es Optional, los tests de auth necesitan un valor real
+# para firmar/verificar tokens. Fijamos uno de test aquí, antes de que
+# ningún otro import dispare la carga de settings.
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-not-for-prod")
+
+import bcrypt
 import pytest
 from unittest.mock import Mock, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from typing import List, Optional, Dict
 
-from app.core.domain.models import Document, Chunk, QueryResult, SourceDocument
+from app.core.domain.models import Document, Chunk, QueryResult, SourceDocument, User
 from app.main import app
 
 
@@ -315,15 +325,71 @@ def sync_service_with_mocks(mock_ollama, mock_chromadb, mock_pdf_processor):
 
 
 # ============================================================================
+# FIXTURES DE AUTENTICACIÓN
+# ============================================================================
+
+# Hash bcrypt precalculado de "testpass123", usado por mock_user_repository.
+# Se calcula una sola vez a nivel de módulo (bcrypt.hashpw es relativamente
+# lento) y se reutiliza en todos los tests que necesiten un login válido.
+TEST_USER_PASSWORD = "testpass123"
+TEST_USER_PASSWORD_HASH = bcrypt.hashpw(TEST_USER_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+@pytest.fixture
+def mock_user_repository():
+    """
+    Mock de UserRepositoryPort para tests unitarios de AuthService.
+
+    Simula un único usuario existente: test@example.com / testpass123
+    (TEST_USER_PASSWORD / TEST_USER_PASSWORD_HASH de arriba).
+    """
+    mock = Mock()
+
+    async def mock_get_by_email(email: str):
+        if email == "test@example.com":
+            return User(
+                id=1,
+                email=email,
+                password_hash=TEST_USER_PASSWORD_HASH,
+                is_active=True,
+            )
+        return None
+
+    async def mock_create_user(email: str, password_hash: str):
+        return User(id=1, email=email, password_hash=password_hash)
+
+    mock.get_by_email = AsyncMock(side_effect=mock_get_by_email)
+    mock.create_user = AsyncMock(side_effect=mock_create_user)
+
+    return mock
+
+
+@pytest.fixture
+def auth_service_with_mocks(mock_user_repository):
+    """AuthService configurado con un UserRepositoryPort mockeado."""
+    from app.core.services.auth_service import AuthService
+
+    return AuthService(user_repository=mock_user_repository)
+
+
+# ============================================================================
 # FIXTURES DE FASTAPI TEST CLIENT
 # ============================================================================
 
 @pytest.fixture
 def test_client():
     """
-    Cliente de test de FastAPI.
+    Cliente de test de FastAPI, YA AUTENTICADO.
 
     Permite hacer requests HTTP a la API sin necesidad de levantar un servidor.
+    Todos los tests que usan este fixture (test_api.py, test_notion_service.py,
+    etc.) fueron escritos antes de que existiera autenticación y verifican
+    lógica de negocio (validación, códigos de error específicos), no el
+    login en sí — así que se sobreescribe get_current_user con un usuario
+    de prueba para que sigan probando lo que probaban antes.
+
+    Los tests que SÍ quieren probar la autenticación (test_auth_endpoints.py)
+    usan su propio fixture `client`, sin este override.
 
     Returns:
         TestClient configurado con la app de FastAPI
@@ -333,7 +399,12 @@ def test_client():
             response = test_client.get("/health")
             assert response.status_code == 200
     """
-    return TestClient(app)
+    from app.main import get_current_user
+    from app.core.services.auth_service import TokenPayload
+
+    app.dependency_overrides[get_current_user] = lambda: TokenPayload(user_id=1, email="test@example.com")
+    yield TestClient(app)
+    app.dependency_overrides.clear()
 
 
 # ============================================================================

@@ -139,6 +139,48 @@ class Chunk(BaseModel):
 
 
 # ============================================================================
+# AUTENTICACIÓN
+# ============================================================================
+class User(BaseModel):
+    """
+    Representa un usuario con acceso al sistema.
+
+    No hay UI de registro: los usuarios se dan de alta con
+    scripts/create_user.py y se guardan en Postgres (Neon).
+
+    IMPORTANTE: password_hash es un dato sensible. Este modelo se usa
+    entre el adapter y los servicios (capa interna) — nunca se devuelve
+    directamente desde un endpoint de la API. main.py define su propio
+    UserResponse (sin password_hash) para eso, igual que ya separa
+    HealthResponse de los modelos de dominio.
+
+    Atributos:
+        id: Identificador único (autoincremental en Postgres)
+        email: Email del usuario, usado como login
+        password_hash: Hash bcrypt de la contraseña
+        is_active: Si el usuario puede iniciar sesión
+        created_at: Fecha de creación de la cuenta
+
+    Equivalente TypeScript:
+        interface User {
+            id: number;
+            email: string;
+            passwordHash: string;
+            isActive: boolean;
+            createdAt: Date;
+        }
+    """
+    id: int = Field(..., description="Identificador único del usuario (autoincremental)")
+    email: str = Field(..., description="Email del usuario, usado como login")
+    password_hash: str = Field(..., description="Hash bcrypt de la contraseña (dato sensible, nunca se expone en respuestas de la API)")
+    is_active: bool = Field(default=True, description="Si el usuario puede iniciar sesión")
+    created_at: datetime = Field(
+        default_factory=datetime.now,
+        description="Fecha de creación de la cuenta"
+    )
+
+
+# ============================================================================
 # MODELOS DE CONSULTA (INPUT/OUTPUT DEL SISTEMA RAG)
 # ============================================================================
 class Query(BaseModel):

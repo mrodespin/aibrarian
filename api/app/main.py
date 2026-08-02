@@ -40,7 +40,7 @@ import asyncio                              # Para lanzar el warm-up del LLM en 
 from contextlib import asynccontextmanager  # Para definir el ciclo de vida (startup/shutdown)
 from pathlib import Path                    # Manejo de rutas de archivos
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form  # Framework web + excepciones HTTP
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Response, Cookie  # Framework web + excepciones HTTP
 import tempfile
 import shutil
 from fastapi.middleware.cors import CORSMiddleware  # Middleware para permitir origen cruzado
@@ -64,6 +64,12 @@ from app.core.observability import (
 # Servicios de lógica de negocio
 from app.core.services.sync_service import SyncService
 from app.core.services.rag_service import RAGService
+from app.core.services.auth_service import (
+    AuthService,
+    InvalidCredentialsError,
+    InvalidTokenError,
+    TokenPayload,
+)
 # Adaptadores concretos (las únicas implementaciones que conoce este fichero)
 # Nota: ChromaCloudAdapter y GroqAdapter se importan más abajo, dentro de sus
 # respectivos "if settings...", no aquí arriba. Sus paquetes (groq,
@@ -74,6 +80,7 @@ from app.adapters.outbound.chromadb_adapter import ChromaDBAdapter
 from app.adapters.outbound.ollama_adapter import OllamaAdapter
 from app.adapters.outbound.pdf_processor_adapter import PDFProcessorAdapter
 from app.adapters.outbound.notion_processor_adapter import NotionProcessorAdapter
+from app.adapters.outbound.postgres_user_adapter import PostgresUserAdapter
 
 
 # ============================================================================
@@ -149,6 +156,13 @@ rag_service = RAGService(
     vector_db=chromadb_adapter
 )
 
+# --- Autenticación (Postgres/Neon + JWT) ---
+# Mismo patrón manual de DI que el resto: instancia global del adapter,
+# inyectada en el servicio. connect()/close() se llaman desde el
+# lifespan (abajo), no aquí — crear el pool es una operación async.
+user_repository = PostgresUserAdapter()
+auth_service = AuthService(user_repository=user_repository)
+
 
 # ============================================================================
 # CICLO DE VIDA DE LA APLICACIÓN
@@ -195,10 +209,20 @@ async def lifespan(app: FastAPI):
     # el garbage collector no la cancele a mitad de ejecución.
     app.state.warm_up_task = asyncio.create_task(llm_adapter.warm_up())
 
+    # Conectar a Postgres (users/auth). No tumba el arranque si falla —
+    # igual que la comprobación del LLM de arriba, la app sigue viva pero
+    # los endpoints de /auth/* devolverán 500 hasta que se arregle.
+    try:
+        await user_repository.connect()
+        logger.info("Connected to Postgres (users)")
+    except Exception as e:
+        logger.warning("Failed to connect to Postgres — auth endpoints will fail until this is fixed", error=str(e))
+
     yield  # ← La app está activa y atiende peticiones desde aquí
 
     # --- SHUTDOWN ---
     logger.info("Shutting down application")
+    await user_repository.close()
 
 
 # ============================================================================
@@ -212,12 +236,13 @@ app = FastAPI(
 )
 
 # Middleware CORS: permite que el frontend (otro origen) haga peticiones a esta API.
-# allow_origins=["*"]: cualquier origen puede hacer peticiones.
-# En producción, cambiar por la URL exacta del frontend:
-#   allow_origins=["http://localhost:3000"]
+# allow_origins=[settings.frontend_url]: SOLO el origen exacto del frontend.
+# "*" + allow_credentials=True ya era inválido para peticiones con cookies
+# según el spec (los navegadores lo rechazan) — con sesión basada en cookie
+# httpOnly esto deja de ser solo un endurecimiento, es un requisito.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[settings.frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -226,6 +251,46 @@ app.add_middleware(
 # Middleware de métricas: registra contador y latencia de cada request HTTP
 # Las métricas se exponen en /metrics para que Prometheus las recolecte
 app.add_middleware(MetricsMiddleware)
+
+
+# ============================================================================
+# AUTENTICACIÓN — COOKIE DE SESIÓN Y DEPENDENCIA DE FASTAPI
+# ============================================================================
+# Nombre de la cookie que guarda el JWT de sesión.
+COOKIE_NAME = "bibliotecario_session"
+
+# Secure requiere HTTPS. En prod (Render) todo va sobre HTTPS → True.
+# En dev local (uvicorn/vite sobre HTTP) → False, o el navegador
+# descartaría la cookie silenciosamente. Reutilizamos settings.debug
+# (ya usado para decidir si se muestran stack traces) en vez de crear
+# una variable nueva.
+COOKIE_SECURE = not settings.debug
+
+# SameSite=None es necesario en prod porque frontend y API viven en
+# subdominios distintos de Render (cross-site) — y SameSite=None exige
+# Secure=True. En dev local, mismo "site" (localhost) → Lax basta y
+# funciona sobre HTTP plano.
+COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
+
+
+def get_current_user(
+    access_token: str | None = Cookie(default=None, alias=COOKIE_NAME)
+) -> TokenPayload:
+    """
+    Dependencia de FastAPI que exige una sesión válida.
+
+    Uso: dependencies=[Depends(get_current_user)] en cualquier endpoint
+    que deba requerir login (ver el resto del fichero).
+
+    Raises:
+        HTTPException(401): si falta la cookie o el token no es válido/expiró.
+    """
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        return auth_service.decode_access_token(access_token)
+    except InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
 
 
 # ============================================================================
@@ -279,6 +344,30 @@ class SyncNotionDatabaseRequest(BaseModel):
     database_id: str | None = None          # ID de la base de datos (None = usar de settings)
     max_pages: int | None = None            # Límite de páginas (None = todas)
     collection_name: str | None = None
+
+
+class LoginRequest(BaseModel):
+    """
+    Request para iniciar sesión.
+
+    Ejemplo de petición:
+        POST /auth/login
+        {"email": "ana@example.com", "password": "..."}
+    """
+    email: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    """
+    Response con los datos públicos de un usuario.
+
+    Deliberadamente NO incluye password_hash — a diferencia del User de
+    dominio (core/domain/models.py), este modelo es lo único que sale
+    de la API. Misma separación dominio/API que HealthResponse.
+    """
+    id: int
+    email: str
 
 
 class HealthResponse(BaseModel):
@@ -360,7 +449,7 @@ async def health_check():
     }
 
 
-@app.get("/stats")
+@app.get("/stats", dependencies=[Depends(get_current_user)])
 async def get_stats():
     """
     Estadísticas de la colección vectorial y del modelo.
@@ -404,10 +493,67 @@ async def get_metrics():
 
 
 # ----------------------------------------------------------------------------
+# Autenticación
+# ----------------------------------------------------------------------------
+
+@app.post("/auth/login", response_model=UserResponse)
+async def login(request: LoginRequest, response: Response):
+    """
+    Inicia sesión: verifica credenciales y, si son correctas, deja una
+    cookie httpOnly con un JWT de sesión (válida durante
+    settings.jwt_expiration_minutes).
+
+    La cookie es httpOnly + Secure (en prod) para que ni el JS del
+    frontend ni un XSS puedan leer el token — solo el navegador la
+    adjunta automáticamente en cada petición (credentials: 'include').
+    """
+    try:
+        user = await auth_service.authenticate(request.email, request.password)
+    except InvalidCredentialsError:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Login endpoint error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+    token = auth_service.create_access_token(user)
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
+        max_age=settings.jwt_expiration_minutes * 60,
+        path="/",
+    )
+    return UserResponse(id=user.id, email=user.email)
+
+
+@app.post("/auth/logout")
+async def logout(response: Response):
+    """Cierra sesión: borra la cookie de sesión."""
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
+    )
+    return {"status": "success"}
+
+
+@app.get("/auth/me", response_model=UserResponse)
+async def me(current_user: TokenPayload = Depends(get_current_user)):
+    """Devuelve el usuario de la sesión actual (usado por el frontend al cargar)."""
+    return UserResponse(id=current_user.user_id, email=current_user.email)
+
+
+# ----------------------------------------------------------------------------
 # Sincronización de documentos (Ingesta)
 # ----------------------------------------------------------------------------
 
-@app.post("/sync", response_model=SyncResult)
+@app.post("/sync", response_model=SyncResult, dependencies=[Depends(get_current_user)])
 async def sync_document(request: SyncFileRequest):
     """
     Sincroniza un archivo PDF individual a la base de datos vectorial.
@@ -473,7 +619,7 @@ async def sync_document(request: SyncFileRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/sync/upload", response_model=SyncResult)
+@app.post("/sync/upload", response_model=SyncResult, dependencies=[Depends(get_current_user)])
 async def sync_upload(
     file: UploadFile = File(...),
     collection_name: str = Form(None)
@@ -553,7 +699,7 @@ async def sync_upload(
                 logger.warning("Failed to cleanup temp file", error=str(e))
 
 
-@app.post("/sync/directory")
+@app.post("/sync/directory", dependencies=[Depends(get_current_user)])
 async def sync_directory(directory_path: str | None = None):
     """
     Sincroniza todos los PDFs de un directorio.
@@ -596,7 +742,7 @@ async def sync_directory(directory_path: str | None = None):
 # Sincronización de Notion
 # ----------------------------------------------------------------------------
 
-@app.post("/sync/notion", response_model=SyncResult)
+@app.post("/sync/notion", response_model=SyncResult, dependencies=[Depends(get_current_user)])
 async def sync_notion_page(request: SyncNotionPageRequest):
     """
     Sincroniza una página de Notion a la base de datos vectorial.
@@ -646,7 +792,7 @@ async def sync_notion_page(request: SyncNotionPageRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/sync/notion/database")
+@app.post("/sync/notion/database", dependencies=[Depends(get_current_user)])
 async def sync_notion_database(request: SyncNotionDatabaseRequest):
     """
     Sincroniza todas las páginas de una base de datos de Notion.
@@ -747,7 +893,7 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
 # Consultas RAG
 # ----------------------------------------------------------------------------
 
-@app.post("/ask", response_model=QueryResult)
+@app.post("/ask", response_model=QueryResult, dependencies=[Depends(get_current_user)])
 async def ask_question(query: Query):
     """
     Endpoint principal del sistema RAG: hacer preguntas al "bibliotecario".
@@ -813,7 +959,7 @@ async def ask_question(query: Query):
 # Endpoints de utilidad
 # ----------------------------------------------------------------------------
 
-@app.delete("/documents/{document_id}")
+@app.delete("/documents/{document_id}", dependencies=[Depends(get_current_user)])
 async def delete_document(document_id: str):
     """
     Elimina un documento (y todos sus chunks) de la base de datos vectorial.

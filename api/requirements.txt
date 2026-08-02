@@ -64,6 +64,11 @@ tenacity==9.0.0              # Retry logic for API calls
 structlog==24.4.0            # Structured logging (JSON format)
 prometheus-client==0.21.0    # Prometheus metrics endpoint
 
+# --- Authentication (users en Postgres/Neon, sesión JWT) ---
+asyncpg==0.30.0               # Driver async puro para Postgres, sin ORM (una tabla no justifica SQLAlchemy+Alembic)
+PyJWT==2.9.0                  # Emisión/validación de JWT de sesión
+bcrypt==4.2.0                 # Hashing de contraseñas (directo, no via passlib: rotura conocida con bcrypt>=4.1)
+
 # --- Testing ---
 pytest==8.3.4                # Testing framework
 pytest-asyncio==0.24.0       # Async support for pytest

@@ -236,6 +236,31 @@ class Settings(BaseSettings):
     )
 
     # ===================================
+    # CONFIGURACIÓN DE AUTENTICACIÓN (Postgres/Neon + JWT)
+    # ===================================
+    database_url: Optional[str] = Field(
+        default=None,                      # Se configura en .env / Render (dato sensible)
+        description="Connection string de Postgres para usuarios/autenticación (Neon en prod, contenedor local en dev)"
+    )
+    jwt_secret_key: Optional[str] = Field(
+        default=None,                      # Se configura en .env / Render (dato sensible)
+        description="Secreto para firmar/verificar los JWT de sesión"
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        description="Algoritmo de firma de los JWT de sesión"
+    )
+    jwt_expiration_minutes: int = Field(
+        default=1440,                      # 24 horas
+        ge=1,
+        description="Duración de la sesión (JWT) en minutos antes de expirar"
+    )
+    frontend_url: str = Field(
+        default="http://localhost:5173",
+        description="Origen exacto del frontend: usado en CORS (allow_origins) y para decidir SameSite de la cookie de sesión"
+    )
+
+    # ===================================
     # CONFIGURACIÓN DE PYDANTIC SETTINGS
     # ===================================
     # model_config controla cómo se comporta la carga de variables
@@ -281,6 +306,10 @@ class Settings(BaseSettings):
         # Enmascar datos sensibles antes de exportar
         if data.get("notion_api_key"):
             data["notion_api_key"] = "***MASKED***"
+        if data.get("database_url"):
+            data["database_url"] = "***MASKED***"
+        if data.get("jwt_secret_key"):
+            data["jwt_secret_key"] = "***MASKED***"
         return data
 
 

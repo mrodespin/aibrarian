@@ -68,6 +68,26 @@ services:
       - key: NOTION_DATABASE_ID
         sync: false
 
+      # --- Autenticación (Neon Postgres + JWT) ---
+      # DATABASE_URL: connection string de Neon (trychroma... no, neon.tech —
+      # crea un proyecto gratis y copia el connection string desde su
+      # dashboard). Antes de rellenarla, crea el primer usuario contra esa
+      # misma URL con scripts/create_user.py — así el login funciona desde
+      # el instante en que este servicio arranca.
+      - key: DATABASE_URL
+        sync: false
+      # Genera uno con: python -c "import secrets; print(secrets.token_hex(32))"
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: JWT_EXPIRATION_MINUTES
+        value: "1440"
+      # URL pública de bibliotecario-ia-frontend (mismo motivo que
+      # VITE_API_URL abajo: Render no permite referenciar la URL pública de
+      # otro servicio, se rellena a mano en el dashboard). Usada para CORS
+      # (allow_origins) y para el atributo SameSite de la cookie de sesión.
+      - key: FRONTEND_URL
+        sync: false
+
       # --- Resto de configuración (valores por defecto de settings.py) ---
       - key: DATA_DIRECTORY
         value: /app/data

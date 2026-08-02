@@ -6,12 +6,31 @@
 #
 # Servicios:
 #   - chromadb: Base de datos vectorial (puerto 8001)
+#   - postgres: Usuarios/autenticación (puerto 5432) — solo desarrollo local;
+#     en producción (Render) se usa Neon (Postgres hosteado, sin disco
+#     persistente en el contenedor de la API, ver ADR-007/render.yaml)
 #   - api: Backend FastAPI (puerto 8000)
 #
 # Nota: Ollama corre de forma NATIVA en macOS para aprovechar GPU Metal (~10x más rápido)
 #   Instalación: brew install ollama && ollama serve
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=bibliotecario
+      - POSTGRES_PASSWORD=bibliotecario
+      - POSTGRES_DB=bibliotecario
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bibliotecario"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   chromadb:
     image: chromadb/chroma:1.5.9
     ports:
@@ -45,8 +64,12 @@ services:
       - CHROMADB_HOST=chromadb
       - CHROMADB_PORT=8000
       - DATA_DIRECTORY=/app/data
+      # Postgres corre en Docker (nombre de servicio, no localhost)
+      - DATABASE_URL=postgresql://bibliotecario:bibliotecario@postgres:5432/bibliotecario
     depends_on:
       chromadb:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
@@ -57,3 +80,4 @@ services:
 
 volumes:
   chroma_data:
+  postgres_data:

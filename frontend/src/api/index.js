@@ -7,3 +7,4 @@ export { healthApi } from './health';
 export { chatApi } from './chat';
 export { syncApi } from './sync';
 export { documentsApi } from './documents';
+export { authApi } from './auth';

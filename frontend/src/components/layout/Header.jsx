@@ -3,11 +3,13 @@
  */
 
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Badge } from '../common';
 import { llmProviderLabel, vectorDbProviderLabel } from '../../utils/providerLabels';
 
 export function Header({ onMenuClick }) {
   const { health } = useApp();
+  const { user, logout } = useAuth();
 
   return (
     <header className="bg-bg-850/80 backdrop-blur-md border-b border-bg-700 px-4 py-3">
@@ -47,6 +49,16 @@ export function Header({ onMenuClick }) {
             <span className={`w-2 h-2 rounded-full ${health.vectorDb ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
             <span className="text-sm font-medium text-text-200">{vectorDbProviderLabel(health.vectorDbProvider)}</span>
           </div>
+
+          {/* Sesión */}
+          <span className="text-sm text-text-300 hidden sm:inline">{user?.email}</span>
+          <button
+            onClick={logout}
+            className="text-sm font-medium text-text-200 hover:text-text-50 transition-colors px-2 py-1 rounded-lg hover:bg-bg-800"
+            aria-label="Cerrar sesión"
+          >
+            Salir
+          </button>
         </div>
       </div>
     </header>

@@ -27,6 +27,9 @@ async function request(endpoint, options = {}) {
       'Content-Type': 'application/json',
       ...options.headers,
     },
+    // Necesario para que la cookie httpOnly de sesión viaje en cada
+    // petición (login la deja, el resto de endpoints protegidos la leen).
+    credentials: 'include',
     ...options,
   };
 
