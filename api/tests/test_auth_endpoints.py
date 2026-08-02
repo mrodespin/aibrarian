@@ -18,6 +18,7 @@ distintas en este fichero, porque /auth/login no pasa por Depends().
 
 import pytest
 
+import app.main as main_module
 from app.main import app, get_current_user
 from app.core.services.auth_service import AuthService, TokenPayload
 from tests.conftest import TEST_USER_PASSWORD
@@ -34,6 +35,13 @@ def _clear_dependency_overrides():
     """Evita que overrides de un test se filtren al siguiente."""
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_login_rate_limit():
+    """Evita que los intentos de login de un test cuenten para el rate limit del siguiente."""
+    main_module._login_attempts.clear()
+    yield
 
 
 # ============================================================================
@@ -68,6 +76,25 @@ def test_login_wrong_password(client, monkeypatch, mock_user_repository):
     )
 
     assert response.status_code == 401
+
+
+@pytest.mark.unit
+def test_login_rate_limited_after_too_many_attempts(client, monkeypatch, mock_user_repository):
+    """Protección básica contra fuerza bruta: N intentos por IP y ventana."""
+    monkeypatch.setattr("app.main.auth_service", AuthService(user_repository=mock_user_repository))
+
+    for _ in range(main_module._LOGIN_RATE_LIMIT):
+        response = client.post(
+            "/auth/login",
+            json={"email": "test@example.com", "password": "wrong-password"},
+        )
+        assert response.status_code == 401
+
+    response = client.post(
+        "/auth/login",
+        json={"email": "test@example.com", "password": "wrong-password"},
+    )
+    assert response.status_code == 429
 
 
 @pytest.mark.unit

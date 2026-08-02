@@ -37,10 +37,12 @@ Relación con otros ficheros:
 # IMPORTS
 # ============================================================================
 import asyncio                              # Para lanzar el warm-up del LLM en segundo plano
+from collections import defaultdict         # Contador de intentos de login por IP (rate limiting)
 from contextlib import asynccontextmanager  # Para definir el ciclo de vida (startup/shutdown)
 from pathlib import Path                    # Manejo de rutas de archivos
+from time import monotonic                  # Reloj monótono para la ventana de rate limiting
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends  # Framework web + excepciones HTTP
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Request  # Framework web + excepciones HTTP
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials  # Para leer el JWT del header Authorization
 import tempfile
 import shutil
@@ -505,8 +507,36 @@ async def get_metrics():
 # Autenticación
 # ----------------------------------------------------------------------------
 
+# Rate limiting de /auth/login, en memoria — sin Redis/slowapi porque una
+# sola tabla de usuarios y una sola instancia (Render free tier, ya ajustado
+# de RAM, ver requirements.txt) no lo justifican. Si el servicio llegara a
+# escalar a varias instancias, cada una llevaría su propio contador (deja de
+# ser un límite global estricto), pero sigue frenando fuerza bruta desde una
+# IP dada contra cualquier instancia individual.
+_LOGIN_RATE_LIMIT = 5      # intentos
+_LOGIN_RATE_WINDOW = 60.0  # segundos
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _enforce_login_rate_limit(request: Request) -> None:
+    ip = _client_ip(request)
+    now = monotonic()
+    attempts = _login_attempts[ip]
+    attempts[:] = [t for t in attempts if now - t < _LOGIN_RATE_WINDOW]
+    if len(attempts) >= _LOGIN_RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
+    attempts.append(now)
+
+
 @app.post("/auth/login", response_model=LoginResponse)
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, http_request: Request):
     """
     Inicia sesión: verifica credenciales y, si son correctas, devuelve un
     JWT de sesión (válido durante settings.jwt_expiration_minutes) en el
@@ -516,7 +546,12 @@ async def login(request: LoginRequest):
     `Authorization: Bearer <token>` en cada petición posterior — ver
     get_current_user() más arriba para el porqué de este diseño en vez
     de una cookie de sesión.
+
+    Raises:
+        HTTPException(429): más de _LOGIN_RATE_LIMIT intentos desde la
+            misma IP en los últimos _LOGIN_RATE_WINDOW segundos.
     """
+    _enforce_login_rate_limit(http_request)
     try:
         user = await auth_service.authenticate(request.email, request.password)
     except InvalidCredentialsError:
