@@ -6,7 +6,7 @@
 ![Coverage](https://img.shields.io/badge/Coverage-62%25-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)
 
-TFM que implementa un asistente RAG ('Bibliotecario IA') para consultar documentos (PDFs locales y Notion) usando Ollama y LangChain.
+TFM que implementa un asistente RAG multiusuario ('Bibliotecario IA') para consultar documentos privados (PDFs y Notion), con LLM local (Ollama) o cloud (Groq), autenticación JWT y arquitectura hexagonal.
 
 ---
 
@@ -14,9 +14,9 @@ TFM que implementa un asistente RAG ('Bibliotecario IA') para consultar document
 
 **`bibliotecario-ia`** es un Trabajo Final de Máster que demuestra la implementación de un sistema RAG (Retrieval-Augmented Generation) de principio a fin, enfocado en la privacidad y la arquitectura de software desacoplada.
 
-El objetivo es crear un *chatbot* capaz de responder preguntas sobre una base de conocimiento privada (alojada en **Notion**) utilizando un modelo de lenguaje que se ejecuta localmente (**Ollama**). Esto garantiza que los datos sensibles nunca abandonen la máquina local.
+El objetivo es crear un *chatbot* capaz de responder preguntas sobre una base de conocimiento privada (PDFs locales y páginas de **Notion**). Gracias a la **Arquitectura Hexagonal**, el LLM y la base vectorial son intercambiables sin tocar la lógica de negocio: un modo 100% local (**Ollama** + ChromaDB) donde los datos sensibles nunca abandonan la máquina, y un modo cloud (**Groq** + Chroma Cloud) usado en la demo pública desplegada en Render.
 
-El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que los componentes (API, lógica de IA, bases de datos) estén desacoplados y sean fáciles de mantener o sustituir.
+El acceso está protegido con **autenticación JWT multiusuario** (cookie `httpOnly`, sin registro público — los usuarios se dan de alta por CLI), necesaria desde que el sistema dejó de ser solo local para tener también una instancia pública.
 
 ---
 
@@ -28,8 +28,8 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 - **Extracción Automática**: Propiedades de bases de datos Notion (title, rich_text, number, select, etc.)
 
 ### 🧠 Sistema RAG Avanzado
-- **Búsqueda Híbrida**: Combinación de búsqueda semántica + keywords extraídos (Query Expansion)
-- **LLM Local**: Ollama (llama3.2) garantiza privacidad total de datos
+- **Búsqueda Híbrida**: Combinación de búsqueda semántica + keywords extraídos (Query Expansion, implementación propia)
+- **LLM Intercambiable**: Ollama local (`llama3.2`, privacidad total) o Groq cloud (`openai/gpt-oss-120b`, usado en la demo pública) — mismo código, se elige por variable de entorno
 - **Respuestas Contextualizadas**: Citas con referencias a documentos fuente
 - **Prompt Engineering**: Instrucciones estrictas para evitar alucinaciones
 
@@ -66,14 +66,14 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 ## 🛠️ Stack Tecnológico
 
 * **Framework Backend:** **Python** con **FastAPI**
-* **Orquestación de IA:** **LangChain** con **Query Expansion**
-* **Modelo de Lenguaje (LLM):** **Ollama** (ej. `llama3.2`)
-* **Base de Datos Vectorial:** **ChromaDB**
+* **Carga y Chunking de Documentos:** **LangChain** (`PyPDFLoader`, `NotionDBLoader`, `RecursiveCharacterTextSplitter`) — la orquestación del pipeline RAG (Query Expansion, búsqueda híbrida, prompting) es implementación propia, no de LangChain
+* **Modelo de Lenguaje (LLM):** **Ollama** (`llama3.2`, local) o **Groq** (`openai/gpt-oss-120b`, cloud) — intercambiables por configuración, ver [ADR-007](docs/adr/007-despliegue-cloud-groq-chroma.md)
+* **Base de Datos Vectorial:** **ChromaDB** (local vía Docker) o **Chroma Cloud** (gestionado)
 * **Fuentes de Datos:** **PDFs locales** y **Notion API**
 * **Frontend:** **React 19** + **Vite 7** + **Tailwind CSS v4** (Dark Mode)
 * **Autenticación:** **JWT** + **Postgres** (Neon en producción)
-* **Observabilidad:** **Structlog** + **Prometheus** + **OpenTelemetry**
-* **Contenerización:** **Docker Compose**
+* **Observabilidad:** **Structlog** + **Prometheus**
+* **Contenerización:** **Docker Compose** (ChromaDB + Postgres + API)
 * **Despliegue cloud (demo pública):** **Render** + **Groq** + **Chroma Cloud** — ver [ADR-007](docs/adr/007-despliegue-cloud-groq-chroma.md) y [guía de despliegue](docs/DEPLOYMENT.md). El desarrollo local (Ollama + ChromaDB) sigue siendo el flujo por defecto de `docker-compose up`.
 
 ---
@@ -127,7 +127,6 @@ graph TD
     subgraph "Observabilidad"
         Logging["Structlog<br>Logging Estructurado"]
         Metrics["Prometheus<br>Métricas"]
-        Tracing["OpenTelemetry<br>Tracing"]
     end
 
     %% --- Núcleo Hexagonal ---
@@ -168,15 +167,18 @@ graph TD
     %% --- Observabilidad ---
     API -.-> Logging
     SyncService -.-> Metrics
-    RAGService -.-> Tracing
+    RAGService -.-> Metrics
 
     %% --- Asignación de Clases ---
     class PDFs,CLI,SyncService,PDFAdapter,ChromaAdapter mvp
     class UI,RAGService,OllamaAdapter,API phase1
     class NotionAPI,NotionAdapter extension
-    class Logging,Metrics,Tracing observability
+    class Logging,Metrics observability
     class Ports mvp
 ```
+
+> Este diagrama refleja las fases originales del TFM (MVP → Fase 1 → Extensión Notion). La autenticación (JWT + Postgres) y el modo cloud (Groq + Chroma Cloud) se añadieron después como una capa transversal — ver la sección de Autenticación y Seguridad y [ADR-007](docs/adr/007-despliegue-cloud-groq-chroma.md).
+
 ---
 
 ## 🔄 Flujos de Trabajo por Fases
@@ -303,10 +305,7 @@ El sistema incluye una **capa completa de observabilidad** para monitoreo en pro
 - `documents_synced_total`: Contador de documentos procesados
 - Endpoint `/metrics` para scraping
 
-### **Tracing** (OpenTelemetry)
-- Trazas distribuidas end-to-end
-- Spans para cada operación crítica
-- Integración con Jaeger/Zipkin (opcional)
+> No hay tracing distribuido (OpenTelemetry/Jaeger) implementado — solo logging estructurado y métricas. Queda como posible ampliación (ver Trabajo Futuro).
 
 **Arquitectura de Observabilidad:**
 
@@ -328,24 +327,20 @@ graph LR
     subgraph "Observability Layer"
         Logger["Structlog<br>Structured Logging"]
         Metrics["Prometheus<br>Metrics Registry"]
-        Tracer["OpenTelemetry<br>Tracing"]
     end
 
     %% --- Sistemas Externos ---
     subgraph "External Systems (Opcional)"
         LogAgg["Log Aggregator<br>ELK/Loki"]
         MetricsDB["Prometheus Server<br>Time Series DB"]
-        TracingBackend["Jaeger/Zipkin<br>Tracing Backend"]
     end
 
     %% --- Flujo de Observabilidad ---
     API --> Logger
     API --> Metrics
-    API --> Tracer
 
     Services --> Logger
     Services --> Metrics
-    Services --> Tracer
 
     Adapters --> Logger
     Adapters --> Metrics
@@ -353,12 +348,11 @@ graph LR
     %% --- Exportación ---
     Logger -.->|JSON Logs| LogAgg
     Metrics -.->|/metrics endpoint| MetricsDB
-    Tracer -.->|OTLP| TracingBackend
 
     %% --- Asignación de Clases ---
     class API,Services,Adapters app
-    class Logger,Metrics,Tracer obs
-    class LogAgg,MetricsDB,TracingBackend external
+    class Logger,Metrics obs
+    class LogAgg,MetricsDB external
 ```
 
 **Ejemplo de uso:**
@@ -396,7 +390,7 @@ VECTOR_SEARCH_LATENCY.observe(duration)
 
 1. **macOS** (con Apple Silicon para GPU Metal)
 2. **Python 3.11+**
-3. **Docker Desktop** (para ChromaDB)
+3. **Docker Desktop** (para ChromaDB y Postgres, usado para la autenticación)
 4. **Node.js 18+** (para el frontend)
 
 ### Instalación
@@ -418,6 +412,8 @@ El script `setup.py` configura automáticamente:
 - Entorno Python con dependencias
 - Frontend con npm
 
+> ⚠️ `setup.py` todavía no crea el primer usuario de login (la autenticación se añadió después). Tanto si usas la instalación automática como la manual, hace falta el paso "Crear tu usuario" de más abajo antes de poder entrar al chat.
+
 **Opción 2: Instalación Manual**
 
 ```bash
@@ -436,10 +432,13 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+# Genera un secreto real para JWT_SECRET_KEY (el de .env.example es un placeholder):
+python -c "import secrets; print(secrets.token_hex(32))"
+# ...y pégalo en JWT_SECRET_KEY dentro de api/.env
 
-# 4. Iniciar ChromaDB
+# 4. Iniciar ChromaDB y Postgres
 cd ..
-docker-compose up -d chromadb
+docker-compose up -d chromadb postgres
 
 # 5. Setup Frontend
 cd frontend
@@ -449,25 +448,35 @@ npm install
 python scripts/verify_setup.py
 ```
 
+### Crear tu usuario
+
+No hay registro público — el login se crea por CLI (contraseña vía `getpass`, no se guarda en el historial de la shell):
+
+```bash
+source api/venv/bin/activate
+python scripts/create_user.py --email tu@email.com
+```
+
 ### Uso
 
 ```bash
 # Terminal 1: Ollama (mantener abierto)
 ollama serve
 
-# Terminal 2: Docker (ChromaDB + API)
+# Terminal 2: Docker (ChromaDB + Postgres + API)
 docker-compose up -d
 
 # Terminal 3: Frontend
 cd frontend && npm run dev
 
-# Abrir navegador en http://localhost:5173
+# Abrir navegador en http://localhost:5173 e iniciar sesión con el usuario creado arriba
 ```
 
 **Puertos:**
 - Frontend: http://localhost:5173
 - API: http://localhost:8000 (API Docs: http://localhost:8000/docs)
 - ChromaDB: http://localhost:8001
+- Postgres: localhost:5432
 
 ---
 
@@ -491,6 +500,7 @@ cd frontend && npm run dev
 - **Subir cobertura de tests del backend**: 62% global, pero concentrado en los *services* (mockeados); los adapters que hablan con servicios reales están poco cubiertos (Notion 29%, PDF 34%, Postgres 35%, ChromaDB 46%)
 - **Rate limiting en `/auth/login`**: no hay throttling — aceptable para un demo personal, pero necesario antes de invitar tráfico público a probarlo
 - **Resolver alertas de Dependabot**: el repo tiene vulnerabilidades de dependencias señaladas por GitHub (varias críticas/altas) pendientes de revisar y actualizar
+- **Tracing distribuido**: no hay OpenTelemetry/Jaeger implementado, solo logging estructurado y métricas (ver Observabilidad)
 
 ---
 
