@@ -2,8 +2,8 @@
 
 ![TFM](https://img.shields.io/badge/Proyecto-TFM_MDEV_IA-blue.svg)
 ![Licencia](https://img.shields.io/badge/Licencia-MIT-green.svg)
-![Tests](https://img.shields.io/badge/Tests-66_passed-brightgreen.svg)
-![Coverage](https://img.shields.io/badge/Coverage-74%25-yellow.svg)
+![Tests](https://img.shields.io/badge/Tests-90_passed-brightgreen.svg)
+![Coverage](https://img.shields.io/badge/Coverage-62%25-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)
 
 TFM que implementa un asistente RAG ('Bibliotecario IA') para consultar documentos (PDFs locales y Notion) usando Ollama y LangChain.
@@ -39,17 +39,23 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 - **Dark Mode**: Diseño moderno con Tailwind CSS v4
 - **Responsive**: Adaptable a móvil y desktop
 
+### 🔐 Autenticación y Seguridad
+- **Multiusuario vía JWT**: sesión de 24h en cookie `httpOnly` + `Secure` (nunca expuesta al JS del frontend)
+- **Alta de usuarios por CLI**: sin registro público — `scripts/create_user.py`, contraseña vía `getpass`
+- **Endpoints protegidos**: todos salvo los healthchecks públicos requeridos por el despliegue
+- **Persistencia en Postgres**: Neon en producción, contenedor local en desarrollo (`docker-compose`)
+
 ### 📊 Observabilidad Integral
 - **Logging Estructurado**: Structlog con formato JSON para parsing automático
 - **Métricas Prometheus**: 8+ métricas clave (latencias, requests, operaciones LLM)
 - **Health Checks**: Monitoreo de estado de API, Ollama y ChromaDB
 - **Endpoint /metrics**: Exposición de métricas para scraping
 
-### 🧪 Testing Exhaustivo
-- **60+ Tests Unitarios**: Pytest con cobertura ~85%
+### 🧪 Testing
+- **90 Tests Unitarios**: Pytest con 62% de cobertura (medido, ver nota en Trabajo Futuro sobre dónde falta cobertura)
 - **Tests de Integración**: End-to-end con servicios reales
-- **Mocks Configurados**: Para Ollama, ChromaDB y procesadores
-- **CI/CD Ready**: Suite de tests automatizable
+- **Mocks Configurados**: Para Ollama, ChromaDB, Postgres y procesadores
+- **CI**: GitHub Actions ejecuta la suite `unit` en cada push/PR (backend; ver Trabajo Futuro sobre frontend)
 
 ### 🏗️ Arquitectura de Calidad
 - **Patrón Hexagonal**: Separación clara entre dominio, puertos y adaptadores
@@ -65,8 +71,10 @@ El sistema se construye sobre una **Arquitectura Hexagonal** para asegurar que l
 * **Base de Datos Vectorial:** **ChromaDB**
 * **Fuentes de Datos:** **PDFs locales** y **Notion API**
 * **Frontend:** **React 19** + **Vite 7** + **Tailwind CSS v4** (Dark Mode)
+* **Autenticación:** **JWT** + **Postgres** (Neon en producción)
 * **Observabilidad:** **Structlog** + **Prometheus** + **OpenTelemetry**
 * **Contenerización:** **Docker Compose**
+* **Despliegue cloud (demo pública):** **Render** + **Groq** + **Chroma Cloud** — ver [ADR-007](docs/adr/007-despliegue-cloud-groq-chroma.md) y [guía de despliegue](docs/DEPLOYMENT.md). El desarrollo local (Ollama + ChromaDB) sigue siendo el flujo por defecto de `docker-compose up`.
 
 ---
 
@@ -465,9 +473,9 @@ cd frontend && npm run dev
 
 ## ⚠️ Limitaciones Conocidas
 
-- **Solo macOS**: El entorno está optimizado para macOS con Apple Silicon (GPU Metal). Otros sistemas requerirían adaptar los scripts de instalación
+- **Solo macOS (desarrollo local)**: El entorno con Ollama nativo está optimizado para macOS con Apple Silicon (GPU Metal). El modo cloud (Groq + Chroma Cloud, ver despliegue) no tiene esta limitación
 - **Modelos locales**: La calidad de las respuestas de llama3.2 (3B parámetros) es inferior a modelos cloud como GPT-4, pero suficiente para el caso de uso y garantiza privacidad total
-- **Sin autenticación**: En el MVP la API no implementa autenticación ni autorización
+- **Cookies de sesión y navegadores**: en el despliegue de demo pública (subdominios `.onrender.com` distintos para frontend y API), Safari y otros navegadores con bloqueo de cookies de terceros activado por defecto descartan la cookie de sesión — el login "parece" funcionar pero las peticiones protegidas posteriores dan 401. Se soluciona sirviendo frontend y API bajo el mismo dominio raíz (pendiente, ver Trabajo Futuro)
 - **Escalabilidad**: ChromaDB en modo standalone no escala horizontalmente. Adecuado para miles de documentos, no para millones
 
 ## 🔮 Trabajo Futuro
@@ -476,8 +484,13 @@ cd frontend && npm run dev
 - **Historial de conversación**: Mantener contexto entre preguntas para permitir preguntas de seguimiento ("¿puedes ampliar eso?")
 - **Más fuentes de datos**: Integrar Google Drive, Confluence, o páginas web como fuentes adicionales de documentos
 - **Evaluación del RAG**: Implementar métricas de calidad (faithfulness, relevance) con frameworks como RAGAS
-- **Autenticación y despliegue**: Añadir autenticación (JWT/OAuth) para exponer el sistema al exterior de forma segura
 - **Soporte multi-plataforma**: Adaptar scripts de instalación para Linux y Windows (WSL)
+- **Dominio propio**: mover frontend/API al mismo dominio raíz (p. ej. `app.dominio.com` + `api.dominio.com`) para que la cookie de sesión funcione en todos los navegadores, incluido Safari (ver Limitaciones Conocidas)
+- **Tests de frontend**: no hay ningún test automatizado en `frontend/` todavía (ni Vitest ni Testing Library configurados) — añadir cobertura al menos de los componentes de auth y chat
+- **CI de frontend**: el workflow actual (`.github/workflows/test.yml`) solo corre `pytest -m unit`; añadir `npm run build` y `npm run lint` para detectar roturas del frontend en cada PR
+- **Subir cobertura de tests del backend**: 62% global, pero concentrado en los *services* (mockeados); los adapters que hablan con servicios reales están poco cubiertos (Notion 29%, PDF 34%, Postgres 35%, ChromaDB 46%)
+- **Rate limiting en `/auth/login`**: no hay throttling — aceptable para un demo personal, pero necesario antes de invitar tráfico público a probarlo
+- **Resolver alertas de Dependabot**: el repo tiene vulnerabilidades de dependencias señaladas por GitHub (varias críticas/altas) pendientes de revisar y actualizar
 
 ---
 

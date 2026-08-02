@@ -63,6 +63,11 @@ yarn-error.log
 .vite/
 
 # === Project Specific ===
+# Notas internas de evaluación TFM (fecha límite, checklist de nota) —
+# útil para el autor, no aporta nada como portafolio público.
+.ai/evaluation.md
+
+
 # Data files (PDFs, generated files)
 # Keep README.md and scripts, ignore actual documents
 data/*.pdf
