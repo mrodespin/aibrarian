@@ -74,6 +74,7 @@ class LLMPort(ABC):
         self,
         prompt: str,
         context: Optional[str] = None,
+        history: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: float = 0.7,
         **kwargs
@@ -96,6 +97,12 @@ class LLMPort(ABC):
             context: Contexto opcional (chunks recuperados de ChromaDB)
                     Ejemplo: "Según el documento X, machine learning es..."
                     El contexto se inyecta en el prompt para dar información
+
+            history: Turnos previos de la conversación, ya formateados como
+                    texto (ver ConversationService.get_history_prompt_block),
+                    o None si no hay historial. Se antepone al contexto en el
+                    prompt para que el modelo pueda resolver preguntas de
+                    seguimiento ("¿puedes ampliar eso?").
 
             max_tokens: Límite de tokens en la respuesta (None = sin límite)
                        Un token ≈ 0.75 palabras en español

@@ -95,7 +95,8 @@ class RAGService:
     async def ask_question(
         self,
         query: Query,
-        collection_name: Optional[str] = None
+        collection_name: Optional[str] = None,
+        history: Optional[str] = None
     ) -> QueryResult:
         """
         Responde una pregunta usando el pipeline RAG completo con Query Expansion.
@@ -122,8 +123,15 @@ class RAGService:
             query: Objeto Query con:
                    - question: la pregunta del usuario
                    - max_results: máximo de chunks a recuperar
-                   - session_id: ID de sesión (para futuro historial)
+                   - session_id: ID de sesión (usado por el endpoint /ask para
+                     recuperar `history`, no leído aquí directamente)
             collection_name: Colección de ChromaDB (opcional)
+            history: Bloque de texto con turnos previos de la conversación
+                     (ya formateado por ConversationService.get_history_prompt_block),
+                     o None si no hay historial / la conversación no tiene session_id.
+                     Solo afecta al prompt de generación, NO a la recuperación
+                     (retrieval sigue basándose únicamente en la pregunta actual —
+                     ver limitación documentada en el plan de esta feature).
 
         Returns:
             QueryResult con:
@@ -228,6 +236,7 @@ class RAGService:
             answer = await self.llm.generate_response(
                 prompt=query.question,
                 context=context,
+                history=history,                          # Turnos previos, o None
                 temperature=settings.rag_temperature,    # 0.3 por defecto, para precisión
                 max_tokens=settings.llm_max_tokens       # Límite de respuesta
             )

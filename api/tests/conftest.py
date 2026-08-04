@@ -23,6 +23,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-not-for-prod")
 
 import bcrypt
 import pytest
+from datetime import datetime
 from unittest.mock import Mock, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from typing import List, Optional, Dict
@@ -370,6 +371,46 @@ def auth_service_with_mocks(mock_user_repository):
     from app.core.services.auth_service import AuthService
 
     return AuthService(user_repository=mock_user_repository)
+
+
+# ============================================================================
+# FIXTURES DE HISTORIAL DE CONVERSACIÓN
+# ============================================================================
+
+@pytest.fixture
+def mock_conversation_repository():
+    """
+    Mock de ConversationRepositoryPort para tests unitarios de ConversationService.
+
+    Simula un almacén en memoria simple: append_message() guarda en un
+    dict interno (keyed por session_id), get_recent_messages() lo lee.
+    """
+    from app.core.domain.models import ConversationMessage
+
+    mock = Mock()
+    storage: Dict[str, List[ConversationMessage]] = {}
+
+    async def mock_append_message(session_id: str, user_id: int, role: str, content: str) -> None:
+        storage.setdefault(session_id, []).append(
+            ConversationMessage(role=role, content=content, created_at=datetime.now())
+        )
+
+    async def mock_get_recent_messages(session_id: str, user_id: int, limit: int):
+        return storage.get(session_id, [])[-limit:]
+
+    mock.append_message = AsyncMock(side_effect=mock_append_message)
+    mock.get_recent_messages = AsyncMock(side_effect=mock_get_recent_messages)
+    mock._storage = storage  # expuesto para inspección directa en tests
+
+    return mock
+
+
+@pytest.fixture
+def conversation_service_with_mocks(mock_conversation_repository):
+    """ConversationService configurado con un ConversationRepositoryPort mockeado."""
+    from app.core.services.conversation_service import ConversationService
+
+    return ConversationService(conversation_repository=mock_conversation_repository)
 
 
 # ============================================================================

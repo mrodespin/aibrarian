@@ -224,6 +224,24 @@ class Query(BaseModel):
         }
 
 
+class ConversationMessage(BaseModel):
+    """
+    Representa un turno (mensaje) del historial de una conversación.
+
+    Persistido en Postgres (conversation_messages) por ConversationService,
+    y usado para dar contexto de turnos previos al generar una respuesta
+    (ver RAGService.ask_question y OllamaAdapter.generate_response).
+
+    Atributos:
+        role: "user" o "assistant"
+        content: Texto del mensaje (pregunta o respuesta)
+        created_at: Momento en que se guardó el mensaje
+    """
+    role: str = Field(..., description="'user' o 'assistant'")
+    content: str = Field(..., description="Texto del mensaje")
+    created_at: datetime = Field(..., description="Momento en que se guardó el mensaje")
+
+
 class SourceDocument(BaseModel):
     """
     Representa una fuente usada para generar una respuesta.

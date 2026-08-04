@@ -73,6 +73,7 @@ from app.core.services.auth_service import (
     InvalidTokenError,
     TokenPayload,
 )
+from app.core.services.conversation_service import ConversationService
 # Adaptadores concretos (las únicas implementaciones que conoce este fichero)
 # Nota: ChromaCloudAdapter y GroqAdapter se importan más abajo, dentro de sus
 # respectivos "if settings...", no aquí arriba. Sus paquetes (groq,
@@ -84,6 +85,7 @@ from app.adapters.outbound.ollama_adapter import OllamaAdapter
 from app.adapters.outbound.pdf_processor_adapter import PDFProcessorAdapter
 from app.adapters.outbound.notion_processor_adapter import NotionProcessorAdapter
 from app.adapters.outbound.postgres_user_adapter import PostgresUserAdapter
+from app.adapters.outbound.postgres_conversation_adapter import PostgresConversationAdapter
 
 
 # ============================================================================
@@ -166,6 +168,15 @@ rag_service = RAGService(
 user_repository = PostgresUserAdapter()
 auth_service = AuthService(user_repository=user_repository)
 
+# --- Historial de conversación (Postgres/Neon) ---
+# Mismo patrón que el bloque de arriba, pool propio (ver
+# postgres_conversation_adapter.py). Deliberadamente NO se inyecta en
+# RAGService (que solo necesita LLM + VectorDB) — el endpoint /ask compone
+# ambos servicios: pide el historial antes de llamar a rag_service, lo
+# persiste después.
+conversation_repository = PostgresConversationAdapter()
+conversation_service = ConversationService(conversation_repository=conversation_repository)
+
 
 # ============================================================================
 # CICLO DE VIDA DE LA APLICACIÓN
@@ -221,11 +232,22 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Failed to connect to Postgres — auth endpoints will fail until this is fixed", error=str(e))
 
+    # Conectar a Postgres (historial de conversación). Igual que arriba,
+    # no tumba el arranque si falla — /ask simplemente sigue funcionando
+    # sin historial hasta que se arregle (ver el try/except en el propio
+    # endpoint, que degrada del mismo modo petición a petición).
+    try:
+        await conversation_repository.connect()
+        logger.info("Connected to Postgres (conversation history)")
+    except Exception as e:
+        logger.warning("Failed to connect to Postgres — conversation history will be unavailable until this is fixed", error=str(e))
+
     yield  # ← La app está activa y atiende peticiones desde aquí
 
     # --- SHUTDOWN ---
     logger.info("Shutting down application")
     await user_repository.close()
+    await conversation_repository.close()
 
 
 # ============================================================================
@@ -925,29 +947,27 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
 # Consultas RAG
 # ----------------------------------------------------------------------------
 
-@app.post("/ask", response_model=QueryResult, dependencies=[Depends(get_current_user)])
-async def ask_question(query: Query):
+@app.post("/ask", response_model=QueryResult)
+async def ask_question(query: Query, current_user: TokenPayload = Depends(get_current_user)):
     """
     Endpoint principal del sistema RAG: hacer preguntas al "bibliotecario".
 
     Este es el endpoint que el frontend usará para el chat.
 
-    Flujo completo (delegado a RAGService):
-        1. Vectorizar la pregunta del usuario
-        2. Buscar chunks similares en ChromaDB
-        3. Construir contexto con esos chunks
-        4. Pedir al LLM que responda basándose en ese contexto
-        5. Retornar la respuesta + las fuentes usadas
+    Flujo completo:
+        1. (Si hay session_id) Recuperar historial reciente de la conversación
+        2. Delegar a RAGService: vectorizar, buscar chunks, construir contexto,
+           generar respuesta (con el historial como contexto adicional)
+        3. (Si hay session_id) Persistir el nuevo turno (pregunta + respuesta)
+        4. Retornar la respuesta + las fuentes usadas
 
-    ¿Por qué es tan simple este endpoint?
-    Toda la lógica vive en RAGService.ask_question().
-    El endpoint solo hace la conexión HTTP ↔ servicio.
-    Esta es la ventaja de la arquitectura hexagonal: los endpoints
-    son delgados y delegan al core.
+    El historial es una mejora de UX, no una decisión de negocio: si
+    Postgres no está disponible, se loguea y se continúa sin historial en
+    vez de fallar la petición completa (ver ConversationService).
 
     Ejemplo de petición:
         POST /ask
-        {"question": "¿Qué es Docker?", "max_results": 3}
+        {"question": "¿Qué es Docker?", "max_results": 3, "session_id": "abc-123"}
 
     Ejemplo de respuesta:
         {
@@ -962,9 +982,16 @@ async def ask_question(query: Query):
     import time
     start_time = time.perf_counter()
 
+    history = None
+    if query.session_id:
+        try:
+            history = await conversation_service.get_history_prompt_block(query.session_id, current_user.user_id)
+        except Exception as e:
+            logger.warning("Failed to load conversation history, continuing without it", error=str(e), session_id=query.session_id)
+
     try:
         logger.info("Processing RAG query", question=query.question[:100])
-        result = await rag_service.ask_question(query)
+        result = await rag_service.ask_question(query, history=history)
 
         # Registrar métricas de éxito
         duration = time.perf_counter() - start_time
@@ -978,6 +1005,13 @@ async def ask_question(query: Query):
             duration_seconds=round(duration, 3),
             num_sources=len(result.source_documents)
         )
+
+        if query.session_id:
+            try:
+                await conversation_service.append_turn(query.session_id, current_user.user_id, query.question, result.answer)
+            except Exception as e:
+                logger.warning("Failed to persist conversation turn", error=str(e), session_id=query.session_id)
+
         return result
 
     except Exception as e:

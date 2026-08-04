@@ -166,6 +166,7 @@ class OllamaAdapter(LLMPort):
         self,
         prompt: str,
         context: Optional[str] = None,
+        history: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: float = 0.7,
         **kwargs
@@ -187,7 +188,9 @@ class OllamaAdapter(LLMPort):
         Args:
             prompt: Pregunta del usuario
             context: Contexto (chunks recuperados por ChromaDB)
-            max_tokens: Límite de tokens (no usado directamente aquí)
+            history: Turnos previos de la conversación, ya formateados
+                     (ver ConversationService.get_history_prompt_block)
+            max_tokens: Límite de tokens (None = usa el default de Ollama)
             temperature: Creatividad del modelo
             **kwargs: Parámetros adicionales para el modelo
 
@@ -201,6 +204,16 @@ class OllamaAdapter(LLMPort):
             # ============================================================
             # CONSTRUCCIÓN DEL PROMPT
             # ============================================================
+            # Si hay historial (turnos previos de la conversación), se
+            # antepone al resto del prompt para que el LLM pueda resolver
+            # preguntas de seguimiento ("¿puedes ampliar eso?"). Nota: esto
+            # SOLO afecta a la generación — la recuperación de chunks sigue
+            # basándose únicamente en la pregunta actual (ver RAGService).
+            history_block = f"""CONVERSACIÓN PREVIA (turnos anteriores, para contexto):
+{history}
+
+""" if history else ""
+
             # Si hay contexto (chunks de ChromaDB), se estructura el prompt
             # para que el LLM use esa información como base
             if context:
@@ -213,14 +226,20 @@ REGLAS ESTRICTAS:
 4. Cita las fuentes cuando sea relevante
 5. Responde en el mismo idioma que la pregunta
 
-CONTEXTO (información de tu base de conocimientos):
+{history_block}CONTEXTO (información de tu base de conocimientos):
 {context}
 
 PREGUNTA DEL USUARIO: {prompt}
 
 RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
+            elif history_block:
+                # Sin contexto pero con historial: seguimos exigiendo que
+                # se ciña a lo ya dicho, no a conocimiento general nuevo.
+                full_prompt = f"""{history_block}PREGUNTA DEL USUARIO: {prompt}
+
+RESPUESTA:"""
             else:
-                # Sin contexto: la pregunta se envía directa al LLM
+                # Sin contexto ni historial: la pregunta se envía directa al LLM
                 # (el LLM responderá con su conocimiento general)
                 full_prompt = prompt
 

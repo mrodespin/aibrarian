@@ -134,6 +134,7 @@ class GroqAdapter(LLMPort):
         self,
         prompt: str,
         context: Optional[str] = None,
+        history: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: float = 0.7,
         **kwargs,
@@ -141,6 +142,15 @@ class GroqAdapter(LLMPort):
         client = self._get_client()
 
         messages = [{"role": "system", "content": _RAG_SYSTEM_PROMPT}]
+        if history:
+            # Bloque ya formateado por ConversationService.get_history_prompt_block
+            # (mismo formato de texto que usa OllamaAdapter, en vez de turnos
+            # nativos user/assistant en el array — simplicidad para v1, ambos
+            # adaptadores consumen el mismo string).
+            messages.append({
+                "role": "user",
+                "content": f"CONVERSACIÓN PREVIA (turnos anteriores, para contexto):\n{history}",
+            })
         if context:
             messages.append({
                 "role": "user",
