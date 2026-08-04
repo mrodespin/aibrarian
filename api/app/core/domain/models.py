@@ -311,6 +311,32 @@ class QueryResult(BaseModel):
         }
 
 
+class DocumentSummary(BaseModel):
+    """
+    Resumen de un documento indexado, para listarlo sin pasar por
+    similarity search (a diferencia de SourceDocument, que representa
+    un CHUNK usado como contexto de una respuesta concreta).
+
+    Es el resultado de agrupar todos los chunks de un mismo document_id
+    en la base de datos vectorial. Se usa tanto en GET /documents (para
+    que el usuario pueda explorar la base de conocimiento desde el UI)
+    como en RAGService para responder preguntas del tipo "¿cuántos
+    documentos conoces?" sin depender del retrieval semántico (ver
+    RAGService._is_meta_question).
+
+    Atributos:
+        document_id: ID del documento (ej: "notion_abc123", "pdf_a3f2b1c9")
+        title: Título legible — de metadata.title/filename, o el propio
+               document_id como último fallback
+        source: "pdf" | "notion" | "unknown", inferido del prefijo del id
+        chunk_count: Cuántos chunks tiene este documento en la colección
+    """
+    document_id: str = Field(..., description="ID del documento")
+    title: str = Field(..., description="Título legible del documento")
+    source: str = Field(..., description="Fuente del documento: pdf, notion o unknown")
+    chunk_count: int = Field(..., description="Número de chunks de este documento en la colección")
+
+
 # ============================================================================
 # MODELOS DE SINCRONIZACIÓN/INGESTA
 # ============================================================================

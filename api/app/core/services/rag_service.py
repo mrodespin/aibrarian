@@ -48,7 +48,7 @@ from typing import AsyncIterator, Dict, Any, Optional
 # Solo importamos LLM y VectorDB (no necesitamos DocumentProcessor)
 from app.core.ports.llm_port import LLMPort
 from app.core.ports.vector_db_port import VectorDBPort
-from app.core.domain.models import Query, QueryResult, SourceDocument
+from app.core.domain.models import Query, QueryResult, SourceDocument, DocumentSummary
 from app.config.settings import settings
 
 
@@ -488,3 +488,26 @@ class RAGService:
                 "stats": {"error": str(e)},
                 "model_info": {}
             }
+
+    async def list_known_documents(
+        self,
+        collection_name: Optional[str] = None
+    ) -> list[DocumentSummary]:
+        """
+        Lista todos los documentos indexados en la base de conocimiento.
+
+        A diferencia de ask_question(), NO pasa por similarity_search ni
+        por el LLM — delega directamente en vector_db.list_documents(),
+        que agrupa por document_id sin ranking ni top_k. Es la forma
+        correcta de responder "¿qué tienes indexado?" (ver GET /documents
+        en main.py y RAGService._build_meta_answer, que reutiliza este
+        mismo método para responder preguntas agregadas dentro del chat).
+
+        Args:
+            collection_name: Colección a consultar (opcional)
+
+        Returns:
+            list[DocumentSummary]: uno por documento, orden alfabético por título
+        """
+        collection = collection_name or settings.chromadb_collection_name
+        return await self.vector_db.list_documents(collection)

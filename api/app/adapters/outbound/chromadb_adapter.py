@@ -50,7 +50,7 @@ from typing import List, Dict, Any, Optional
 
 # Importamos el PUERTO (interfaz) que implementamos
 from app.core.ports.vector_db_port import VectorDBPort
-from app.core.domain.models import Chunk, SourceDocument
+from app.core.domain.models import Chunk, SourceDocument, DocumentSummary
 from app.config.settings import settings
 
 # Observabilidad: logging estructurado y métricas
@@ -472,3 +472,89 @@ class ChromaDBAdapter(VectorDBPort):
                 "status": "error",
                 "error": str(e)
             }
+
+    async def list_documents(
+        self,
+        collection_name: str = "documents"
+    ) -> List[DocumentSummary]:
+        """
+        Lista los documentos distintos de una colección, agrupando chunks
+        por su "document_id" en metadata.
+
+        A diferencia de similarity_search, esto NO hace ranking por
+        similitud ni aplica top_k: trae TODOS los chunks de la colección
+        (collection.get(), sin query_embeddings) y los agrupa. A esta
+        escala (decenas/cientos de chunks) es barato; si la colección
+        creciera mucho (miles de chunks) habría que paginar con
+        limit/offset — no implementado en este MVP.
+
+        ¿Cómo se obtiene "title" y "source" de cada documento?
+        - title: metadata["title"] si existe y no es "Untitled" (páginas
+          de Notion sin título — ver NotionProcessorAdapter._extract_title),
+          si no metadata["filename"] (PDFs), si no el propio document_id.
+        - source: no viene como campo explícito en los metadatos de cada
+          chunk, así que se infiere del prefijo determinista del
+          document_id ("pdf_..." / "notion_...", ver cómo lo generan
+          PDFProcessorAdapter.load_document y NotionProcessorAdapter.load_document).
+
+        Args:
+            collection_name: Colección a consultar
+
+        Returns:
+            List[DocumentSummary]: uno por document_id, orden alfabético por título
+        """
+        try:
+            collection = self._get_or_create_collection(collection_name)
+
+            # include=["metadatas"]: no hace falta traer embeddings ni
+            # documents (el texto de los chunks), solo sus metadatos
+            result = collection.get(include=["metadatas"])
+
+            ids = result.get("ids") or []
+            metadatas = result.get("metadatas") or []
+
+            # Agrupa chunks por document_id, contando cuántos hay de cada uno
+            # y quedándonos con los metadatos del primero que veamos (todos
+            # los chunks de un mismo documento comparten title/filename)
+            grouped: Dict[str, Dict[str, Any]] = {}
+            for chunk_id, metadata in zip(ids, metadatas):
+                metadata = metadata or {}
+                document_id = metadata.get("document_id", chunk_id)
+                if document_id not in grouped:
+                    grouped[document_id] = {"chunk_count": 0, "metadata": metadata}
+                grouped[document_id]["chunk_count"] += 1
+
+            summaries = []
+            for document_id, info in grouped.items():
+                metadata = info["metadata"]
+
+                title = metadata.get("title")
+                if not title or title == "Untitled":
+                    title = metadata.get("filename") or document_id
+
+                if document_id.startswith("pdf_"):
+                    source = "pdf"
+                elif document_id.startswith("notion_"):
+                    source = "notion"
+                else:
+                    source = "unknown"
+
+                summaries.append(DocumentSummary(
+                    document_id=document_id,
+                    title=title,
+                    source=source,
+                    chunk_count=info["chunk_count"]
+                ))
+
+            summaries.sort(key=lambda doc: doc.title.lower())
+
+            logger.info(
+                "Listed documents in collection",
+                collection_name=collection_name,
+                document_count=len(summaries)
+            )
+            return summaries
+
+        except Exception as e:
+            logger.error("Failed to list documents", error=str(e), collection_name=collection_name)
+            return []

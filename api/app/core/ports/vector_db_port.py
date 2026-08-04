@@ -29,7 +29,7 @@ La implementación real está en: /adapters/outbound/chromadb_adapter.py
 # abstractmethod marca métodos como "obligatorios de implementar"
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
-from app.core.domain.models import Chunk, SourceDocument
+from app.core.domain.models import Chunk, SourceDocument, DocumentSummary
 
 
 # ============================================================================
@@ -230,5 +230,36 @@ class VectorDBPort(ABC):
         - Monitoreo del sistema
         - Verificar que hay documentos cargados
         - Debugging ("¿se indexaron mis PDFs?")
+        """
+        pass
+
+    @abstractmethod
+    async def list_documents(
+        self,
+        collection_name: str = "documents"
+    ) -> List[DocumentSummary]:
+        """
+        Lista los documentos distintos almacenados en una colección,
+        agrupando sus chunks — sin pasar por similarity_search.
+
+        ¿Por qué hace falta esto si ya existe similarity_search?
+        similarity_search siempre devuelve como mucho top_k chunks, los
+        más parecidos a una pregunta. Es la herramienta correcta para
+        "¿qué dice el libro X sobre Y?", pero es la herramienta
+        EQUIVOCADA para "¿cuántos documentos tienes en total?" — con top_k
+        nunca puedes garantizar ver el catálogo completo. list_documents
+        consulta los metadatos directamente, sin ranking ni umbral de
+        relevancia, así que siempre devuelve TODOS los documentos.
+
+        Args:
+            collection_name: Colección a consultar
+
+        Returns:
+            List[DocumentSummary]: Uno por document_id distinto, con su
+            título, fuente y número de chunks. Orden alfabético por título.
+
+        Útil para:
+        - Endpoint GET /documents (explorar la base de conocimiento desde el UI)
+        - RAGService respondiendo preguntas tipo "¿qué documentos conoces?"
         """
         pass

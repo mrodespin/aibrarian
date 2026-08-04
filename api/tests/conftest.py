@@ -28,7 +28,7 @@ from unittest.mock import Mock, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from typing import List, Optional, Dict
 
-from app.core.domain.models import Document, Chunk, QueryResult, SourceDocument, User
+from app.core.domain.models import Document, Chunk, QueryResult, SourceDocument, User, DocumentSummary
 from app.main import app
 
 
@@ -241,9 +241,17 @@ def mock_chromadb():
             "collection_name": collection_name
         }
 
+    # Mock de list_documents (catálogo completo, no pasa por similarity_search)
+    async def mock_list_documents(collection_name: str = "documents") -> List[DocumentSummary]:
+        return [
+            DocumentSummary(document_id="doc_001", title="1984", source="notion", chunk_count=3),
+            DocumentSummary(document_id="doc_002", title="Deep Learning", source="notion", chunk_count=4),
+        ]
+
     mock.store_chunks = AsyncMock(side_effect=mock_store)
     mock.similarity_search = AsyncMock(side_effect=mock_similarity_search)
     mock.get_collection_stats = AsyncMock(side_effect=mock_stats)
+    mock.list_documents = AsyncMock(side_effect=mock_list_documents)
 
     return mock
 

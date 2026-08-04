@@ -301,6 +301,31 @@ def test_stats_endpoint_returns_collection_info(test_client):
 
 
 # ============================================================================
+# TESTS DEL ENDPOINT GET /documents
+# ============================================================================
+
+@pytest.mark.unit
+def test_list_documents_endpoint_returns_200(test_client):
+    """
+    Test: GET /documents debe retornar 200 OK.
+
+    A diferencia de /stats, list_documents() en el adapter nunca lanza
+    (mismo contrato que similarity_search/get_collection_stats: en error
+    degrada a lista vacía), así que aquí no hace falta tolerar un código
+    alternativo — siempre 200, con "documents": [] si el vector_db real
+    no está disponible en el entorno de test.
+    """
+    response = test_client.get("/documents")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "total" in data
+    assert "documents" in data
+    assert isinstance(data["documents"], list)
+    assert data["total"] == len(data["documents"])
+
+
+# ============================================================================
 # TESTS DE CORS Y HEADERS
 # ============================================================================
 

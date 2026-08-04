@@ -132,6 +132,12 @@ def test_protected_endpoint_without_auth_returns_401(client):
 
 
 @pytest.mark.unit
+def test_list_documents_without_auth_returns_401(client):
+    response = client.get("/documents")
+    assert response.status_code == 401
+
+
+@pytest.mark.unit
 def test_protected_endpoint_with_auth_is_not_blocked_by_auth_layer(client):
     """
     Con una sesión válida, /ask deja de devolver 401 por falta de auth.

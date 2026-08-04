@@ -1117,6 +1117,38 @@ async def ask_question_stream(query: Query, current_user: TokenPayload = Depends
 # Endpoints de utilidad
 # ----------------------------------------------------------------------------
 
+@app.get("/documents", dependencies=[Depends(get_current_user)])
+async def list_documents():
+    """
+    Lista todos los documentos indexados en la base de conocimiento.
+
+    A diferencia de POST /ask, esto NO pasa por el LLM ni por similarity
+    search — devuelve el catálogo completo agrupando chunks por
+    document_id (ver RAGService.list_known_documents / VectorDBPort.list_documents).
+
+    Pensado para que el frontend pueda mostrar "qué hay indexado" sin
+    depender de que el chat sepa responder bien preguntas agregadas tipo
+    "¿cuántos documentos tienes?" (el RAG semántico por sí solo no puede
+    garantizar cubrir el catálogo completo, ver RAGService._is_meta_question
+    para el caso equivalente dentro del chat).
+
+    Ejemplo de respuesta:
+        {
+            "total": 12,
+            "documents": [
+                {"document_id": "notion_abc123", "title": "1984", "source": "notion", "chunk_count": 3},
+                ...
+            ]
+        }
+    """
+    try:
+        documents = await rag_service.list_known_documents()
+        return {"total": len(documents), "documents": documents}
+    except Exception as e:
+        logger.error("Failed to list documents", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.delete("/documents/{document_id}", dependencies=[Depends(get_current_user)])
 async def delete_document(document_id: str):
     """
