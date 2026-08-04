@@ -373,14 +373,11 @@ VECTOR_SEARCH_LATENCY.observe(duration)
 
 | Documento | Descripción |
 |-----------|-------------|
-| **[docs/Bibliotecario-IA_Presentacion_TFM.pptx](docs/Bibliotecario-IA_Presentacion_TFM.pptx)** | Slides de presentación del proyecto |
 | **[docs/STRUCTURE.md](docs/STRUCTURE.md)** | Arquitectura y estructura del proyecto |
 | **[docs/USAGE.md](docs/USAGE.md)** | API endpoints y scripts CLI |
 | **[docs/USAGE_TESTING.md](docs/USAGE_TESTING.md)** | Suite de tests y guía de testing |
 | **[docs/adr/INDEX.md](docs/adr/INDEX.md)** | Decisiones arquitectónicas (ADRs) |
 | **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Despliegue opcional en Render (Groq + Chroma Cloud) |
-| **[.ai/context.md](.ai/context.md)** | Contexto para agentes IA |
-| **[.ai/evaluation.md](.ai/evaluation.md)** | Contexto sobre los criterios de evaluacion del TFM para agentes IA |
 
 ---
 
@@ -484,22 +481,16 @@ cd frontend && npm run dev
 
 - **Solo macOS (desarrollo local)**: El entorno con Ollama nativo está optimizado para macOS con Apple Silicon (GPU Metal). El modo cloud (Groq + Chroma Cloud, ver despliegue) no tiene esta limitación
 - **Modelos locales**: La calidad de las respuestas de llama3.2 (3B parámetros) es inferior a modelos cloud como GPT-4, pero suficiente para el caso de uso y garantiza privacidad total
-- **Cookies de sesión y navegadores**: si despliegas frontend y API en subdominios `.onrender.com` distintos (lo normal si no configuras un dominio propio), Safari y otros navegadores con bloqueo de cookies de terceros activado por defecto descartan la cookie de sesión — el login "parece" funcionar pero las peticiones protegidas posteriores dan 401. Se soluciona sirviendo frontend y API bajo el mismo dominio raíz (pendiente, ver Trabajo Futuro)
 - **Escalabilidad**: ChromaDB en modo standalone no escala horizontalmente. Adecuado para miles de documentos, no para millones
 
 ## 🔮 Trabajo Futuro
 
 - **Streaming de respuestas**: Implementar Server-Sent Events (SSE) para mostrar la respuesta del LLM token a token en tiempo real
 - **Historial de conversación**: Mantener contexto entre preguntas para permitir preguntas de seguimiento ("¿puedes ampliar eso?")
-- **Más fuentes de datos**: Integrar Google Drive, Confluence, o páginas web como fuentes adicionales de documentos
 - **Evaluación del RAG**: Implementar métricas de calidad (faithfulness, relevance) con frameworks como RAGAS
-- **Soporte multi-plataforma**: Adaptar scripts de instalación para Linux y Windows (WSL)
-- **Dominio propio**: mover frontend/API al mismo dominio raíz (p. ej. `app.dominio.com` + `api.dominio.com`) para que la cookie de sesión funcione en todos los navegadores, incluido Safari (ver Limitaciones Conocidas)
 - **Tests de frontend**: no hay ningún test automatizado en `frontend/` todavía (ni Vitest ni Testing Library configurados) — añadir cobertura al menos de los componentes de auth y chat
 - **CI de frontend**: el workflow actual (`.github/workflows/test.yml`) solo corre `pytest -m unit`; añadir `npm run build` y `npm run lint` para detectar roturas del frontend en cada PR
 - **Subir cobertura de tests del backend**: 62% global, pero concentrado en los *services* (mockeados); los adapters que hablan con servicios reales están poco cubiertos (Notion 29%, PDF 34%, Postgres 35%, ChromaDB 46%)
-- **Rate limiting en `/auth/login`**: no hay throttling — aceptable para un demo personal, pero necesario antes de invitar tráfico público a probarlo
-- **Resolver alertas de Dependabot**: el repo tiene vulnerabilidades de dependencias señaladas por GitHub (varias críticas/altas) pendientes de revisar y actualizar
 - **Tracing distribuido**: no hay OpenTelemetry/Jaeger implementado, solo logging estructurado y métricas (ver Observabilidad)
 
 ---

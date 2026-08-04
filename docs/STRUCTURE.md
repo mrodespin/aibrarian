@@ -80,10 +80,6 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   ├── postcss.config.js           # PostCSS configuration
 │   └── README.md                   # Frontend documentation
 │
-├── /.ai/                           # Contexto para Agentes IA
-│   ├── context.md                  # Contexto completo del proyecto (stack, arquitectura, comandos)
-│   └── evaluation.md               # Notas internas de evaluación TFM — solo local, gitignored
-│
 ├── /docs/                          # Documentación Técnica (Humanos)
 │   ├── STRUCTURE.md                # Este archivo - estructura y arquitectura
 │   ├── USAGE.md                    # Documentación de API y uso

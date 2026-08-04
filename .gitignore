@@ -22,6 +22,9 @@ desktop.ini
 # === AI Tools ===
 # Claude Code local settings (not project context)
 .claude/
+# Internal AI-agent context — not for a public portfolio repo
+CLAUDE.md
+.ai/
 
 # === Python / Backend ('/api') ===
 # Virtual environments
@@ -63,10 +66,6 @@ yarn-error.log
 .vite/
 
 # === Project Specific ===
-# Notas internas de evaluación TFM (fecha límite, checklist de nota) —
-# útil para el autor, no aporta nada como portafolio público.
-.ai/evaluation.md
-
 
 # Data files (PDFs, generated files)
 # Keep README.md and scripts, ignore actual documents
