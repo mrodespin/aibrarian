@@ -2,8 +2,8 @@
 
 ![TFM](https://img.shields.io/badge/Proyecto-TFM_MDEV_IA-blue.svg)
 ![Licencia](https://img.shields.io/badge/Licencia-MIT-green.svg)
-![Tests](https://img.shields.io/badge/Tests-90_passed-brightgreen.svg)
-![Coverage](https://img.shields.io/badge/Coverage-62%25-yellow.svg)
+![Tests](https://img.shields.io/badge/Tests-108_passed-brightgreen.svg)
+![Coverage](https://img.shields.io/badge/Coverage-63%25-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)
 
 TFM que implementa un asistente RAG multiusuario ('Bibliotecario IA') para consultar documentos privados (PDFs y Notion), con LLM local (Ollama) o cloud (Groq), autenticación JWT y arquitectura hexagonal.
@@ -29,9 +29,13 @@ El acceso está protegido con **autenticación JWT multiusuario** (token enviado
 
 ### 🧠 Sistema RAG Avanzado
 - **Búsqueda Híbrida**: Combinación de búsqueda semántica + keywords extraídos (Query Expansion, implementación propia)
+- **Filtro de Relevancia**: Umbral mínimo de similitud (`min_relevance_score`) — descarta chunks poco relevantes antes de generar, en vez de forzar al LLM a responder con contexto irrelevante
 - **LLM Intercambiable**: Ollama local (`llama3.2`, privacidad total) o Groq cloud (`openai/gpt-oss-120b`, para despliegues sin GPU local) — mismo código, se elige por variable de entorno
+- **Respuestas en Streaming**: Server-Sent Events (`POST /ask/stream`) — la respuesta se muestra token a token en vez de esperar a tenerla completa
+- **Historial de Conversación**: Contexto entre preguntas (Postgres), permite preguntas de seguimiento ("¿puedes ampliar eso?")
 - **Respuestas Contextualizadas**: Citas con referencias a documentos fuente
 - **Prompt Engineering**: Instrucciones estrictas para evitar alucinaciones
+- **Evaluación de Calidad**: Harness de RAGAS (faithfulness, answer relevancy, context precision) contra un dataset de referencia — `pytest -m eval`
 
 ### 🎨 Interfaz de Usuario
 - **Chat Conversacional**: Interfaz intuitiva con historial de conversación
@@ -52,7 +56,7 @@ El acceso está protegido con **autenticación JWT multiusuario** (token enviado
 - **Endpoint /metrics**: Exposición de métricas para scraping
 
 ### 🧪 Testing
-- **90 Tests Unitarios**: Pytest con 62% de cobertura (medido, ver nota en Trabajo Futuro sobre dónde falta cobertura)
+- **108 Tests Unitarios**: Pytest con 63% de cobertura (medido, ver nota en Trabajo Futuro sobre dónde falta cobertura)
 - **Tests de Integración**: End-to-end con servicios reales
 - **Mocks Configurados**: Para Ollama, ChromaDB, Postgres y procesadores
 - **CI**: GitHub Actions ejecuta la suite `unit` en cada push/PR (backend; ver Trabajo Futuro sobre frontend)
@@ -485,12 +489,9 @@ cd frontend && npm run dev
 
 ## 🔮 Trabajo Futuro
 
-- **Streaming de respuestas**: Implementar Server-Sent Events (SSE) para mostrar la respuesta del LLM token a token en tiempo real
-- **Historial de conversación**: Mantener contexto entre preguntas para permitir preguntas de seguimiento ("¿puedes ampliar eso?")
-- **Evaluación del RAG**: Implementar métricas de calidad (faithfulness, relevance) con frameworks como RAGAS
 - **Tests de frontend**: no hay ningún test automatizado en `frontend/` todavía (ni Vitest ni Testing Library configurados) — añadir cobertura al menos de los componentes de auth y chat
 - **CI de frontend**: el workflow actual (`.github/workflows/test.yml`) solo corre `pytest -m unit`; añadir `npm run build` y `npm run lint` para detectar roturas del frontend en cada PR
-- **Subir cobertura de tests del backend**: 62% global, pero concentrado en los *services* (mockeados); los adapters que hablan con servicios reales están poco cubiertos (Notion 29%, PDF 34%, Postgres 35%, ChromaDB 46%)
+- **Subir cobertura de tests del backend**: 63% global, pero concentrado en los *services* (mockeados); los adapters que hablan con servicios reales están poco cubiertos
 - **Tracing distribuido**: no hay OpenTelemetry/Jaeger implementado, solo logging estructurado y métricas (ver Observabilidad)
 
 ---
