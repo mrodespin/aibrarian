@@ -3,14 +3,13 @@
  */
 
 import { SyncForm } from './SyncForm';
+import { DocumentList } from './DocumentList';
 
 export function DocumentPanel() {
   return (
     <div className="space-y-4">
       <SyncForm />
-
-      {/* Future: Document list could go here */}
-      {/* <DocumentList /> */}
+      <DocumentList />
     </div>
   );
 }
