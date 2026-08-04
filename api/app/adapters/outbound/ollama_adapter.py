@@ -230,11 +230,22 @@ RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
             # ainvoke() es el método async de LangChain para invocar el LLM
             # "a" de ainvoke = async (vs invoke que es síncrono)
             # Equivalente: await llm.invoke(prompt) en versión async
+            #
+            # OJO: OllamaLLM._default_params solo expone 4 keys de nivel superior
+            # (model, format, options, keep_alive); ainvoke() únicamente reenvía a
+            # Ollama los kwargs que coincidan con esos nombres. temperature y
+            # num_predict (max_tokens) van ANIDADOS dentro de "options" — pasarlos
+            # sueltos como kwargs (como se hacía antes) no lanza ningún error,
+            # simplemente Ollama los ignora y siempre usa la temperature con la
+            # que se construyó el cliente en _get_llm().
+            ollama_options: Dict[str, Any] = {"temperature": temperature, **kwargs}
+            if max_tokens is not None:
+                ollama_options["num_predict"] = max_tokens
+
             start_time = time.perf_counter()
             response = await llm.ainvoke(
                 full_prompt,
-                temperature=temperature,
-                **kwargs  # Parámetros adicionales (top_p, etc.)
+                options=ollama_options
             )
             duration = time.perf_counter() - start_time
 
@@ -427,9 +438,11 @@ Pregunta: {question}
 Keywords:"""
 
             start_time = time.perf_counter()
+            # Igual que en generate_response(): temperature va anidada en "options",
+            # no como kwarg suelto (ver comentario detallado ahí).
             response = await llm.ainvoke(
                 extraction_prompt,
-                temperature=0.1  # Muy bajo para respuestas consistentes
+                options={"temperature": 0.1}  # Muy bajo para respuestas consistentes
             )
             duration = time.perf_counter() - start_time
 

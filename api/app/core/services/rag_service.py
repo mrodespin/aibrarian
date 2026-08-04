@@ -178,6 +178,7 @@ class RAGService:
                         top_k=query.max_results,
                         keyword_filter=keyword
                     )
+                    source_documents = self._filter_by_relevance(source_documents)
                     if source_documents:
                         logger.info(f"Found {len(source_documents)} docs with keyword '{keyword}'")
                         break  # Encontramos resultados, no seguir buscando
@@ -194,6 +195,7 @@ class RAGService:
                     collection_name=collection,
                     top_k=query.max_results
                 )
+                source_documents = self._filter_by_relevance(source_documents)
 
             # Si no hay resultados relevantes, no llamamos al LLM
             # Ahorra recursos y evita que invente una respuesta
@@ -226,7 +228,7 @@ class RAGService:
             answer = await self.llm.generate_response(
                 prompt=query.question,
                 context=context,
-                temperature=settings.llm_temperature,   # Ej: 0.3 para precisión
+                temperature=settings.rag_temperature,    # 0.3 por defecto, para precisión
                 max_tokens=settings.llm_max_tokens       # Límite de respuesta
             )
 
@@ -259,6 +261,34 @@ class RAGService:
                 session_id=query.session_id,
                 processing_time=time.time() - start_time
             )
+
+    def _filter_by_relevance(self, source_documents: list[SourceDocument]) -> list[SourceDocument]:
+        """
+        Descarta chunks cuyo relevance_score está por debajo del umbral mínimo.
+
+        ¿Por qué hace falta esto?
+        ChromaDB siempre devuelve exactamente top_k resultados (los más cercanos
+        disponibles), aunque ninguno sea realmente relevante para la pregunta.
+        Sin este filtro, esos chunks poco relevantes se usan igualmente como
+        contexto y el LLM acaba fabricando una respuesta en vez de admitir que
+        no tiene información — justo el bug que este método corrige.
+
+        Args:
+            source_documents: Chunks recuperados de ChromaDB (ya rankeados)
+
+        Returns:
+            list[SourceDocument]: Solo los chunks con relevance_score >= umbral
+        """
+        filtered = [
+            doc for doc in source_documents
+            if doc.relevance_score is None or doc.relevance_score >= settings.min_relevance_score
+        ]
+        if len(filtered) < len(source_documents):
+            logger.info(
+                f"Filtered out {len(source_documents) - len(filtered)} low-relevance chunks "
+                f"(threshold={settings.min_relevance_score})"
+            )
+        return filtered
 
     def _build_context(self, source_documents: list[SourceDocument]) -> str:
         """

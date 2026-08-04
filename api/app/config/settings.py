@@ -158,11 +158,39 @@ class Settings(BaseSettings):
     # ge y le son validaciones de Pydantic (como min/max en Zod)
     # Si alguien pone max_context_chunks=0, Pydantic lanza error automáticamente
 
+    min_relevance_score: float = Field(
+        default=0.3,                       # score = 1/(1+distancia_L2); ver chromadb_adapter.py
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Score mínimo de relevancia para que un chunk recuperado se use como contexto. "
+            "Sin este filtro, ChromaDB siempre devuelve los top_k chunks más cercanos aunque "
+            "ninguno sea realmente relevante, y el LLM acaba fabricando una respuesta en vez "
+            "de admitir que no tiene información."
+        )
+    )
+
     llm_temperature: float = Field(
         default=0.7,                       # Balance entre precisión y variedad
         ge=0.0,                            # Mínimo 0.0 (determinista)
         le=1.0,                            # Máximo 1.0 (muy creativo)
         description="Temperature for LLM generation"
+    )
+    rag_temperature: float = Field(
+        default=0.3,                       # Precisión > variedad para la respuesta final del RAG
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Temperature específica para la generación de la respuesta final en RAGService "
+            "(distinta de llm_temperature, que se usa para construir el cliente y otras "
+            "llamadas como extract_keywords)."
+        )
+    )
+    conversation_history_turns: int = Field(
+        default=3,                         # 3 turnos = 6 mensajes (usuario+asistente x3)
+        ge=0,
+        le=10,
+        description="Número de turnos previos de la conversación a incluir como contexto en el prompt"
     )
     llm_max_tokens: Optional[int] = Field(
         default=None,                      # None = sin límite de tokens

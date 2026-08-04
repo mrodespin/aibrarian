@@ -180,6 +180,76 @@ async def test_query_limits_context_chunks(rag_service_with_mocks):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_query_filters_low_relevance_chunks(rag_service_with_mocks, sample_query, mock_chromadb):
+    """
+    Test: chunks con relevance_score por debajo del umbral se descartan.
+
+    Sin este filtro, ChromaDB devuelve top_k chunks aunque no sean relevantes
+    y el LLM acaba fabricando una respuesta en vez de decir "no lo sé".
+    """
+    # Arrange: un chunk relevante (0.9) y uno claramente irrelevante (0.05)
+    from app.core.domain.models import SourceDocument
+
+    async def mock_search(*args, **kwargs):
+        return [
+            SourceDocument(
+                document_id="doc_relevant",
+                chunk_content="Chunk relevante",
+                metadata={},
+                relevance_score=0.9
+            ),
+            SourceDocument(
+                document_id="doc_irrelevant",
+                chunk_content="Chunk irrelevante",
+                metadata={},
+                relevance_score=0.05
+            ),
+        ]
+
+    mock_chromadb.similarity_search = AsyncMock(side_effect=mock_search)
+
+    # Act
+    response = await rag_service_with_mocks.ask_question(sample_query)
+
+    # Assert
+    doc_ids = [source.document_id for source in response.source_documents]
+    assert "doc_relevant" in doc_ids
+    assert "doc_irrelevant" not in doc_ids
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_query_all_chunks_below_threshold_returns_no_info(rag_service_with_mocks, sample_query, mock_chromadb):
+    """
+    Test: si TODOS los chunks recuperados están por debajo del umbral,
+    se devuelve el mismo fallback que cuando no hay resultados en absoluto
+    (no un branch nuevo, reutiliza el existente).
+    """
+    # Arrange: todos los chunks por debajo del umbral por defecto (0.3)
+    from app.core.domain.models import SourceDocument
+
+    async def mock_search(*args, **kwargs):
+        return [
+            SourceDocument(
+                document_id="doc_irrelevant",
+                chunk_content="Chunk irrelevante",
+                metadata={},
+                relevance_score=0.1
+            ),
+        ]
+
+    mock_chromadb.similarity_search = AsyncMock(side_effect=mock_search)
+
+    # Act
+    response = await rag_service_with_mocks.ask_question(sample_query)
+
+    # Assert
+    assert response.source_documents == []
+    assert "no encontré información relevante" in response.answer
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_query_includes_source_metadata(rag_service_with_mocks, sample_query):
     """
     Test: verificar que las fuentes incluyen metadata útil.
