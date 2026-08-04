@@ -589,8 +589,10 @@ Keywords:"""
 
             classification_prompt = f"""Clasifica la siguiente pregunta en una sola categoría.
 
-CATALOG: la pregunta pide el número total, un listado o un resumen de TODOS los documentos disponibles (ej: "¿cuántos libros conoces?", "how many books do you have?", "qué documentos tienes", "lista los libros").
-CONTENT: la pregunta pide información específica sobre el contenido de uno o varios documentos (ej: "¿quién escribió 1984?", "what is Docker?", "resume el capítulo 3").
+CATALOG: la pregunta pide el número total, un listado o un resumen de TODOS los documentos que hay en la base de conocimiento, como colección. Ejemplos: "¿cuántos libros conoces?", "how many books do you have?", "qué documentos tienes", "lista los libros", "qué hay en tu base de conocimiento".
+CONTENT: la pregunta pide información sobre UN documento concreto (aunque no lo nombre explícitamente y se sobreentienda por el contexto de la conversación) — incluye preguntas que piden una CANTIDAD sobre ESE documento en particular: páginas, capítulos, año de publicación, precio, etc. Ejemplos: "¿quién escribió 1984?", "what is Docker?", "resume el capítulo 3", "¿cuántas páginas tiene?", "¿cuántos capítulos tiene este libro?", "¿en qué año se publicó?".
+
+Regla clave para desambiguar: si la pregunta pide una cantidad SOBRE UN documento (páginas, capítulos, año...) es CONTENT, no CATALOG. Solo es CATALOG si pregunta por el número o listado de TODOS los documentos de la base de conocimiento en su conjunto.
 
 Responde con una única palabra: CATALOG o CONTENT. Nada más.
 
