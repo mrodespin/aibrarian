@@ -48,9 +48,18 @@ services:
     volumes:
       - chroma_data:/chroma/chroma
     healthcheck:
-      # /api/v1/heartbeat da 410 Gone desde que se subió la imagen a 1.5.9
-      # (v1 de la API retirada); usar /api/v2/heartbeat en su lugar.
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      # La imagen chromadb/chroma:1.5.9 no trae curl ni wget ni python (es
+      # una imagen mínima con el binario `chroma` y poco más — confirmado
+      # con `docker exec ... ls /bin /usr/bin`), así que un healthcheck
+      # basado en curl se queda siempre en "unhealthy" aunque el servidor
+      # esté perfectamente arriba (probado: exec falla con "curl: executable
+      # file not found in $PATH", no es que el heartbeat responda mal).
+      # Usamos el truco de /dev/tcp de bash (sí está disponible) para
+      # comprobar que el puerto acepta conexiones — más débil que un check
+      # HTTP real (no valida el body del heartbeat), pero suficiente para
+      # saber que el proceso está escuchando, y no depende de ningún
+      # binario extra en la imagen.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8000"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -82,7 +91,12 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      # python:3.11-slim tampoco trae curl instalado por defecto (mismo
+      # problema que el healthcheck de chromadb, ver más arriba) — pero
+      # este contenedor SÍ tiene python3 siempre disponible (es la propia
+      # app), así que usamos urllib de la stdlib en vez de añadir curl a
+      # la imagen solo para esto.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 5
