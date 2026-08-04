@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from typing import List
 
 from app.core.domain.models import Document, Chunk, DocumentSource, SyncResult
+from app.adapters.outbound.notion_processor_adapter import NotionProcessorAdapter
 
 
 # ============================================================================
@@ -311,3 +312,72 @@ def test_notion_database_endpoint_without_api_key(test_client):
 
     # Assert
     assert response.status_code in [400, 422, 500]
+
+
+# ============================================================================
+# TESTS DE _extract_title() — descubrimiento por type=="title", no por nombre
+# ============================================================================
+# NotionProcessorAdapter() no necesita API key real para estos tests: la key
+# solo se usa al crear el cliente HTTP (_get_client), lazy y no invocado aquí.
+# _extract_title() es una función pura sobre un dict, así que se instancia
+# el adapter real (sin mocks) y se le pasan payloads de página construidos
+# a mano, igual de shape que los que devuelve la API de Notion.
+
+def _fake_page(properties: dict) -> dict:
+    """Construye un payload de página de Notion mínimo para los tests."""
+    return {"properties": properties}
+
+
+def _title_property(text: str) -> dict:
+    """Construye una propiedad type=="title" con el texto dado."""
+    return {"type": "title", "title": [{"plain_text": text}] if text else []}
+
+
+@pytest.mark.unit
+def test_extract_title_finds_title_by_type_regardless_of_property_name():
+    """
+    Caso que reproduce el bug original: la columna título de la BD de
+    Notion no se llama "title"/"Name"/"Nombre" (ninguno de los nombres que
+    probaba la versión antigua), sino algo arbitrario como "Película".
+    Debe encontrarse igualmente porque se busca por type, no por nombre.
+    """
+    adapter = NotionProcessorAdapter(notion_api_key="fake-key")
+    page = _fake_page({
+        "Película": _title_property("Blade Runner 2049"),
+        "Año": {"type": "number", "number": 2017},
+    })
+
+    assert adapter._extract_title(page) == "Blade Runner 2049"
+
+
+@pytest.mark.unit
+def test_extract_title_still_works_with_common_names():
+    """Regresión: los nombres de columna típicos siguen funcionando."""
+    adapter = NotionProcessorAdapter(notion_api_key="fake-key")
+    page = _fake_page({
+        "Name": _title_property("Deep Learning"),
+    })
+
+    assert adapter._extract_title(page) == "Deep Learning"
+
+
+@pytest.mark.unit
+def test_extract_title_returns_untitled_when_title_property_is_empty():
+    """Si la celda título existe pero está vacía, cae al fallback "Untitled"."""
+    adapter = NotionProcessorAdapter(notion_api_key="fake-key")
+    page = _fake_page({
+        "Nombre": _title_property(""),
+    })
+
+    assert adapter._extract_title(page) == "Untitled"
+
+
+@pytest.mark.unit
+def test_extract_title_returns_untitled_when_no_title_property_exists():
+    """Si no hay ninguna propiedad type=="title" (payload degenerado), fallback."""
+    adapter = NotionProcessorAdapter(notion_api_key="fake-key")
+    page = _fake_page({
+        "Año": {"type": "number", "number": 2017},
+    })
+
+    assert adapter._extract_title(page) == "Untitled"

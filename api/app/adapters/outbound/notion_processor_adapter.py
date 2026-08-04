@@ -442,11 +442,23 @@ class NotionProcessorAdapter(DocumentProcessorPort):
         """
         Extrae el título de una página de Notion.
 
-        En Notion, el título es una propiedad especial de tipo "title".
-        El nombre de esa propiedad puede variar: "title", "Title", "Name", "name".
-        Este método prueba los nombres más comunes.
+        En Notion, el título es una propiedad especial de tipo "title" —
+        pero el NOMBRE de esa propiedad (la columna que ve el usuario) es
+        arbitrario: puede llamarse "Nombre", "Película", "Libro", "Título"
+        con tilde, lo que sea. Notion no garantiza el nombre, solo garantiza
+        que exista exactamente UNA propiedad con type=="title" por página
+        (venga o no de una base de datos).
 
-        Si no encuentra título, retorna "Untitled" como fallback.
+        Por eso este método NO adivina nombres de columna (la versión
+        anterior probaba una lista fija ["title", "Title", "Name", "name",
+        "Nombre"], que fallaba en cuanto la BD usaba cualquier otro nombre
+        — daba "Untitled" para las 12 páginas de una BD real con la columna
+        llamada de otra forma). En su lugar busca por type, igual que ya
+        hace _extract_properties_content() unas líneas más abajo — mismo
+        criterio en los dos sitios que leen el título.
+
+        Si la propiedad título existe pero está vacía (nadie escribió nada
+        en esa celda de Notion), sigue devolviendo "Untitled" como fallback.
 
         Args:
             page: Objeto página devuelto por la API de Notion
@@ -456,13 +468,13 @@ class NotionProcessorAdapter(DocumentProcessorPort):
         """
         properties = page.get("properties", {})
 
-        # Prueba nombres comunes de la propiedad título
-        for key in ["title", "Title", "Name", "name", "Nombre"]:
-            if key in properties:
-                title_prop = properties[key]
-                if title_prop.get("type") == "title":
-                    title_array = title_prop.get("title", [])
-                    return self._extract_rich_text(title_array)
+        # Busca la propiedad con type=="title" sin importar su nombre
+        for prop_data in properties.values():
+            if prop_data.get("type") == "title":
+                title_array = prop_data.get("title", [])
+                title = self._extract_rich_text(title_array)
+                if title:
+                    return title
 
         return "Untitled"
 
