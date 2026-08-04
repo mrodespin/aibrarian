@@ -140,6 +140,58 @@ async def test_is_catalog_question_returns_false_on_error():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_condense_question_rewrites_using_history():
+    adapter = OllamaAdapter()
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value="¿En qué año se publicó 1984?")
+
+    with patch.object(adapter, "_get_llm", return_value=mock_llm):
+        result = await adapter.condense_question(
+            "¿En qué año se publicó?",
+            history="Usuario: háblame de 1984\nAsistente: ...publicado en 1949...",
+        )
+
+    assert result == "¿En qué año se publicó 1984?"
+    _, kwargs = mock_llm.ainvoke.call_args
+    assert kwargs["options"] == {"temperature": 0.0}
+    # El history se interpola dentro del prompt enviado a ainvoke
+    prompt_arg = mock_llm.ainvoke.call_args.args[0]
+    assert "publicado en 1949" in prompt_arg
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_condense_question_returns_original_on_empty_response():
+    """Si el LLM devuelve algo vacío/degenerado, mejor la original que perderla."""
+    adapter = OllamaAdapter()
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value="   ")
+
+    with patch.object(adapter, "_get_llm", return_value=mock_llm):
+        result = await adapter.condense_question("¿Cuántas páginas tiene?", history="algo")
+
+    assert result == "¿Cuántas páginas tiene?"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_condense_question_returns_original_on_error():
+    """Fallback seguro documentado en LLMPort: error → pregunta original, no excepción."""
+    adapter = OllamaAdapter()
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(side_effect=RuntimeError("connection refused"))
+
+    with patch.object(adapter, "_get_llm", return_value=mock_llm):
+        result = await adapter.condense_question("¿Cuántas páginas tiene?", history="algo")
+
+    assert result == "¿Cuántas páginas tiene?"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_stream_response_yields_chunks_via_astream():
     """stream_response() usa llm.astream() (no ainvoke) y reenvía cada trozo."""
     adapter = OllamaAdapter()

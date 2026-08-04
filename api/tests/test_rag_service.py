@@ -476,6 +476,80 @@ async def test_catalog_classification_failure_falls_back_to_content_pipeline(
 
 
 # ============================================================================
+# TESTS DE condense_question() (query rewriting) en ask_question()
+# ============================================================================
+# Patrón estándar de RAG conversacional: una pregunta de seguimiento se
+# reescribe como autocontenida usando el historial ANTES de retrievar, en
+# vez de intentar responder solo desde el historial o dejar que
+# similarity_search falle con una pregunta sin ancla (ver LLMPort.condense_question).
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_condense_question_called_when_history_present(
+    rag_service_with_mocks, mock_ollama, mock_chromadb
+):
+    """Con historial, se condensa antes de retrievar y el retrieval usa la pregunta condensada."""
+    from app.core.domain.models import Query
+
+    mock_ollama.condense_question = AsyncMock(return_value="¿En qué año se publicó 1984?")
+    history = "Usuario: háblame de 1984\nAsistente: ...publicado en 1949..."
+    query = Query(question="¿En qué año se publicó?")
+
+    await rag_service_with_mocks.ask_question(query, history=history)
+
+    mock_ollama.condense_question.assert_awaited_once_with(query.question, history)
+    # El retrieval (embeddings/keywords) debe usar la pregunta YA condensada,
+    # no la pregunta de seguimiento original sin contexto
+    mock_ollama.generate_embedding.assert_awaited_once_with("¿En qué año se publicó 1984?")
+    mock_ollama.extract_keywords.assert_awaited_once_with("¿En qué año se publicó 1984?")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_condense_question_not_called_without_history(
+    rag_service_with_mocks, sample_query, mock_ollama
+):
+    """Sin historial no hay nada que condensar — no se llama al LLM para eso."""
+    await rag_service_with_mocks.ask_question(sample_query)  # history=None por defecto
+
+    mock_ollama.condense_question.assert_not_called()
+    mock_ollama.generate_embedding.assert_awaited_once_with(sample_query.question)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_condense_question_not_called_for_catalog_questions(
+    rag_service_with_mocks, mock_ollama
+):
+    """Una pregunta de catálogo no necesita condensarse — se corta antes."""
+    from app.core.domain.models import Query
+
+    mock_ollama.is_catalog_question = AsyncMock(return_value=True)
+    query = Query(question="¿Cuántos libros conoces?")
+
+    await rag_service_with_mocks.ask_question(query, history="algo de historial")
+
+    mock_ollama.condense_question.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_generate_response_receives_condensed_question_as_prompt(
+    rag_service_with_mocks, mock_ollama
+):
+    """La respuesta final se genera con la pregunta condensada, no la original corta."""
+    from app.core.domain.models import Query
+
+    mock_ollama.condense_question = AsyncMock(return_value="¿Cuántas páginas tiene Cien años de soledad?")
+    query = Query(question="¿Cuántas páginas tiene?")
+
+    await rag_service_with_mocks.ask_question(query, history="Usuario: Cien años de soledad...")
+
+    _, kwargs = mock_ollama.generate_response.call_args
+    assert kwargs["prompt"] == "¿Cuántas páginas tiene Cien años de soledad?"
+
+
+# ============================================================================
 # TESTS DE ask_question_stream() (streaming SSE)
 # ============================================================================
 

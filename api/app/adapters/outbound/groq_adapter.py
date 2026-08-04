@@ -56,6 +56,22 @@ REGLAS ESTRICTAS:
 4. Cita las fuentes cuando sea relevante
 5. Responde en el mismo idioma que la pregunta"""
 
+# Usado cuando context=None pero sí hay history. RAGService no debería
+# llegar aquí en el flujo normal (condense_question() reescribe la
+# pregunta de seguimiento y sigue retrievando como siempre — ver
+# RAGService.ask_question), pero se deja como red de seguridad para
+# cualquier llamada con context=None + history. _RAG_SYSTEM_PROMPT no vale
+# aquí porque habla de "contexto" (chunks de ChromaDB), que en este caso
+# no existe — las mismas reglas anti-alucinación, aplicadas a la
+# conversación previa en vez de a chunks recuperados.
+_HISTORY_ONLY_SYSTEM_PROMPT = """Eres un asistente bibliotecario. Ya has hablado con el usuario sobre esto en esta misma conversación — la respuesta a su pregunta debería estar en lo que ya se dijo antes.
+
+REGLAS ESTRICTAS:
+1. Responde ÚNICAMENTE con información que ya aparece en la conversación previa
+2. NO uses tu conocimiento general ni inventes datos que no estén ahí
+3. Si la respuesta no está en la conversación previa, di "No tengo esa información en mi base de conocimientos"
+4. Responde en el mismo idioma que la pregunta"""
+
 
 class GroqAdapter(LLMPort):
     """
@@ -141,7 +157,11 @@ class GroqAdapter(LLMPort):
     ) -> str:
         client = self._get_client()
 
-        messages = [{"role": "system", "content": _RAG_SYSTEM_PROMPT}]
+        # Vía "history" del router (context=None, history presente): system
+        # prompt distinto, centrado en la conversación previa en vez de en
+        # "el contexto" (que en este caso no existe). Ver _HISTORY_ONLY_SYSTEM_PROMPT.
+        system_prompt = _HISTORY_ONLY_SYSTEM_PROMPT if (not context and history) else _RAG_SYSTEM_PROMPT
+        messages = [{"role": "system", "content": system_prompt}]
         if history:
             # Bloque ya formateado por ConversationService.get_history_prompt_block
             # (mismo formato de texto que usa OllamaAdapter, en vez de turnos
@@ -260,6 +280,49 @@ class GroqAdapter(LLMPort):
         except Exception as e:
             logger.warning("Failed to classify question intent via Groq, falling back to content pipeline", error=str(e))
             return False
+
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=1, max=5))
+    async def condense_question(self, question: str, history: str) -> str:
+        """Ver LLMPort.condense_question — mismo prompt/criterio que OllamaAdapter."""
+        try:
+            client = self._get_client()
+
+            condense_prompt = (
+                "Dada la conversación previa y la pregunta de seguimiento del usuario, "
+                "reescribe la pregunta de seguimiento como una pregunta autocontenida "
+                "(standalone) que incluya todo el contexto necesario para entenderla sin "
+                "necesitar la conversación previa.\n\n"
+                "Si la pregunta de seguimiento YA es autocontenida (por ejemplo, ya "
+                "menciona explícitamente el documento o tema del que habla), devuélvela "
+                "EXACTAMENTE IGUAL, sin cambiarla.\n\n"
+                "Responde SOLO con la pregunta (reescrita o igual), sin explicaciones, "
+                "sin comillas, sin prefijos.\n\n"
+                f"CONVERSACIÓN PREVIA:\n{history}\n\n"
+                f"PREGUNTA DE SEGUIMIENTO: {question}\n\n"
+                "PREGUNTA AUTOCONTENIDA:"
+            )
+
+            start_time = time.perf_counter()
+            completion = await client.chat.completions.create(
+                model=settings.groq_model,
+                messages=[{"role": "user", "content": condense_prompt}],
+                temperature=0.0,
+            )
+            duration = time.perf_counter() - start_time
+
+            condensed = (completion.choices[0].message.content or "").strip().strip('"')
+            if not condensed:
+                condensed = question
+
+            LLM_REQUESTS.labels(operation="condense_question").inc()
+            LLM_LATENCY.labels(operation="condense_question").observe(duration)
+            logger.info("Condensed follow-up question via Groq", original=question, condensed=condensed)
+
+            return condensed
+
+        except Exception as e:
+            logger.warning("Failed to condense question via Groq, using original", error=str(e))
+            return question
 
     # ========================================================================
     # Embeddings (local, backend configurable — ver _get_embedder)

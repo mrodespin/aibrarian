@@ -104,20 +104,31 @@ class RAGService:
         ESTE ES EL MÉTODO PRINCIPAL DEL SISTEMA.
         Es el que se invoca cuando un usuario hace una pregunta.
 
-        Atajo previo (antes de ①): si la pregunta es "meta" — sobre el
-        catálogo en sí ("¿cuántos documentos tienes?", en cualquier
-        idioma) en vez de sobre contenido — se responde directamente con
-        _build_meta_answer() en vez de con retrieval semántico. La
-        clasificación la hace el LLM (LLMPort.is_catalog_question), no un
-        regex — así no depende del idioma ni de una redacción concreta.
-        Sigue habiendo UNA llamada al LLM incluso en este atajo (la
-        clasificación), pero se ahorra el resto del pipeline: embedding,
-        similarity_search y la generación completa de la respuesta.
+        Atajo previo (antes de ①): antes de tocar la BD vectorial,
+        LLMPort.is_catalog_question() comprueba si la pregunta es sobre el
+        catálogo en sí ("¿cuántos documentos tienes?") → si lo es, se
+        responde con _build_meta_answer(), sin retrieval.
 
-        Pipeline con Query Expansion (preguntas de contenido normales):
-            ① Extraer keywords         → extract_keywords() [NUEVO]
+        Si NO es una pregunta de catálogo y hay `history`, la pregunta pasa
+        antes por LLMPort.condense_question() — patrón estándar de RAG
+        conversacional ("query rewriting" / "condense question", ver
+        `create_history_aware_retriever` de LangChain): reescribe una
+        pregunta de seguimiento corta ("¿en qué año se publicó?") como una
+        pregunta autocontenida ("¿en qué año se publicó Cien años de
+        soledad?") usando el historial. Existe porque una pregunta de
+        seguimiento sin nombres propios puede hacer que similarity_search
+        devuelva un chunk de OTRO documento con score suficiente para
+        "parecer" relevante — visto en producción, no es hipotético — y
+        ahí ya no hay señal de que algo fue mal después del hecho. Con la
+        pregunta ya autocontenida, el pipeline de retrieval de siempre
+        (extract_keywords + similarity_search) vuelve a funcionar sin
+        necesitar ninguna vía especial.
+
+        Pipeline con Query Expansion:
+            ⓪ Condensar si hay historial → condense_question() [NUEVO]
+            ① Extraer keywords         → extract_keywords()
             ② Vectorizar pregunta      → generate_embedding()
-            ③ Buscar con keywords      → similarity_search(keyword_filter) [NUEVO]
+            ③ Buscar con keywords      → similarity_search(keyword_filter)
             ④ Fallback semántico       → similarity_search() sin filtro
             ⑤ Construir contexto       → _build_context()
             ⑥ Generar respuesta        → generate_response()
@@ -139,9 +150,8 @@ class RAGService:
             history: Bloque de texto con turnos previos de la conversación
                      (ya formateado por ConversationService.get_history_prompt_block),
                      o None si no hay historial / la conversación no tiene session_id.
-                     Solo afecta al prompt de generación, NO a la recuperación
-                     (retrieval sigue basándose únicamente en la pregunta actual —
-                     ver limitación documentada en el plan de esta feature).
+                     Alimenta tanto la condensación de la pregunta (retrieval)
+                     como el prompt de generación final.
 
         Returns:
             QueryResult con:
@@ -159,15 +169,6 @@ class RAGService:
         collection = collection_name or settings.chromadb_collection_name
 
         try:
-            # Preguntas sobre el catálogo ("¿cuántos libros conoces?") se
-            # responden aparte, sin retrieval semántico — ver
-            # LLMPort.is_catalog_question y _build_meta_answer. Va DENTRO
-            # del try: aunque cada adaptador ya garantiza no lanzar nunca
-            # desde is_catalog_question (fallback a False documentado en
-            # el port), no queremos que la petición entera reviente si
-            # algún adaptador futuro no respeta ese contrato — un fallo
-            # aquí degrada al mensaje de error genérico de más abajo, no
-            # tumba la petición sin respuesta.
             if await self.llm.is_catalog_question(query.question):
                 answer = await self._build_meta_answer(collection)
                 return QueryResult(
@@ -178,7 +179,8 @@ class RAGService:
                     processing_time=time.time() - start_time
                 )
 
-            source_documents = await self._retrieve(query, collection)
+            retrieval_question = await self._condense_if_needed(query.question, history)
+            source_documents = await self._retrieve(retrieval_question, query.max_results, collection)
 
             # Si no hay resultados relevantes, no llamamos al LLM
             # Ahorra recursos y evita que invente una respuesta
@@ -205,11 +207,13 @@ class RAGService:
             # PASO 4: Generar respuesta usando el LLM con contexto
             # ================================================================
             # El LLM recibe:
-            # - prompt: la pregunta original del usuario
+            # - prompt: retrieval_question (la pregunta ya condensada si
+            #   hacía falta — autocontenida, se lee bien igual que la
+            #   original si no necesitaba reescritura)
             # - context: los chunks relevantes formateados
             # El LLM debe basar su respuesta SOLO en ese contexto
             answer = await self.llm.generate_response(
-                prompt=query.question,
+                prompt=retrieval_question,
                 context=context,
                 history=history,                          # Turnos previos, o None
                 temperature=settings.rag_temperature,    # 0.3 por defecto, para precisión
@@ -278,8 +282,7 @@ class RAGService:
         start_time = time.time()
         collection = collection_name or settings.chromadb_collection_name
 
-        # Mismo shortcut que ask_question() para preguntas de catálogo —
-        # ver LLMPort.is_catalog_question/_build_meta_answer.
+        # Mismo atajo de catálogo que ask_question() — ver LLMPort.is_catalog_question.
         if await self.llm.is_catalog_question(query.question):
             answer = await self._build_meta_answer(collection)
             yield {"type": "sources", "source_documents": []}
@@ -291,7 +294,9 @@ class RAGService:
             }
             return
 
-        source_documents = await self._retrieve(query, collection)
+        # Mismo condense_question() que ask_question() — ver ahí para el porqué.
+        retrieval_question = await self._condense_if_needed(query.question, history)
+        source_documents = await self._retrieve(retrieval_question, query.max_results, collection)
         yield {"type": "sources", "source_documents": source_documents}
 
         if not source_documents:
@@ -311,7 +316,7 @@ class RAGService:
         context = self._build_context(source_documents)
 
         async for chunk in self.llm.stream_response(
-            prompt=query.question,
+            prompt=retrieval_question,
             context=context,
             history=history,
             temperature=settings.rag_temperature,
@@ -327,7 +332,29 @@ class RAGService:
             "session_id": query.session_id
         }
 
-    async def _retrieve(self, query: Query, collection: str) -> list[SourceDocument]:
+    async def _condense_if_needed(self, question: str, history: Optional[str]) -> str:
+        """
+        Reescribe `question` como pregunta autocontenida vía
+        LLMPort.condense_question() si hay historial — si no hay historial
+        no hay nada que condensar, se devuelve tal cual sin llamar al LLM.
+
+        Extraído a su propio método porque ask_question() y
+        ask_question_stream() lo necesitan exactamente igual, antes de
+        _retrieve() en ambos casos.
+
+        Args:
+            question: Pregunta del usuario, tal cual
+            history: Turnos previos de la conversación, o None
+
+        Returns:
+            str: pregunta lista para retrieval (condensada, o la original
+                 si no había historial que consultar)
+        """
+        if not history:
+            return question
+        return await self.llm.condense_question(question, history)
+
+    async def _retrieve(self, question: str, max_results: int, collection: str) -> list[SourceDocument]:
         """
         Ejecuta el retrieval con Query Expansion (keyword + fallback
         semántico) y aplica el filtro de relevancia — compartido entre
@@ -342,7 +369,11 @@ class RAGService:
             (③ y ④ pasan siempre por _filter_by_relevance)
 
         Args:
-            query: Pregunta del usuario (question, max_results)
+            question: Pregunta a usar para retrieval — YA condensada si
+                      hacía falta (ver _condense_if_needed), no
+                      necesariamente la pregunta original tal cual la
+                      escribió el usuario
+            max_results: top_k a pedir a similarity_search (de Query.max_results)
             collection: Nombre de la colección de ChromaDB donde buscar
 
         Returns:
@@ -350,22 +381,22 @@ class RAGService:
         """
         # Truncamos la pregunta a 50 chars solo para el log
         # [:50] es slicing en Python (como substring en JS)
-        logger.info(f"Processing question: {query.question[:50]}...")
+        logger.info(f"Processing question: {question[:50]}...")
 
         # ================================================================
         # PASO 1: Extraer keywords para Query Expansion
         # ================================================================
         # El LLM identifica nombres propios, títulos, etc.
         # Ejemplo: "¿Quién dirigió Blade Runner?" → ["Blade Runner"]
-        keywords = await self.llm.extract_keywords(query.question)
+        keywords = await self.llm.extract_keywords(question)
         logger.info(f"Extracted keywords: {keywords}")
 
         # ================================================================
-        # PASO 2: Vectorizar la pregunta del usuario
+        # PASO 2: Vectorizar la pregunta
         # ================================================================
         # La pregunta se convierte en un vector numérico
         # Este vector se usará para buscar chunks similares
-        query_embedding = await self.llm.generate_embedding(query.question)
+        query_embedding = await self.llm.generate_embedding(question)
         logger.debug(f"Generated query embedding of dimension: {len(query_embedding)}")
 
         # ================================================================
@@ -382,7 +413,7 @@ class RAGService:
                 source_documents = await self.vector_db.similarity_search(
                     query_embedding=query_embedding,
                     collection_name=collection,
-                    top_k=query.max_results,
+                    top_k=max_results,
                     keyword_filter=keyword
                 )
                 source_documents = self._filter_by_relevance(source_documents)
@@ -400,7 +431,7 @@ class RAGService:
             source_documents = await self.vector_db.similarity_search(
                 query_embedding=query_embedding,
                 collection_name=collection,
-                top_k=query.max_results
+                top_k=max_results
             )
             source_documents = self._filter_by_relevance(source_documents)
 

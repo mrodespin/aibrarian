@@ -190,6 +190,10 @@ def mock_ollama():
     # (mock_ollama.is_catalog_question = AsyncMock(return_value=True)),
     # ver RAGService.ask_question / test_rag_service.py.
     mock.is_catalog_question = AsyncMock(return_value=False)
+    # Default: no hay nada que condensar — devuelve la pregunta tal cual.
+    # Los tests que quieran comprobar el condensado real sobreescriben esto
+    # (mock_ollama.condense_question = AsyncMock(return_value="..."))
+    mock.condense_question = AsyncMock(side_effect=lambda question, history: question)
 
     return mock
 

@@ -142,6 +142,55 @@ async def test_is_catalog_question_returns_false_on_error(groq_settings):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_condense_question_rewrites_using_history(groq_settings):
+    adapter = GroqAdapter()
+
+    mock_completion = MagicMock()
+    mock_completion.choices = [MagicMock(message=MagicMock(content="What year was 1984 published?"))]
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
+
+    with patch.object(adapter, "_get_client", return_value=mock_client):
+        result = await adapter.condense_question(
+            "What year was it published?",
+            history="User: tell me about 1984\nAssistant: ...published in 1949...",
+        )
+
+    assert result == "What year was 1984 published?"
+    _, kwargs = mock_client.chat.completions.create.call_args
+    assert kwargs["temperature"] == 0.0
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_condense_question_returns_original_on_empty_response(groq_settings):
+    adapter = GroqAdapter()
+
+    mock_completion = MagicMock()
+    mock_completion.choices = [MagicMock(message=MagicMock(content="   "))]
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
+
+    with patch.object(adapter, "_get_client", return_value=mock_client):
+        result = await adapter.condense_question("How many pages?", history="something")
+
+    assert result == "How many pages?"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_condense_question_returns_original_on_error(groq_settings):
+    """Fallback seguro documentado en LLMPort: error → pregunta original, no excepción."""
+    adapter = GroqAdapter()
+
+    with patch.object(adapter, "_get_client", side_effect=RuntimeError("boom")):
+        result = await adapter.condense_question("How many pages?", history="something")
+
+    assert result == "How many pages?"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_generate_embeddings_batch_uses_onnx_by_default(groq_settings):
     """Los embeddings no llaman a Groq: por defecto usan ONNXMiniLM_L6_V2 (llamable) vía executor."""
     adapter = GroqAdapter()

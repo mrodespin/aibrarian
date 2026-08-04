@@ -347,12 +347,17 @@ class LLMPort(ABC):
         clase de pregunta a VectorDBPort.list_documents() en vez de a
         similarity_search (ver RAGService._build_meta_answer).
 
+        Nota: esto es independiente de condense_question() — una pregunta
+        de catálogo no necesita reescribirse con el historial, así que
+        esta comprobación va ANTES, y solo si es False se pasa por
+        condense_question() antes de retrievar.
+
         ¿Por qué un LLM y no un regex de palabras clave?
-        Un regex de frases típicas ("cuántos libros", "qué documentos...")
-        solo cubre un idioma y una redacción concreta. El LLM entiende la
-        intención independientemente del idioma o de cómo esté formulada
-        la pregunta — mismo principio que extract_keywords(), que también
-        delega en el LLM en vez de en una lista de patrones.
+        Un regex de frases típicas solo cubre un idioma y una redacción
+        concreta. El LLM entiende la intención independientemente del
+        idioma o de cómo esté formulada la pregunta — mismo principio que
+        extract_keywords(), que también delega en el LLM en vez de en una
+        lista de patrones.
 
         Debe ser una llamada barata y rápida: prompt corto, respuesta de
         una palabra, temperature baja/0 para que la clasificación sea
@@ -371,5 +376,61 @@ class LLMPort(ABC):
             await llm.is_catalog_question("¿Cuántos libros conoces?")       # True
             await llm.is_catalog_question("How many books do you have?")   # True
             await llm.is_catalog_question("¿Quién escribió 1984?")         # False
+        """
+        pass
+
+    @abstractmethod
+    async def condense_question(self, question: str, history: str) -> str:
+        """
+        Reescribe una pregunta de seguimiento como una pregunta
+        autocontenida (standalone), incorporando el contexto necesario de
+        la conversación previa — patrón estándar en RAG conversacional
+        ("query rewriting" / "condense question", ver
+        `create_history_aware_retriever` de LangChain para la misma idea).
+
+        ¿Por qué hace falta esto?
+        similarity_search/extract_keywords se basan SOLO en el texto de la
+        pregunta actual. Una pregunta de seguimiento corta y sin nombres
+        propios ("¿en qué año fue publicada?", "¿cuántas páginas tiene?")
+        no tiene ancla para encontrar el documento correcto — puede no
+        encontrar nada, o (peor, confirmado en producción) encontrar un
+        chunk de OTRO documento con score suficiente para colarse como
+        "relevante" y generar una respuesta segura pero incorrecta.
+
+        Al reescribir ANTES de retrievar ("¿en qué año fue publicada?" +
+        historial sobre "Cien años de soledad" → "¿En qué año fue
+        publicada Cien años de soledad?"), la búsqueda vectorial recibe
+        una pregunta autocontenida y vuelve a funcionar con el pipeline
+        normal de siempre (extract_keywords + similarity_search) — no hace
+        falta ninguna vía especial ni saltarse ChromaDB.
+
+        Si la pregunta ya es autocontenida (nombra el documento/tema
+        explícitamente, o no depende de turnos anteriores), debe
+        devolverse tal cual, sin reescribir — este método NO decide si
+        hace falta reescribir, siempre se le pide que lo intente; es su
+        propio prompt el que debe dejar la pregunta intacta si ya vale
+        por sí sola.
+
+        En caso de error, debe devolver la pregunta original sin tocar
+        (fallback seguro: en el peor caso el retrieval se comporta como
+        antes de tener esta función, no rompe la petición).
+
+        Args:
+            question: Pregunta de seguimiento del usuario
+            history: Turnos previos de la conversación ya formateados (ver
+                     ConversationService.get_history_prompt_block) — quien
+                     llama a este método solo debe invocarlo cuando history
+                     no es None/vacío (sin historial no hay nada que condensar)
+
+        Returns:
+            str: la pregunta reescrita como standalone, o la original si
+                 ya lo era o si hubo un error
+
+        Ejemplo:
+            await llm.condense_question(
+                "¿En qué año fue publicada?",
+                history="Usuario: háblame de Cien años de soledad\\nAsistente: ...publicada en 1967..."
+            )
+            # "¿En qué año fue publicada Cien años de soledad?"
         """
         pass

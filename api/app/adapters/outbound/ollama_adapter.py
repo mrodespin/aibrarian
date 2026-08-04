@@ -206,11 +206,28 @@ PREGUNTA DEL USUARIO: {prompt}
 
 RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
         elif history_block:
-            # Sin contexto pero con historial: seguimos exigiendo que se
-            # ciña a lo ya dicho, no a conocimiento general nuevo.
-            return f"""{history_block}PREGUNTA DEL USUARIO: {prompt}
+            # Sin contexto pero con historial. RAGService no debería llegar
+            # aquí en el flujo normal (condense_question() reescribe la
+            # pregunta de seguimiento y sigue retrievando como siempre —
+            # ver RAGService.ask_question), pero se deja como red de
+            # seguridad para cualquier llamada con context=None + history.
+            # Antes esta rama no imponía ninguna regla estricta (a
+            # diferencia de la rama `if context:` de arriba); el comentario
+            # decía "seguimos exigiendo que se ciña a lo ya dicho" pero el
+            # texto real no lo hacía cumplir. Ahora sí, con las mismas 4
+            # reglas anti-alucinación que la rama de contexto, aplicadas al
+            # historial en vez de a chunks de ChromaDB.
+            return f"""Eres un asistente bibliotecario. Ya has hablado con el usuario sobre esto en esta misma conversación — la respuesta a su pregunta debería estar en lo que ya se dijo abajo.
 
-RESPUESTA:"""
+REGLAS ESTRICTAS:
+1. Responde ÚNICAMENTE con información que ya aparece en la conversación previa
+2. NO uses tu conocimiento general ni inventes datos que no estén ahí
+3. Si la respuesta no está en la conversación previa, di "No tengo esa información en mi base de conocimientos"
+4. Responde en el mismo idioma que la pregunta
+
+{history_block}PREGUNTA DEL USUARIO: {prompt}
+
+RESPUESTA (basada ÚNICAMENTE en la conversación anterior):"""
         else:
             # Sin contexto ni historial: la pregunta se envía directa al LLM
             # (el LLM responderá con su conocimiento general)
@@ -573,9 +590,9 @@ Keywords:"""
 
         Mismo patrón que extract_keywords(): prompt corto, temperature
         muy baja para una clasificación consistente, respuesta de una
-        sola palabra para que el parseo sea trivial. Ver LLMPort.is_catalog_question
-        para el porqué (independiente de idioma/redacción, a diferencia
-        de un regex de frases).
+        sola palabra para que el parseo sea trivial. Ver
+        LLMPort.is_catalog_question para el porqué (independiente de
+        idioma/redacción, a diferencia de un regex de frases).
 
         Args:
             question: Pregunta del usuario, en cualquier idioma
@@ -625,3 +642,68 @@ Categoría:"""
             # como de contenido (el pipeline normal ya sabe admitir "no tengo
             # información" si no encuentra nada relevante)
             return False
+
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=5)
+    )
+    async def condense_question(self, question: str, history: str) -> str:
+        """
+        Reescribe una pregunta de seguimiento como pregunta autocontenida,
+        usando el historial de conversación. Ver LLMPort.condense_question
+        para el porqué (patrón estándar de RAG conversacional).
+
+        Args:
+            question: Pregunta de seguimiento del usuario
+            history: Turnos previos de la conversación ya formateados
+
+        Returns:
+            str: pregunta reescrita, o la original si ya era autocontenida
+                 o si hubo un error
+        """
+        try:
+            llm = self._get_llm()
+
+            condense_prompt = f"""Dada la conversación previa y la pregunta de seguimiento del usuario, reescribe la pregunta de seguimiento como una pregunta autocontenida (standalone) que incluya todo el contexto necesario para entenderla sin necesitar la conversación previa.
+
+Si la pregunta de seguimiento YA es autocontenida (por ejemplo, ya menciona explícitamente el documento o tema del que habla), devuélvela EXACTAMENTE IGUAL, sin cambiarla.
+
+Responde SOLO con la pregunta (reescrita o igual), sin explicaciones, sin comillas, sin prefijos.
+
+CONVERSACIÓN PREVIA:
+{history}
+
+PREGUNTA DE SEGUIMIENTO: {question}
+
+PREGUNTA AUTOCONTENIDA:"""
+
+            start_time = time.perf_counter()
+            response = await llm.ainvoke(
+                condense_prompt,
+                options={"temperature": 0.0}  # Determinista: es una reescritura mecánica, no generación creativa
+            )
+            duration = time.perf_counter() - start_time
+
+            condensed = response.strip().strip('"')
+            # Si el LLM devuelve una respuesta vacía o degenerada, mejor
+            # quedarse con la pregunta original que perderla
+            if not condensed:
+                condensed = question
+
+            LLM_REQUESTS.labels(operation='condense_question').inc()
+            LLM_LATENCY.labels(operation='condense_question').observe(duration)
+
+            logger.info(
+                "Condensed follow-up question",
+                original=question,
+                condensed=condensed,
+                duration_seconds=round(duration, 3)
+            )
+            return condensed
+
+        except Exception as e:
+            logger.warning("Failed to condense question, using original", error=str(e))
+            # Fallback seguro: si la reescritura falla, seguimos con la
+            # pregunta original — el retrieval se comporta como si esta
+            # función no existiera, no rompe la petición
+            return question
