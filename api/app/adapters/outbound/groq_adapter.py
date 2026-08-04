@@ -213,6 +213,45 @@ class GroqAdapter(LLMPort):
             logger.warning("Failed to extract keywords via Groq", error=str(e))
             return []
 
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=1, max=5))
+    async def is_catalog_question(self, question: str) -> bool:
+        """Ver LLMPort.is_catalog_question — mismo prompt/criterio que OllamaAdapter."""
+        try:
+            client = self._get_client()
+
+            classification_prompt = (
+                "Clasifica la siguiente pregunta en una sola categoría.\n\n"
+                "CATALOG: la pregunta pide el número total, un listado o un resumen de "
+                "TODOS los documentos disponibles (ej: \"¿cuántos libros conoces?\", "
+                "\"how many books do you have?\", \"qué documentos tienes\", \"lista los libros\").\n"
+                "CONTENT: la pregunta pide información específica sobre el contenido de uno "
+                "o varios documentos (ej: \"¿quién escribió 1984?\", \"what is Docker?\", "
+                "\"resume el capítulo 3\").\n\n"
+                "Responde con una única palabra: CATALOG o CONTENT. Nada más.\n\n"
+                f"Pregunta: {question}\n\nCategoría:"
+            )
+
+            start_time = time.perf_counter()
+            completion = await client.chat.completions.create(
+                model=settings.groq_model,
+                messages=[{"role": "user", "content": classification_prompt}],
+                temperature=0.0,
+            )
+            duration = time.perf_counter() - start_time
+
+            raw = completion.choices[0].message.content or ""
+            is_catalog = "CATALOG" in raw.strip().upper()
+
+            LLM_REQUESTS.labels(operation="classify_intent").inc()
+            LLM_LATENCY.labels(operation="classify_intent").observe(duration)
+            logger.info("Classified question intent via Groq", is_catalog_question=is_catalog)
+
+            return is_catalog
+
+        except Exception as e:
+            logger.warning("Failed to classify question intent via Groq, falling back to content pipeline", error=str(e))
+            return False
+
     # ========================================================================
     # Embeddings (local, backend configurable — ver _get_embedder)
     # ========================================================================

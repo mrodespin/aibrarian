@@ -96,6 +96,52 @@ async def test_extract_keywords_returns_empty_on_error(groq_settings):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_is_catalog_question_true_when_groq_answers_catalog(groq_settings):
+    adapter = GroqAdapter()
+
+    mock_completion = MagicMock()
+    mock_completion.choices = [MagicMock(message=MagicMock(content="CATALOG"))]
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
+
+    with patch.object(adapter, "_get_client", return_value=mock_client):
+        result = await adapter.is_catalog_question("How many books do you have?")
+
+    assert result is True
+    _, kwargs = mock_client.chat.completions.create.call_args
+    assert kwargs["temperature"] == 0.0
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_is_catalog_question_false_when_groq_answers_content(groq_settings):
+    adapter = GroqAdapter()
+
+    mock_completion = MagicMock()
+    mock_completion.choices = [MagicMock(message=MagicMock(content="CONTENT"))]
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
+
+    with patch.object(adapter, "_get_client", return_value=mock_client):
+        result = await adapter.is_catalog_question("Who wrote 1984?")
+
+    assert result is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_is_catalog_question_returns_false_on_error(groq_settings):
+    """Fallback seguro documentado en LLMPort: error → False, no excepción."""
+    adapter = GroqAdapter()
+
+    with patch.object(adapter, "_get_client", side_effect=RuntimeError("boom")):
+        result = await adapter.is_catalog_question("cualquier pregunta")
+
+    assert result is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_generate_embeddings_batch_uses_onnx_by_default(groq_settings):
     """Los embeddings no llaman a Groq: por defecto usan ONNXMiniLM_L6_V2 (llamable) vía executor."""
     adapter = GroqAdapter()

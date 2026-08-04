@@ -330,3 +330,46 @@ class LLMPort(ABC):
             # keywords = ["Docker"]
         """
         pass
+
+    @abstractmethod
+    async def is_catalog_question(self, question: str) -> bool:
+        """
+        Clasifica si una pregunta es sobre el CATÁLOGO (cuántos/qué
+        documentos hay en total) en vez de sobre el CONTENIDO de un
+        documento concreto.
+
+        ¿Por qué hace falta esto?
+        similarity_search siempre devuelve como mucho top_k chunks — es la
+        herramienta correcta para "¿qué dice el libro X sobre Y?", pero
+        estructuralmente NO puede responder bien "¿cuántos libros
+        conoces?": no hay forma de garantizar que el top_k cubra el
+        catálogo completo. RAGService usa este método para desviar esa
+        clase de pregunta a VectorDBPort.list_documents() en vez de a
+        similarity_search (ver RAGService._build_meta_answer).
+
+        ¿Por qué un LLM y no un regex de palabras clave?
+        Un regex de frases típicas ("cuántos libros", "qué documentos...")
+        solo cubre un idioma y una redacción concreta. El LLM entiende la
+        intención independientemente del idioma o de cómo esté formulada
+        la pregunta — mismo principio que extract_keywords(), que también
+        delega en el LLM en vez de en una lista de patrones.
+
+        Debe ser una llamada barata y rápida: prompt corto, respuesta de
+        una palabra, temperature baja/0 para que la clasificación sea
+        consistente. En caso de error de red/parseo, debe devolver False
+        (fallback seguro: cae al pipeline RAG normal en vez de romper la
+        pregunta por completo).
+
+        Args:
+            question: Pregunta del usuario en lenguaje natural, en cualquier idioma
+
+        Returns:
+            bool: True si la pregunta es sobre el catálogo/inventario de
+                  documentos, False si es sobre contenido (o si hubo error)
+
+        Ejemplo:
+            await llm.is_catalog_question("¿Cuántos libros conoces?")       # True
+            await llm.is_catalog_question("How many books do you have?")   # True
+            await llm.is_catalog_question("¿Quién escribió 1984?")         # False
+        """
+        pass

@@ -185,6 +185,11 @@ def mock_ollama():
     mock.generate_embedding = AsyncMock(side_effect=mock_embedding)
     mock.generate_embeddings_batch = AsyncMock(side_effect=mock_embeddings_batch)
     mock.extract_keywords = AsyncMock(side_effect=mock_extract_keywords)
+    # Default: ninguna pregunta es "de catálogo" — los tests que quieran
+    # ejercitar ese camino sobreescriben esto explícitamente
+    # (mock_ollama.is_catalog_question = AsyncMock(return_value=True)),
+    # ver RAGService.ask_question / test_rag_service.py.
+    mock.is_catalog_question = AsyncMock(return_value=False)
 
     return mock
 

@@ -95,6 +95,51 @@ async def test_extract_keywords_passes_temperature_via_options():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_is_catalog_question_true_when_llm_answers_catalog():
+    adapter = OllamaAdapter()
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value="CATALOG")
+
+    with patch.object(adapter, "_get_llm", return_value=mock_llm):
+        result = await adapter.is_catalog_question("¿Cuántos libros conoces?")
+
+    assert result is True
+    _, kwargs = mock_llm.ainvoke.call_args
+    assert kwargs["options"] == {"temperature": 0.0}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_is_catalog_question_false_when_llm_answers_content():
+    adapter = OllamaAdapter()
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value="CONTENT")
+
+    with patch.object(adapter, "_get_llm", return_value=mock_llm):
+        result = await adapter.is_catalog_question("¿Quién escribió 1984?")
+
+    assert result is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_is_catalog_question_returns_false_on_error():
+    """Fallback seguro documentado en LLMPort: error → False, no excepción."""
+    adapter = OllamaAdapter()
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(side_effect=RuntimeError("connection refused"))
+
+    with patch.object(adapter, "_get_llm", return_value=mock_llm):
+        result = await adapter.is_catalog_question("¿Cuántos libros conoces?")
+
+    assert result is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_stream_response_yields_chunks_via_astream():
     """stream_response() usa llm.astream() (no ainvoke) y reenvía cada trozo."""
     adapter = OllamaAdapter()

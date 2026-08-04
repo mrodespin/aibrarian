@@ -1158,7 +1158,7 @@ async def list_documents():
     Pensado para que el frontend pueda mostrar "qué hay indexado" sin
     depender de que el chat sepa responder bien preguntas agregadas tipo
     "¿cuántos documentos tienes?" (el RAG semántico por sí solo no puede
-    garantizar cubrir el catálogo completo, ver RAGService._is_meta_question
+    garantizar cubrir el catálogo completo, ver LLMPort.is_catalog_question
     para el caso equivalente dentro del chat).
 
     Ejemplo de respuesta:

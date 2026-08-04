@@ -322,7 +322,7 @@ class DocumentSummary(BaseModel):
     que el usuario pueda explorar la base de conocimiento desde el UI)
     como en RAGService para responder preguntas del tipo "¿cuántos
     documentos conoces?" sin depender del retrieval semántico (ver
-    RAGService._is_meta_question).
+    LLMPort.is_catalog_question).
 
     Atributos:
         document_id: ID del documento (ej: "notion_abc123", "pdf_a3f2b1c9")

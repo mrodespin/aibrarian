@@ -561,3 +561,65 @@ Keywords:"""
             logger.warning("Failed to extract keywords", error=str(e))
             # En caso de error, devolvemos lista vacía (fallback a búsqueda semántica pura)
             return []
+
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=5)
+    )
+    async def is_catalog_question(self, question: str) -> bool:
+        """
+        Clasifica si la pregunta es sobre el catálogo (cuántos/qué
+        documentos hay) o sobre contenido, usando el LLM.
+
+        Mismo patrón que extract_keywords(): prompt corto, temperature
+        muy baja para una clasificación consistente, respuesta de una
+        sola palabra para que el parseo sea trivial. Ver LLMPort.is_catalog_question
+        para el porqué (independiente de idioma/redacción, a diferencia
+        de un regex de frases).
+
+        Args:
+            question: Pregunta del usuario, en cualquier idioma
+
+        Returns:
+            bool: True si es una pregunta de catálogo, False en cualquier
+                  otro caso (incluido error) — fallback seguro al pipeline normal
+        """
+        try:
+            llm = self._get_llm()
+
+            classification_prompt = f"""Clasifica la siguiente pregunta en una sola categoría.
+
+CATALOG: la pregunta pide el número total, un listado o un resumen de TODOS los documentos disponibles (ej: "¿cuántos libros conoces?", "how many books do you have?", "qué documentos tienes", "lista los libros").
+CONTENT: la pregunta pide información específica sobre el contenido de uno o varios documentos (ej: "¿quién escribió 1984?", "what is Docker?", "resume el capítulo 3").
+
+Responde con una única palabra: CATALOG o CONTENT. Nada más.
+
+Pregunta: {question}
+
+Categoría:"""
+
+            start_time = time.perf_counter()
+            response = await llm.ainvoke(
+                classification_prompt,
+                options={"temperature": 0.0}  # Determinista: es una clasificación, no generación
+            )
+            duration = time.perf_counter() - start_time
+
+            is_catalog = "CATALOG" in response.strip().upper()
+
+            LLM_REQUESTS.labels(operation='classify_intent').inc()
+            LLM_LATENCY.labels(operation='classify_intent').observe(duration)
+
+            logger.info(
+                "Classified question intent",
+                is_catalog_question=is_catalog,
+                duration_seconds=round(duration, 3)
+            )
+            return is_catalog
+
+        except Exception as e:
+            logger.warning("Failed to classify question intent, falling back to content pipeline", error=str(e))
+            # Fallback seguro: si la clasificación falla, tratamos la pregunta
+            # como de contenido (el pipeline normal ya sabe admitir "no tengo
+            # información" si no encuentra nada relevante)
+            return False
