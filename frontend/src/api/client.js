@@ -4,7 +4,10 @@
 
 import { tokenStorage } from './tokenStorage';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Exportado para que chat.js (askStream) pueda montar la URL de /ask/stream
+// sin duplicar la lógica de VITE_API_URL — necesita su propio fetch() en vez
+// de pasar por request() porque este último siempre hace response.json().
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 /**
  * Custom error class for API errors

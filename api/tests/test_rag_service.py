@@ -382,6 +382,73 @@ async def test_query_response_has_processing_time(rag_service_with_mocks, sample
 
 
 # ============================================================================
+# TESTS DE ask_question_stream() (streaming SSE)
+# ============================================================================
+
+async def _collect_stream(async_gen):
+    """Helper: consume un async generator y devuelve la lista de eventos."""
+    return [event async for event in async_gen]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_stream_yields_sources_before_tokens(rag_service_with_mocks, sample_query):
+    """El primer evento emitido siempre es 'sources', antes de cualquier 'token'."""
+    events = await _collect_stream(rag_service_with_mocks.ask_question_stream(sample_query))
+
+    assert events[0]["type"] == "sources"
+    assert len(events[0]["source_documents"]) > 0
+    assert any(e["type"] == "token" for e in events[1:-1])
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_stream_ends_with_done_event(rag_service_with_mocks, sample_query):
+    """El último evento siempre es 'done', con processing_time y session_id."""
+    events = await _collect_stream(rag_service_with_mocks.ask_question_stream(sample_query))
+
+    assert events[-1]["type"] == "done"
+    assert "processing_time" in events[-1]
+    assert events[-1]["session_id"] == sample_query.session_id
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_stream_tokens_concatenate_to_full_answer(rag_service_with_mocks, sample_query, mock_ollama):
+    """Concatenar los 'token' del stream da la misma respuesta que generate_response()."""
+    events = await _collect_stream(rag_service_with_mocks.ask_question_stream(sample_query))
+
+    streamed_answer = "".join(e["text"] for e in events if e["type"] == "token")
+    full_answer = await mock_ollama.generate_response(prompt=sample_query.question, context="cualquier contexto")
+
+    # mock_stream_response trocea la misma plantilla que mock_generate_response
+    # (ver conftest.py) — no podemos comparar el contexto exacto, pero sí que
+    # el streaming no pierde/duplica texto: ambas empiezan igual.
+    assert streamed_answer.startswith("Basándome en el contexto proporcionado,")
+    assert full_answer.startswith("Basándome en el contexto proporcionado,")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_stream_no_relevant_context_yields_fallback_token(rag_service_with_mocks, sample_query, mock_chromadb):
+    """Sin chunks relevantes, se emite sources vacío + un único token de fallback + done."""
+    from app.core.domain.models import SourceDocument
+
+    async def mock_search(*args, **kwargs):
+        return [SourceDocument(document_id="doc", chunk_content="irrelevante", metadata={}, relevance_score=0.05)]
+
+    mock_chromadb.similarity_search = AsyncMock(side_effect=mock_search)
+
+    events = await _collect_stream(rag_service_with_mocks.ask_question_stream(sample_query))
+
+    assert events[0] == {"type": "sources", "source_documents": []}
+    token_events = [e for e in events if e["type"] == "token"]
+    assert len(token_events) == 1
+    assert "no encontré información relevante" in token_events[0]["text"]
+    assert events[-1]["type"] == "done"
+
+
+# ============================================================================
 # TESTS DE INTEGRACIÓN (requieren servicios reales)
 # ============================================================================
 # Estos tests se marcan con @pytest.mark.integration

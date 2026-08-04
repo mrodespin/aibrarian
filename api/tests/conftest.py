@@ -136,6 +136,7 @@ def mock_ollama():
     async def mock_generate_response(
         prompt: str,
         context: Optional[str] = None,
+        history: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: float = 0.7,
         **kwargs
@@ -143,6 +144,20 @@ def mock_ollama():
         if context:
             return f"Basándome en el contexto proporcionado, {prompt[:50]}"
         return "Esta es una respuesta simulada del LLM para el prompt: " + prompt[:50]
+
+    # Mock de stream_response (misma respuesta que mock_generate_response,
+    # pero troceada palabra a palabra para simular streaming real)
+    async def mock_stream_response(
+        prompt: str,
+        context: Optional[str] = None,
+        history: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7,
+        **kwargs
+    ):
+        full_response = await mock_generate_response(prompt, context, history, max_tokens, temperature, **kwargs)
+        for word in full_response.split(" "):
+            yield word + " "
 
     # Mock de generate_embedding (vectorización)
     async def mock_embedding(text: str) -> List[float]:
@@ -166,6 +181,7 @@ def mock_ollama():
         return keywords[:3]  # Máximo 3 keywords
 
     mock.generate_response = AsyncMock(side_effect=mock_generate_response)
+    mock.stream_response = mock_stream_response  # async generator, no AsyncMock wrapper
     mock.generate_embedding = AsyncMock(side_effect=mock_embedding)
     mock.generate_embeddings_batch = AsyncMock(side_effect=mock_embeddings_batch)
     mock.extract_keywords = AsyncMock(side_effect=mock_extract_keywords)

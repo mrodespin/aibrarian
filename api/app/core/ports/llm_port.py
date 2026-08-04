@@ -33,7 +33,7 @@ La implementación real está en: /adapters/outbound/ollama_adapter.py
 # ============================================================================
 # ABC permite crear clases abstractas (interfaces)
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, AsyncIterator
 
 
 # ============================================================================
@@ -238,6 +238,43 @@ class LLMPort(ABC):
         completa (ver is_available en groq_adapter.py para el porqué).
         """
         pass
+
+    async def stream_response(
+        self,
+        prompt: str,
+        context: Optional[str] = None,
+        history: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7,
+        **kwargs
+    ) -> AsyncIterator[str]:
+        """
+        Versión en streaming de generate_response(): produce la respuesta
+        trozo a trozo en vez de esperar a tenerla completa.
+
+        No es @abstractmethod (mismo patrón que warm_up): por defecto cae
+        a generate_response() y produce un único trozo con la respuesta
+        completa, así que un adaptador que no implemente streaming real
+        (p.ej. GroqAdapter en esta primera versión) sigue siendo un
+        LLMPort válido sin tener que sobreescribir nada. OllamaAdapter sí
+        lo sobreescribe con streaming real (llm.astream()).
+
+        Args:
+            Mismos que generate_response() — ver ahí para el detalle.
+
+        Yields:
+            str: fragmentos de la respuesta, en el orden en que se generan.
+                 Concatenados en orden, forman la misma respuesta completa
+                 que devolvería generate_response() con los mismos argumentos.
+        """
+        yield await self.generate_response(
+            prompt=prompt,
+            context=context,
+            history=history,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            **kwargs
+        )
 
     @abstractmethod
     def get_model_info(self) -> Dict[str, Any]:

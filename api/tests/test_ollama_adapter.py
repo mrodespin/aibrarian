@@ -91,3 +91,52 @@ async def test_extract_keywords_passes_temperature_via_options():
     _, kwargs = mock_llm.ainvoke.call_args
     assert kwargs["options"] == {"temperature": 0.1}
     assert keywords == ["Blade Runner", "director"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_stream_response_yields_chunks_via_astream():
+    """stream_response() usa llm.astream() (no ainvoke) y reenvía cada trozo."""
+    adapter = OllamaAdapter()
+
+    mock_llm = MagicMock()
+
+    async def mock_astream(prompt, options=None):
+        for chunk in ["Do", "cker", " es genial"]:
+            yield chunk
+
+    mock_llm.astream = mock_astream
+
+    with patch.object(adapter, "_get_llm", return_value=mock_llm):
+        chunks = [
+            chunk async for chunk in adapter.stream_response(
+                prompt="¿Qué es Docker?",
+                context="Docker es una plataforma de contenedores.",
+                temperature=0.3
+            )
+        ]
+
+    assert chunks == ["Do", "cker", " es genial"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_stream_response_passes_temperature_and_max_tokens_via_options():
+    """stream_response() debe anidar temperature/num_predict igual que generate_response()."""
+    adapter = OllamaAdapter()
+
+    mock_llm = MagicMock()
+    captured_options = {}
+
+    async def mock_astream(prompt, options=None):
+        captured_options.update(options or {})
+        yield "chunk"
+
+    mock_llm.astream = mock_astream
+
+    with patch.object(adapter, "_get_llm", return_value=mock_llm):
+        async for _ in adapter.stream_response(prompt="¿Qué es RAG?", temperature=0.55, max_tokens=100):
+            pass
+
+    assert captured_options["temperature"] == 0.55
+    assert captured_options["num_predict"] == 100

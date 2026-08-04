@@ -37,12 +37,14 @@ Relación con otros ficheros:
 # IMPORTS
 # ============================================================================
 import asyncio                              # Para lanzar el warm-up del LLM en segundo plano
+import json                                 # Para serializar los eventos SSE de /ask/stream
 from collections import defaultdict         # Contador de intentos de login por IP (rate limiting)
 from contextlib import asynccontextmanager  # Para definir el ciclo de vida (startup/shutdown)
 from pathlib import Path                    # Manejo de rutas de archivos
 from time import monotonic                  # Reloj monótono para la ventana de rate limiting
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Request  # Framework web + excepciones HTTP
+from fastapi.responses import StreamingResponse  # Para el streaming SSE de /ask/stream
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials  # Para leer el JWT del header Authorization
 import tempfile
 import shutil
@@ -1019,6 +1021,96 @@ async def ask_question(query: Query, current_user: TokenPayload = Depends(get_cu
         RAG_QUERIES_TOTAL.labels(status='error').inc()
         logger.error("Ask endpoint error", error=str(e), question=query.question[:50])
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _sse_event(event_type: str, data: dict) -> str:
+    """
+    Formatea un evento en el formato Server-Sent Events que espera el
+    cliente (ver frontend/src/api/chat.js askStream()):
+
+        event: <event_type>
+        data: <JSON>
+        <línea en blanco>
+
+    ensure_ascii=False: mantiene los acentos/ñ tal cual en vez de \\uXXXX,
+    el body ya viaja como UTF-8.
+    """
+    return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.post("/ask/stream")
+async def ask_question_stream(query: Query, current_user: TokenPayload = Depends(get_current_user)):
+    """
+    Versión en streaming de /ask: la respuesta del LLM se envía trozo a
+    trozo vía Server-Sent Events en vez de esperar a tenerla completa.
+
+    Endpoint separado en vez de content-negotiation sobre /ask: /ask usa
+    response_model=QueryResult, que FastAPI valida/serializa como un único
+    JSON — incompatible con StreamingResponse. Este endpoint recibe el
+    mismo body (Query) pero devuelve text/event-stream.
+
+    IMPORTANTE para el cliente: no se puede usar EventSource nativo, porque
+    no permite mandar el header Authorization (ver frontend/src/api/chat.js
+    askStream(), que usa fetch() + lectura manual del stream).
+
+    Eventos emitidos (uno por línea `data:`, formato SSE):
+        event: sources → {"source_documents": [...]}  (una vez, tras el retrieval)
+        event: token   → {"text": "..."}               (uno por fragmento generado)
+        event: done    → {"processing_time": ..., "session_id": ...}  (una vez, al final)
+        event: error   → {"detail": "..."}             (solo si algo falla a mitad de stream)
+
+    El historial de conversación se recupera antes de empezar a generar y
+    se persiste al final, mismo patrón que /ask (degradación silenciosa —
+    logged-only — si Postgres no está disponible).
+    """
+    history = None
+    if query.session_id:
+        try:
+            history = await conversation_service.get_history_prompt_block(query.session_id, current_user.user_id)
+        except Exception as e:
+            logger.warning("Failed to load conversation history, continuing without it", error=str(e), session_id=query.session_id)
+
+    async def event_generator():
+        answer_parts: list[str] = []
+        logger.info("Processing RAG query (stream)", question=query.question[:100])
+        try:
+            async for event in rag_service.ask_question_stream(query, history=history):
+                if event["type"] == "sources":
+                    source_documents = event["source_documents"]
+                    RAG_CONTEXT_CHUNKS.observe(len(source_documents))
+                    yield _sse_event("sources", {
+                        "source_documents": [doc.model_dump() for doc in source_documents]
+                    })
+                elif event["type"] == "token":
+                    answer_parts.append(event["text"])
+                    yield _sse_event("token", {"text": event["text"]})
+                elif event["type"] == "done":
+                    RAG_QUERIES_TOTAL.labels(status='success').inc()
+                    RAG_QUERY_DURATION.observe(event["processing_time"])
+                    logger.info(
+                        "RAG query completed (stream)",
+                        question=query.question[:50],
+                        duration_seconds=round(event["processing_time"], 3)
+                    )
+                    yield _sse_event("done", {
+                        "processing_time": event["processing_time"],
+                        "session_id": event["session_id"]
+                    })
+        except Exception as e:
+            RAG_QUERIES_TOTAL.labels(status='error').inc()
+            logger.error("Ask stream endpoint error", error=str(e), question=query.question[:50])
+            yield _sse_event("error", {"detail": str(e)})
+            return
+
+        if query.session_id:
+            try:
+                await conversation_service.append_turn(
+                    query.session_id, current_user.user_id, query.question, "".join(answer_parts)
+                )
+            except Exception as e:
+                logger.warning("Failed to persist conversation turn", error=str(e), session_id=query.session_id)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # ----------------------------------------------------------------------------

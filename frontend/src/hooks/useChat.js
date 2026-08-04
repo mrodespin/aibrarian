@@ -41,29 +41,74 @@ export function useChat() {
     };
     setMessages(prev => [...prev, userMessage]);
 
-    try {
-      const result = await chatApi.ask({ question, sessionId, maxResults: 4 });
+    // La burbuja del asistente se crea de forma perezosa, en el primer
+    // evento que llega (onSources), no aquí: así evitamos que conviva con
+    // el SkeletonMessage de MessageList (que se muestra mientras
+    // isLoading=true) — en cuanto llegan las fuentes, apagamos isLoading
+    // y la burbuja real (creciendo token a token) toma el relevo.
+    const assistantMessageId = Date.now() + 1;
+    let placeholderCreated = false;
 
-      const assistantMessage = {
-        id: Date.now() + 1,
+    const ensurePlaceholder = (extra = {}) => {
+      if (placeholderCreated) return;
+      placeholderCreated = true;
+      setMessages(prev => [...prev, {
+        id: assistantMessageId,
         role: 'assistant',
-        content: result.answer,
-        sources: result.source_documents || [],
-        processingTime: result.processing_time,
+        content: '',
+        sources: [],
         timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+        ...extra,
+      }]);
+    };
+
+    const updateAssistantMessage = (updater) => {
+      setMessages(prev => prev.map(m => (m.id === assistantMessageId ? updater(m) : m)));
+    };
+
+    try {
+      await chatApi.askStream({
+        question,
+        sessionId,
+        maxResults: 4,
+        onSources: (sources) => {
+          ensurePlaceholder({ sources: sources || [] });
+          setIsLoading(false);
+        },
+        onToken: (text) => {
+          ensurePlaceholder();
+          updateAssistantMessage((m) => ({ ...m, content: m.content + text }));
+        },
+        onDone: (info) => {
+          updateAssistantMessage((m) => ({ ...m, processingTime: info.processing_time }));
+        },
+        onError: (detail) => {
+          ensurePlaceholder();
+          setError(detail || 'Error al procesar la pregunta');
+          updateAssistantMessage((m) => ({
+            ...m,
+            content: `Error: ${detail || 'No se pudo obtener respuesta'}`,
+            isError: true,
+          }));
+        },
+      });
     } catch (err) {
       setError(err.message || 'Error al procesar la pregunta');
-      // Add error message to chat
-      const errorMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: `Error: ${err.message || 'No se pudo obtener respuesta'}`,
-        isError: true,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      if (placeholderCreated) {
+        updateAssistantMessage((m) => ({
+          ...m,
+          content: `Error: ${err.message || 'No se pudo obtener respuesta'}`,
+          isError: true,
+        }));
+      } else {
+        setMessages(prev => [...prev, {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: `Error: ${err.message || 'No se pudo obtener respuesta'}`,
+          isError: true,
+          timestamp: new Date(),
+        }]);
+      }
     } finally {
       setIsLoading(false);
     }

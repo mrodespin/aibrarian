@@ -43,7 +43,7 @@ Endpoints que usan este servicio:
 # ============================================================================
 import logging
 import time
-from typing import Optional
+from typing import AsyncIterator, Dict, Any, Optional
 
 # Solo importamos LLM y VectorDB (no necesitamos DocumentProcessor)
 from app.core.ports.llm_port import LLMPort
@@ -149,61 +149,7 @@ class RAGService:
         collection = collection_name or settings.chromadb_collection_name
 
         try:
-            # Truncamos la pregunta a 50 chars solo para el log
-            # [:50] es slicing en Python (como substring en JS)
-            logger.info(f"Processing question: {query.question[:50]}...")
-
-            # ================================================================
-            # PASO 1: Extraer keywords para Query Expansion
-            # ================================================================
-            # El LLM identifica nombres propios, títulos, etc.
-            # Ejemplo: "¿Quién dirigió Blade Runner?" → ["Blade Runner"]
-            keywords = await self.llm.extract_keywords(query.question)
-            logger.info(f"Extracted keywords: {keywords}")
-
-            # ================================================================
-            # PASO 2: Vectorizar la pregunta del usuario
-            # ================================================================
-            # La pregunta se convierte en un vector numérico
-            # Este vector se usará para buscar chunks similares
-            query_embedding = await self.llm.generate_embedding(query.question)
-            logger.debug(f"Generated query embedding of dimension: {len(query_embedding)}")
-
-            # ================================================================
-            # PASO 3: Buscar con Query Expansion (keyword + semantic)
-            # ================================================================
-            # Intentamos buscar con cada keyword extraída
-            # Si encontramos resultados, usamos esos; si no, fallback semántico
-            source_documents = []
-
-            if keywords:
-                # Intentar búsqueda con la primera keyword más relevante
-                # (normalmente es el nombre propio o título)
-                for keyword in keywords:
-                    source_documents = await self.vector_db.similarity_search(
-                        query_embedding=query_embedding,
-                        collection_name=collection,
-                        top_k=query.max_results,
-                        keyword_filter=keyword
-                    )
-                    source_documents = self._filter_by_relevance(source_documents)
-                    if source_documents:
-                        logger.info(f"Found {len(source_documents)} docs with keyword '{keyword}'")
-                        break  # Encontramos resultados, no seguir buscando
-
-            # ================================================================
-            # PASO 4: Fallback a búsqueda semántica pura
-            # ================================================================
-            # Si no hay keywords o no encontramos resultados con keywords,
-            # hacemos búsqueda semántica sin filtros
-            if not source_documents:
-                logger.info("No results with keywords, falling back to semantic search")
-                source_documents = await self.vector_db.similarity_search(
-                    query_embedding=query_embedding,
-                    collection_name=collection,
-                    top_k=query.max_results
-                )
-                source_documents = self._filter_by_relevance(source_documents)
+            source_documents = await self._retrieve(query, collection)
 
             # Si no hay resultados relevantes, no llamamos al LLM
             # Ahorra recursos y evita que invente una respuesta
@@ -270,6 +216,153 @@ class RAGService:
                 session_id=query.session_id,
                 processing_time=time.time() - start_time
             )
+
+    async def ask_question_stream(
+        self,
+        query: Query,
+        collection_name: Optional[str] = None,
+        history: Optional[str] = None
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Versión en streaming de ask_question(): produce la respuesta trozo a
+        trozo en vez de esperar a tenerla completa antes de devolver nada.
+
+        Usa exactamente el mismo retrieval que ask_question() (ver _retrieve),
+        así que el filtro de relevancia y el fallback de Query Expansion se
+        comportan igual en ambos métodos — solo cambia cómo se consume la
+        generación (stream_response() en vez de generate_response()).
+
+        Yields (en este orden):
+            {"type": "sources", "source_documents": [...]}
+                Una sola vez, justo después del retrieval, antes de generar.
+            {"type": "token", "text": "..."}
+                Uno por cada fragmento de texto generado, en orden. Si no
+                hubo chunks relevantes, se emite un único token con el
+                mensaje de fallback (mismo texto que devuelve ask_question
+                en ese caso) en vez de intentar generar de verdad.
+            {"type": "done", "processing_time": ..., "session_id": ...}
+                Una sola vez, al final.
+
+        Args:
+            Mismos que ask_question() — ver ahí para el detalle.
+        """
+        start_time = time.time()
+        collection = collection_name or settings.chromadb_collection_name
+
+        source_documents = await self._retrieve(query, collection)
+        yield {"type": "sources", "source_documents": source_documents}
+
+        if not source_documents:
+            logger.warning("No relevant context found in database")
+            yield {
+                "type": "token",
+                "text": "Lo siento, no encontré información relevante en la base de conocimientos para responder a tu pregunta."
+            }
+            yield {
+                "type": "done",
+                "processing_time": time.time() - start_time,
+                "session_id": query.session_id
+            }
+            return
+
+        logger.info(f"Retrieved {len(source_documents)} relevant documents")
+        context = self._build_context(source_documents)
+
+        async for chunk in self.llm.stream_response(
+            prompt=query.question,
+            context=context,
+            history=history,
+            temperature=settings.rag_temperature,
+            max_tokens=settings.llm_max_tokens
+        ):
+            yield {"type": "token", "text": chunk}
+
+        processing_time = time.time() - start_time
+        logger.info(f"Streamed answer in {processing_time:.2f}s")
+        yield {
+            "type": "done",
+            "processing_time": processing_time,
+            "session_id": query.session_id
+        }
+
+    async def _retrieve(self, query: Query, collection: str) -> list[SourceDocument]:
+        """
+        Ejecuta el retrieval con Query Expansion (keyword + fallback
+        semántico) y aplica el filtro de relevancia — compartido entre
+        ask_question() y ask_question_stream(), que solo difieren en cómo
+        se consume la generación posterior.
+
+        Pipeline:
+            ① Extraer keywords         → extract_keywords()
+            ② Vectorizar pregunta      → generate_embedding()
+            ③ Buscar con keywords      → similarity_search(keyword_filter)
+            ④ Fallback semántico       → similarity_search() sin filtro
+            (③ y ④ pasan siempre por _filter_by_relevance)
+
+        Args:
+            query: Pregunta del usuario (question, max_results)
+            collection: Nombre de la colección de ChromaDB donde buscar
+
+        Returns:
+            list[SourceDocument]: chunks relevantes (puede ser vacía)
+        """
+        # Truncamos la pregunta a 50 chars solo para el log
+        # [:50] es slicing en Python (como substring en JS)
+        logger.info(f"Processing question: {query.question[:50]}...")
+
+        # ================================================================
+        # PASO 1: Extraer keywords para Query Expansion
+        # ================================================================
+        # El LLM identifica nombres propios, títulos, etc.
+        # Ejemplo: "¿Quién dirigió Blade Runner?" → ["Blade Runner"]
+        keywords = await self.llm.extract_keywords(query.question)
+        logger.info(f"Extracted keywords: {keywords}")
+
+        # ================================================================
+        # PASO 2: Vectorizar la pregunta del usuario
+        # ================================================================
+        # La pregunta se convierte en un vector numérico
+        # Este vector se usará para buscar chunks similares
+        query_embedding = await self.llm.generate_embedding(query.question)
+        logger.debug(f"Generated query embedding of dimension: {len(query_embedding)}")
+
+        # ================================================================
+        # PASO 3: Buscar con Query Expansion (keyword + semantic)
+        # ================================================================
+        # Intentamos buscar con cada keyword extraída
+        # Si encontramos resultados, usamos esos; si no, fallback semántico
+        source_documents = []
+
+        if keywords:
+            # Intentar búsqueda con la primera keyword más relevante
+            # (normalmente es el nombre propio o título)
+            for keyword in keywords:
+                source_documents = await self.vector_db.similarity_search(
+                    query_embedding=query_embedding,
+                    collection_name=collection,
+                    top_k=query.max_results,
+                    keyword_filter=keyword
+                )
+                source_documents = self._filter_by_relevance(source_documents)
+                if source_documents:
+                    logger.info(f"Found {len(source_documents)} docs with keyword '{keyword}'")
+                    break  # Encontramos resultados, no seguir buscando
+
+        # ================================================================
+        # PASO 4: Fallback a búsqueda semántica pura
+        # ================================================================
+        # Si no hay keywords o no encontramos resultados con keywords,
+        # hacemos búsqueda semántica sin filtros
+        if not source_documents:
+            logger.info("No results with keywords, falling back to semantic search")
+            source_documents = await self.vector_db.similarity_search(
+                query_embedding=query_embedding,
+                collection_name=collection,
+                top_k=query.max_results
+            )
+            source_documents = self._filter_by_relevance(source_documents)
+
+        return source_documents
 
     def _filter_by_relevance(self, source_documents: list[SourceDocument]) -> list[SourceDocument]:
         """

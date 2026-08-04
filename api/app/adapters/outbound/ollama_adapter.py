@@ -152,6 +152,70 @@ class OllamaAdapter(LLMPort):
     # MÉTODOS PRINCIPALES - Implementación de LLMPort
     # ========================================================================
 
+    def _build_full_prompt(
+        self,
+        prompt: str,
+        context: Optional[str],
+        history: Optional[str]
+    ) -> str:
+        """
+        Construye el prompt completo que se envía al modelo, combinando
+        (si existen) el historial de la conversación y el contexto
+        recuperado de ChromaDB con la pregunta del usuario.
+
+        Factorizado como método propio porque tanto generate_response()
+        como stream_response() necesitan exactamente el mismo prompt — la
+        única diferencia entre ambos es cómo se consume la respuesta del
+        modelo (de golpe vs. en streaming), no cómo se construye la pregunta.
+
+        Args:
+            prompt: Pregunta del usuario
+            context: Contexto (chunks recuperados por ChromaDB), o None
+            history: Turnos previos de la conversación ya formateados
+                     (ver ConversationService.get_history_prompt_block), o None
+
+        Returns:
+            str: prompt completo listo para enviar al modelo
+        """
+        # Si hay historial (turnos previos de la conversación), se antepone
+        # al resto del prompt para que el LLM pueda resolver preguntas de
+        # seguimiento ("¿puedes ampliar eso?"). Nota: esto SOLO afecta a la
+        # generación — la recuperación de chunks sigue basándose únicamente
+        # en la pregunta actual (ver RAGService).
+        history_block = f"""CONVERSACIÓN PREVIA (turnos anteriores, para contexto):
+{history}
+
+""" if history else ""
+
+        # Si hay contexto (chunks de ChromaDB), se estructura el prompt
+        # para que el LLM use esa información como base
+        if context:
+            return f"""Eres un asistente bibliotecario que SOLO responde usando la información proporcionada en el contexto.
+
+REGLAS ESTRICTAS:
+1. SOLO usa la información del contexto para responder
+2. NO uses tu conocimiento general o información externa
+3. Si la información no está en el contexto, di "No tengo información sobre eso en mi base de conocimientos"
+4. Cita las fuentes cuando sea relevante
+5. Responde en el mismo idioma que la pregunta
+
+{history_block}CONTEXTO (información de tu base de conocimientos):
+{context}
+
+PREGUNTA DEL USUARIO: {prompt}
+
+RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
+        elif history_block:
+            # Sin contexto pero con historial: seguimos exigiendo que se
+            # ciña a lo ya dicho, no a conocimiento general nuevo.
+            return f"""{history_block}PREGUNTA DEL USUARIO: {prompt}
+
+RESPUESTA:"""
+        else:
+            # Sin contexto ni historial: la pregunta se envía directa al LLM
+            # (el LLM responderá con su conocimiento general)
+            return prompt
+
     # PATRÓN: @retry con Exponential Backoff
     # - stop_after_attempt(3): máximo 3 intentos antes de fallar
     # - wait_exponential: espera entre intentos crece exponencialmente
@@ -200,48 +264,7 @@ class OllamaAdapter(LLMPort):
         try:
             # Obtiene el cliente LLM (lazy, solo crea si es la primera vez)
             llm = self._get_llm()
-
-            # ============================================================
-            # CONSTRUCCIÓN DEL PROMPT
-            # ============================================================
-            # Si hay historial (turnos previos de la conversación), se
-            # antepone al resto del prompt para que el LLM pueda resolver
-            # preguntas de seguimiento ("¿puedes ampliar eso?"). Nota: esto
-            # SOLO afecta a la generación — la recuperación de chunks sigue
-            # basándose únicamente en la pregunta actual (ver RAGService).
-            history_block = f"""CONVERSACIÓN PREVIA (turnos anteriores, para contexto):
-{history}
-
-""" if history else ""
-
-            # Si hay contexto (chunks de ChromaDB), se estructura el prompt
-            # para que el LLM use esa información como base
-            if context:
-                full_prompt = f"""Eres un asistente bibliotecario que SOLO responde usando la información proporcionada en el contexto.
-
-REGLAS ESTRICTAS:
-1. SOLO usa la información del contexto para responder
-2. NO uses tu conocimiento general o información externa
-3. Si la información no está en el contexto, di "No tengo información sobre eso en mi base de conocimientos"
-4. Cita las fuentes cuando sea relevante
-5. Responde en el mismo idioma que la pregunta
-
-{history_block}CONTEXTO (información de tu base de conocimientos):
-{context}
-
-PREGUNTA DEL USUARIO: {prompt}
-
-RESPUESTA (basada ÚNICAMENTE en el contexto anterior):"""
-            elif history_block:
-                # Sin contexto pero con historial: seguimos exigiendo que
-                # se ciña a lo ya dicho, no a conocimiento general nuevo.
-                full_prompt = f"""{history_block}PREGUNTA DEL USUARIO: {prompt}
-
-RESPUESTA:"""
-            else:
-                # Sin contexto ni historial: la pregunta se envía directa al LLM
-                # (el LLM responderá con su conocimiento general)
-                full_prompt = prompt
+            full_prompt = self._build_full_prompt(prompt, context, history)
 
             # ============================================================
             # LLAMADA AL MODELO
@@ -282,6 +305,55 @@ RESPUESTA:"""
         except Exception as e:
             logger.error("Failed to generate response", error=str(e))
             raise  # Re-lanza para que @retry pueda reintentar
+
+    async def stream_response(
+        self,
+        prompt: str,
+        context: Optional[str] = None,
+        history: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7,
+        **kwargs
+    ):
+        """
+        Versión en streaming de generate_response(): produce la respuesta
+        trozo a trozo según Ollama la va generando, en vez de esperar a
+        tenerla completa.
+
+        Usa el mismo prompt que generate_response() (ver _build_full_prompt)
+        y el mismo fix de options={...} para temperature/num_predict — la
+        única diferencia real es astream() en vez de ainvoke().
+
+        Sin @retry (a diferencia de generate_response): reintentar a mitad
+        de un stream ya empezado produciría trozos duplicados en el
+        cliente; si astream() falla, el error se propaga y quien la llama
+        (RAGService.ask_question_stream) decide cómo comunicarlo.
+
+        Yields:
+            str: fragmentos de texto de la respuesta, en orden
+        """
+        llm = self._get_llm()
+        full_prompt = self._build_full_prompt(prompt, context, history)
+
+        ollama_options: Dict[str, Any] = {"temperature": temperature, **kwargs}
+        if max_tokens is not None:
+            ollama_options["num_predict"] = max_tokens
+
+        start_time = time.perf_counter()
+        chunk_count = 0
+        try:
+            async for chunk in llm.astream(full_prompt, options=ollama_options):
+                chunk_count += 1
+                yield chunk
+        finally:
+            duration = time.perf_counter() - start_time
+            LLM_REQUESTS.labels(operation='generate_stream').inc()
+            LLM_LATENCY.labels(operation='generate_stream').observe(duration)
+            logger.info(
+                "Streamed response from Ollama",
+                duration_seconds=round(duration, 3),
+                chunk_count=chunk_count
+            )
 
     @retry(
         stop=stop_after_attempt(3),
