@@ -865,6 +865,15 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
 
     Por eso este endpoint implementa el pipeline split → embeddings → store
     de forma directa, reutilizando los adaptadores ya instanciados.
+
+    Resiliencia por página: el bucle envuelve cada documento en su propio
+    try/except (igual que ya hace ingest_database() en scripts/ingest_notion.py,
+    que sí tenía esta protección — este endpoint no la tenía). Sin esto, una
+    sola página que falle (embeddings, ChromaDB, lo que sea) aborta TODA la
+    petición con un 500 y las páginas restantes ni se intentan — encontrado
+    en producción depurando por qué solo 2 de 12 páginas de una BD de Notion
+    llegaban a indexarse. Ahora una página que falla se registra como
+    resultado fallido y el bucle sigue con las demás.
     """
     try:
         if not settings.notion_api_key:
@@ -898,33 +907,53 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
                 "results": []
             }
 
-        # Procesar cada documento: split → embeddings → store
+        # Procesar cada documento: split → embeddings → store.
+        # Cada iteración está aislada: si una página falla, se registra como
+        # resultado fallido y se sigue con la siguiente (ver docstring).
         results = []
         for doc in documents:
-            # Dividir en chunks
-            chunks = await notion_processor.split_into_chunks(doc)
+            title = doc.metadata.get("title", "Untitled")
+            try:
+                # Dividir en chunks
+                chunks = await notion_processor.split_into_chunks(doc)
 
-            # Generar embeddings en batch (más eficiente que uno por uno)
-            chunk_texts = [chunk.content for chunk in chunks]
-            embeddings = await llm_adapter.generate_embeddings_batch(chunk_texts)
+                # Generar embeddings en batch (más eficiente que uno por uno)
+                chunk_texts = [chunk.content for chunk in chunks]
+                embeddings = await llm_adapter.generate_embeddings_batch(chunk_texts)
 
-            # Asignar embeddings a los chunks
-            # zip() empareja chunks[i] con embeddings[i]
-            for chunk, embedding in zip(chunks, embeddings):
-                chunk.embedding = embedding
+                # Asignar embeddings a los chunks
+                # zip() empareja chunks[i] con embeddings[i]
+                for chunk, embedding in zip(chunks, embeddings):
+                    chunk.embedding = embedding
 
-            # Almacenar en ChromaDB
-            collection = request.collection_name or settings.chromadb_collection_name
-            success = await chromadb_adapter.store_chunks(chunks, collection)
+                # Almacenar en ChromaDB
+                collection = request.collection_name or settings.chromadb_collection_name
+                success = await chromadb_adapter.store_chunks(chunks, collection)
 
-            results.append(
-                SyncResult(
-                    document_id=doc.id,
-                    chunks_created=len(chunks),
-                    success=success,
-                    message=f"Synced '{doc.metadata.get('title', 'Untitled')}'"
+                results.append(
+                    SyncResult(
+                        document_id=doc.id,
+                        chunks_created=len(chunks),
+                        success=success,
+                        message=f"Synced '{title}'" if success else f"Failed to store chunks for '{title}'"
+                    )
                 )
-            )
+
+            except Exception as e:
+                # No relanzar: una página rota no debe tumbar el resto del
+                # sync. Se registra como fallo y el bucle continúa.
+                logger.error(
+                    "Failed to sync Notion page, continuing with the rest",
+                    document_id=doc.id, title=title, error=str(e)
+                )
+                results.append(
+                    SyncResult(
+                        document_id=doc.id,
+                        chunks_created=0,
+                        success=False,
+                        message=f"Error syncing '{title}': {e}"
+                    )
+                )
 
         # Resumen final
         successful = sum(1 for r in results if r.success)

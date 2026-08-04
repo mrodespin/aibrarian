@@ -315,6 +315,76 @@ def test_notion_database_endpoint_without_api_key(test_client):
 
 
 # ============================================================================
+# TESTS DE RESILIENCIA DE /sync/notion/database — una página rota no debe
+# abortar el resto (bug real encontrado en producción: sin try/except por
+# página, una excepción en cualquier documento tumbaba TODO el endpoint con
+# un 500 y las páginas siguientes ni se intentaban).
+# ============================================================================
+
+def _fake_notion_document(doc_id: str) -> Document:
+    return Document(
+        id=doc_id,
+        source=DocumentSource.NOTION,
+        content="contenido de prueba",
+        metadata={"title": doc_id}
+    )
+
+
+@pytest.mark.unit
+def test_sync_database_continues_after_one_page_fails(test_client, monkeypatch):
+    """
+    3 páginas, la 2ª falla generando embeddings → la 1ª y la 3ª deben
+    seguir procesándose igualmente (antes de este fix, la excepción de la
+    página 2 abortaba todo el endpoint y la 3ª nunca se intentaba).
+    """
+    import app.main as main_module
+
+    docs = [_fake_notion_document("notion_a"), _fake_notion_document("notion_b"), _fake_notion_document("notion_c")]
+
+    monkeypatch.setattr(main_module.settings, "notion_api_key", "fake-key")
+    monkeypatch.setattr(
+        main_module.notion_processor, "load_database_pages",
+        AsyncMock(return_value=docs)
+    )
+    monkeypatch.setattr(
+        main_module.notion_processor, "split_into_chunks",
+        AsyncMock(side_effect=lambda doc, *a, **kw: [
+            Chunk(id=f"{doc.id}_chunk_0", document_id=doc.id, content="texto", metadata={})
+        ])
+    )
+
+    # Todos los chunks tienen el mismo content ("texto"), así que en vez de
+    # identificar la página por contenido, simulamos el fallo por ORDEN de
+    # llamada: la 2ª invocación de generate_embeddings_batch (la página del
+    # medio) es la que falla.
+    call_count = {"n": 0}
+
+    async def flaky_embeddings_by_order(texts):
+        call_count["n"] += 1
+        if call_count["n"] == 2:
+            raise RuntimeError("embedding backend timed out")
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    monkeypatch.setattr(main_module.llm_adapter, "generate_embeddings_batch", flaky_embeddings_by_order)
+    monkeypatch.setattr(main_module.chromadb_adapter, "store_chunks", AsyncMock(return_value=True))
+
+    response = test_client.post("/sync/notion/database", json={"database_id": "db123"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 3
+    assert data["successful"] == 2
+    assert data["failed"] == 1
+
+    results_by_id = {r["document_id"]: r for r in data["results"]}
+    assert results_by_id["notion_a"]["success"] is True
+    assert results_by_id["notion_b"]["success"] is False
+    assert "embedding backend timed out" in results_by_id["notion_b"]["message"]
+    # La clave del test: la página 3 (después de la que falló) SÍ se procesó
+    assert results_by_id["notion_c"]["success"] is True
+
+
+# ============================================================================
 # TESTS DE _extract_title() — descubrimiento por type=="title", no por nombre
 # ============================================================================
 # NotionProcessorAdapter() no necesita API key real para estos tests: la key
