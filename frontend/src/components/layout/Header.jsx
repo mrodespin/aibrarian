@@ -35,26 +35,34 @@ export function Header({ onMenuClick }) {
           </div>
         </div>
 
-        {/* Service status badges */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${health.api ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
-            <span className="text-sm font-medium text-text-200">API</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${health.llm ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
-            <span className="text-sm font-medium text-text-200">{llmProviderLabel(health.llmProvider)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${health.vectorDb ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
-            <span className="text-sm font-medium text-text-200">{vectorDbProviderLabel(health.vectorDbProvider)}</span>
+          {/* Service status badges — ocultos por debajo de lg (mismo breakpoint
+              que usa Layout.jsx para el sidebar fijo/off-canvas): en mobile y
+              tablet esta misma info ya está en el panel lateral (StatsPanel,
+              vía el botón de menú), con más detalle y sin apelotonarse contra
+              el logo y "Salir" — mostrarla aquí también en pantallas estrechas
+              solo añadía ruido duplicado. En desktop el sidebar es fijo, así
+              que aquí sirve de vistazo rápido sin abrir nada. */}
+          <div className="hidden lg:flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${health.api ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
+              <span className="text-sm font-medium text-text-200">API</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${health.llm ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
+              <span className="text-sm font-medium text-text-200">{llmProviderLabel(health.llmProvider)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${health.vectorDb ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
+              <span className="text-sm font-medium text-text-200">{vectorDbProviderLabel(health.vectorDbProvider)}</span>
+            </div>
           </div>
 
           {/* Sesión */}
           <span className="text-sm text-text-300 hidden sm:inline">{user?.email}</span>
           <button
             onClick={logout}
-            className="text-sm font-medium text-text-200 hover:text-text-50 transition-colors px-2 py-1 rounded-lg hover:bg-bg-800"
+            className="text-sm font-medium text-text-200 hover:text-text-50 transition-colors px-2 py-1 rounded-lg hover:bg-bg-800 whitespace-nowrap"
             aria-label="Cerrar sesión"
           >
             Salir
