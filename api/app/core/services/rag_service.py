@@ -42,6 +42,7 @@ Endpoints que usan este servicio:
 # IMPORTS
 # ============================================================================
 import logging
+import re
 import time
 from typing import AsyncIterator, Dict, Any, Optional
 
@@ -53,6 +54,36 @@ from app.config.settings import settings
 
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# DETECCIÓN DE PREGUNTAS "META" (sobre el catálogo, no sobre contenido)
+# ============================================================================
+# Preguntas como "¿cuántos libros conoces?" no son sobre el CONTENIDO de un
+# documento concreto — son sobre el catálogo en sí. El retrieval semántico
+# top-k (similarity_search) no puede responderlas bien de forma fiable: da
+# igual max_results, siempre es una muestra parcial de chunks, nunca "todos
+# los documentos". Estos patrones detectan esa clase de pregunta para
+# desviarla a RAGService._build_meta_answer(), que lista el catálogo
+# completo vía VectorDBPort.list_documents() sin pasar por el LLM.
+#
+# Limitación conocida (documentada, no un intento de cobertura exhaustiva):
+# es detección por patrones, no semántica. Cubre las formulaciones más
+# comunes en español pero no todas las posibles. Una pregunta meta que no
+# matchee ningún patrón cae al pipeline RAG normal — que ya sabe admitir
+# "no tengo información" gracias al filtro de relevancia (_filter_by_relevance),
+# así que el fallo es seguro (respuesta parcial/honesta), no silencioso.
+_META_QUESTION_PATTERNS = [
+    # "páginas" queda fuera a propósito: "¿cuántas páginas tiene el
+    # capítulo 3?" es una pregunta de CONTENIDO sobre un documento
+    # concreto, no sobre el catálogo — incluirla daba falsos positivos.
+    r"cu[aá]nt[oa]s?\s+(libros|documentos|archivos|pdfs?|fuentes)",
+    r"qu[eé]\s+(libros|documentos)\s+(conoces|tienes|hay)",
+    r"(lista|list[aá]me|dame\s+una\s+lista|mu[eé]strame)\s+(los\s+|las\s+|de\s+)?(libros|documentos)",
+    r"qu[eé]\s+(contiene|hay\s+en)\s+tu\s+base\s+de\s+conocimiento",
+    r"de\s+qu[eé]\s+trata\s+tu\s+base\s+de\s+conocimiento",
+]
+_META_QUESTION_REGEX = re.compile("|".join(_META_QUESTION_PATTERNS), re.IGNORECASE)
 
 
 # ============================================================================
@@ -104,7 +135,13 @@ class RAGService:
         ESTE ES EL MÉTODO PRINCIPAL DEL SISTEMA.
         Es el que se invoca cuando un usuario hace una pregunta.
 
-        Pipeline con Query Expansion:
+        Atajo previo (antes de ①): si la pregunta es "meta" — sobre el
+        catálogo en sí ("¿cuántos documentos tienes?") en vez de sobre
+        contenido — se responde directamente con _build_meta_answer() y
+        se sale sin pasar por retrieval ni por el LLM. Ver
+        _is_meta_question y el comentario de _META_QUESTION_PATTERNS.
+
+        Pipeline con Query Expansion (preguntas de contenido normales):
             ① Extraer keywords         → extract_keywords() [NUEVO]
             ② Vectorizar pregunta      → generate_embedding()
             ③ Buscar con keywords      → similarity_search(keyword_filter) [NUEVO]
@@ -147,6 +184,20 @@ class RAGService:
         """
         start_time = time.time()
         collection = collection_name or settings.chromadb_collection_name
+
+        # Preguntas sobre el catálogo ("¿cuántos libros conoces?") se
+        # responden aparte, sin retrieval semántico ni LLM — ver
+        # _is_meta_question/_build_meta_answer y el comentario de
+        # _META_QUESTION_PATTERNS más arriba en este fichero.
+        if self._is_meta_question(query.question):
+            answer = await self._build_meta_answer(collection)
+            return QueryResult(
+                question=query.question,
+                answer=answer,
+                source_documents=[],
+                session_id=query.session_id,
+                processing_time=time.time() - start_time
+            )
 
         try:
             source_documents = await self._retrieve(query, collection)
@@ -248,6 +299,19 @@ class RAGService:
         """
         start_time = time.time()
         collection = collection_name or settings.chromadb_collection_name
+
+        # Mismo shortcut que ask_question() para preguntas de catálogo —
+        # ver _is_meta_question/_build_meta_answer.
+        if self._is_meta_question(query.question):
+            answer = await self._build_meta_answer(collection)
+            yield {"type": "sources", "source_documents": []}
+            yield {"type": "token", "text": answer}
+            yield {
+                "type": "done",
+                "processing_time": time.time() - start_time,
+                "session_id": query.session_id
+            }
+            return
 
         source_documents = await self._retrieve(query, collection)
         yield {"type": "sources", "source_documents": source_documents}
@@ -363,6 +427,45 @@ class RAGService:
             source_documents = self._filter_by_relevance(source_documents)
 
         return source_documents
+
+    def _is_meta_question(self, question: str) -> bool:
+        """
+        Detecta si la pregunta es sobre el catálogo (cuántos/qué documentos
+        hay) en vez de sobre el contenido de un documento concreto.
+
+        Ver el comentario junto a _META_QUESTION_PATTERNS al inicio del
+        fichero para el porqué y las limitaciones de este enfoque.
+
+        Args:
+            question: Pregunta del usuario, tal cual (se compara en minúsculas)
+
+        Returns:
+            bool: True si matchea alguno de los patrones de pregunta meta
+        """
+        return bool(_META_QUESTION_REGEX.search(question.lower()))
+
+    async def _build_meta_answer(self, collection: str) -> str:
+        """
+        Construye una respuesta determinista listando el catálogo completo.
+
+        Deliberadamente NO pasa por el LLM: para "¿cuántos documentos
+        tienes?" no hay nada que generar, solo listar — así se elimina
+        cualquier riesgo de alucinación en esta clase de pregunta y la
+        respuesta es instantánea (sin esperar a generate_response).
+
+        Args:
+            collection: Colección de ChromaDB a consultar
+
+        Returns:
+            str: Listado numerado de documentos, o un mensaje si no hay ninguno
+        """
+        documents = await self.vector_db.list_documents(collection)
+        if not documents:
+            return "Todavía no tengo ningún documento indexado en mi base de conocimiento."
+
+        lines = [f"Conozco {len(documents)} documentos en mi base de conocimiento:\n"]
+        lines += [f"{i}. {doc.title}" for i, doc in enumerate(documents, 1)]
+        return "\n".join(lines)
 
     def _filter_by_relevance(self, source_documents: list[SourceDocument]) -> list[SourceDocument]:
         """

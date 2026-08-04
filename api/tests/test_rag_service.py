@@ -382,6 +382,94 @@ async def test_query_response_has_processing_time(rag_service_with_mocks, sample
 
 
 # ============================================================================
+# TESTS DE _is_meta_question() y preguntas de catálogo en ask_question()
+# ============================================================================
+# "¿Cuántos libros conoces?" no es una pregunta de contenido — no debe
+# pasar por similarity_search/generate_response, sino resolverse con
+# vector_db.list_documents() (ver RAGService._build_meta_answer).
+
+@pytest.mark.unit
+@pytest.mark.parametrize("question", [
+    "¿Cuántos libros conoces?",
+    "cuantos documentos tienes",
+    "¿Qué libros conoces?",
+    "qué documentos tienes",
+    "lista los libros",
+    "listame los documentos",
+    "dame una lista de libros",
+    "muéstrame los documentos",
+    "¿Qué contiene tu base de conocimiento?",
+    "¿de qué trata tu base de conocimiento?",
+])
+def test_is_meta_question_matches_common_phrasings(rag_service_with_mocks, question):
+    assert rag_service_with_mocks._is_meta_question(question) is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("question", [
+    "¿Quién escribió 1984?",
+    "¿Qué es RAG?",
+    "Háblame del libro de Deep Learning",
+    "¿Cuántas páginas tiene el capítulo 3?",  # de contenido, no de catálogo
+])
+def test_is_meta_question_does_not_match_content_questions(rag_service_with_mocks, question):
+    assert rag_service_with_mocks._is_meta_question(question) is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_meta_question_lists_full_catalog_without_llm_or_search(
+    rag_service_with_mocks, mock_ollama, mock_chromadb
+):
+    """
+    Pregunta meta → responde con el catálogo completo (mock_chromadb.list_documents
+    devuelve 2 documentos, ver conftest.py) sin llamar a generate_response
+    ni a similarity_search — solo a list_documents.
+    """
+    from app.core.domain.models import Query
+
+    query = Query(question="¿Cuántos libros conoces?")
+
+    response = await rag_service_with_mocks.ask_question(query)
+
+    assert "1984" in response.answer
+    assert "Deep Learning" in response.answer
+    assert response.answer.startswith("Conozco 2 documentos")
+    assert response.source_documents == []
+    mock_chromadb.list_documents.assert_awaited_once()
+    mock_ollama.generate_response.assert_not_called()
+    mock_chromadb.similarity_search.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_meta_question_with_empty_catalog(rag_service_with_mocks, mock_chromadb):
+    """Sin documentos indexados, responde honestamente en vez de listar vacío."""
+    from app.core.domain.models import Query
+
+    mock_chromadb.list_documents.side_effect = None
+    mock_chromadb.list_documents.return_value = []
+
+    query = Query(question="¿Cuántos documentos tienes?")
+    response = await rag_service_with_mocks.ask_question(query)
+
+    assert "no tengo ningún documento" in response.answer.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_content_question_still_uses_normal_pipeline(
+    rag_service_with_mocks, sample_query, mock_ollama, mock_chromadb
+):
+    """Una pregunta de contenido normal NO se desvía al atajo de catálogo."""
+    await rag_service_with_mocks.ask_question(sample_query)
+
+    mock_chromadb.similarity_search.assert_called()
+    mock_ollama.generate_response.assert_called_once()
+    mock_chromadb.list_documents.assert_not_called()
+
+
+# ============================================================================
 # TESTS DE ask_question_stream() (streaming SSE)
 # ============================================================================
 
@@ -446,6 +534,26 @@ async def test_stream_no_relevant_context_yields_fallback_token(rag_service_with
     assert len(token_events) == 1
     assert "no encontré información relevante" in token_events[0]["text"]
     assert events[-1]["type"] == "done"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_stream_meta_question_yields_single_token_with_catalog(
+    rag_service_with_mocks, mock_ollama, mock_chromadb
+):
+    """Mismo atajo que ask_question(), pero como stream: un único token, sin LLM."""
+    from app.core.domain.models import Query
+
+    query = Query(question="¿Qué documentos tienes?")
+    events = await _collect_stream(rag_service_with_mocks.ask_question_stream(query))
+
+    assert events[0] == {"type": "sources", "source_documents": []}
+    token_events = [e for e in events if e["type"] == "token"]
+    assert len(token_events) == 1
+    assert "1984" in token_events[0]["text"]
+    assert events[-1]["type"] == "done"
+    mock_ollama.generate_response.assert_not_called()
+    mock_chromadb.similarity_search.assert_not_called()
 
 
 # ============================================================================
