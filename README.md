@@ -2,8 +2,8 @@
 
 ![TFM](https://img.shields.io/badge/Proyecto-TFM_MDEV_IA-blue.svg)
 ![Licencia](https://img.shields.io/badge/Licencia-MIT-green.svg)
-![Tests](https://img.shields.io/badge/Tests-108_passed-brightgreen.svg)
-![Coverage](https://img.shields.io/badge/Coverage-63%25-yellow.svg)
+![Tests](https://img.shields.io/badge/Tests-132_passed-brightgreen.svg)
+![Coverage](https://img.shields.io/badge/Coverage-67%25-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)
 
 TFM que implementa un asistente RAG multiusuario ('Bibliotecario IA') para consultar documentos privados (PDFs y Notion), con LLM local (Ollama) o cloud (Groq), autenticación JWT y arquitectura hexagonal.
@@ -26,6 +26,8 @@ El acceso está protegido con **autenticación JWT multiusuario** (token enviado
 - **PDFs Locales**: Upload desde navegador con drag & drop o sincronización masiva vía CLI
 - **Notion API**: Sincronización de páginas individuales y bases de datos completas
 - **Extracción Automática**: Propiedades de bases de datos Notion (title, rich_text, number, select, etc.)
+- **Detección de Título Robusta**: identifica la propiedad título de una página de Notion por su `type`, no por el nombre de la columna — funciona con cualquier esquema de base de datos, no solo con el nombre de columna usado durante el desarrollo original
+- **Sincronización Resiliente**: al sincronizar una base de datos completa de Notion, el fallo de una página aislada (timeout, error del backend de embeddings, etc.) no aborta el resto — se registra como fallo puntual y la sincronización continúa con las páginas siguientes
 
 ### 🧠 Sistema RAG Avanzado
 - **Búsqueda Híbrida**: Combinación de búsqueda semántica + keywords extraídos (Query Expansion, implementación propia)
@@ -35,11 +37,13 @@ El acceso está protegido con **autenticación JWT multiusuario** (token enviado
 - **Historial de Conversación**: Contexto entre preguntas (Postgres), permite preguntas de seguimiento ("¿puedes ampliar eso?")
 - **Respuestas Contextualizadas**: Citas con referencias a documentos fuente
 - **Prompt Engineering**: Instrucciones estrictas para evitar alucinaciones
+- **Preguntas sobre el Catálogo, sin Alucinar**: preguntas tipo "¿cuántos documentos conoces?" no se resuelven con búsqueda semántica top-k (que nunca puede garantizar cubrir el catálogo completo) — un LLM clasifica la intención de la pregunta (independiente del idioma) y, si es agregada, se responde listando el catálogo real vía metadatos, no generando texto
 - **Evaluación de Calidad**: Harness de RAGAS (faithfulness, answer relevancy, context precision) contra un dataset de referencia — `pytest -m eval`
 
 ### 🎨 Interfaz de Usuario
 - **Chat Conversacional**: Interfaz intuitiva con historial de conversación
 - **Panel de Sincronización**: Gestión visual de documentos con estadísticas en tiempo real
+- **Explorador de Documentos**: listado con buscador de todo lo indexado (título, fuente, nº de chunks) y borrado directo, sin depender de que el chat sepa responder bien preguntas de tipo "qué tienes indexado"
 - **Dark Mode**: Diseño moderno con Tailwind CSS v4
 - **Responsive**: Adaptable a móvil y desktop
 
@@ -56,7 +60,7 @@ El acceso está protegido con **autenticación JWT multiusuario** (token enviado
 - **Endpoint /metrics**: Exposición de métricas para scraping
 
 ### 🧪 Testing
-- **108 Tests Unitarios**: Pytest con 63% de cobertura (medido, ver nota en Trabajo Futuro sobre dónde falta cobertura)
+- **132 Tests Unitarios**: Pytest con 67% de cobertura (medido, ver nota en Trabajo Futuro sobre dónde falta cobertura)
 - **Tests de Integración**: End-to-end con servicios reales
 - **Mocks Configurados**: Para Ollama, ChromaDB, Postgres y procesadores
 - **CI**: GitHub Actions ejecuta la suite `unit` en cada push/PR (backend; ver Trabajo Futuro sobre frontend)
@@ -491,8 +495,9 @@ cd frontend && npm run dev
 
 - **Tests de frontend**: no hay ningún test automatizado en `frontend/` todavía (ni Vitest ni Testing Library configurados) — añadir cobertura al menos de los componentes de auth y chat
 - **CI de frontend**: el workflow actual (`.github/workflows/test.yml`) solo corre `pytest -m unit`; añadir `npm run build` y `npm run lint` para detectar roturas del frontend en cada PR
-- **Subir cobertura de tests del backend**: 63% global, pero concentrado en los *services* (mockeados); los adapters que hablan con servicios reales están poco cubiertos
+- **Subir cobertura de tests del backend**: 67% global, pero concentrado en los *services* (mockeados); los adapters que hablan con servicios reales están poco cubiertos
 - **Tracing distribuido**: no hay OpenTelemetry/Jaeger implementado, solo logging estructurado y métricas (ver Observabilidad)
+- **Revisar/renovar los scripts de instalación** (`scripts/setup.py`, `scripts/verify_setup.py`): han quedado descolgados de cómo funciona el proyecto hoy — no contemplan Postgres (añadido junto con el historial de conversación) como dependencia igual de necesaria que ChromaDB, y no hay ninguna comprobación que avise si la API está corriendo a la vez en Docker (`docker-compose up -d`) y nativa (`uvicorn --reload`), algo que puede pasar fácilmente en desarrollo activo y que hace que cambios en `api/.env` parezcan no aplicarse (responde el contenedor viejo, no el proceso reiniciado). Decidir entre actualizarlos o rehacerlos desde cero.
 
 ---
 
