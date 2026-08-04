@@ -2,8 +2,8 @@
 
 ![TFM](https://img.shields.io/badge/Proyecto-TFM_MDEV_IA-blue.svg)
 ![Licencia](https://img.shields.io/badge/Licencia-MIT-green.svg)
-![Tests](https://img.shields.io/badge/Tests-132_passed-brightgreen.svg)
-![Coverage](https://img.shields.io/badge/Coverage-67%25-yellow.svg)
+![Tests](https://img.shields.io/badge/Tests-142_passed-brightgreen.svg)
+![Coverage](https://img.shields.io/badge/Coverage-68%25-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)
 
 TFM que implementa un asistente RAG multiusuario ('Bibliotecario IA') para consultar documentos privados (PDFs y Notion), con LLM local (Ollama) o cloud (Groq), autenticación JWT y arquitectura hexagonal.
@@ -35,6 +35,7 @@ El acceso está protegido con **autenticación JWT multiusuario** (token enviado
 - **LLM Intercambiable**: Ollama local (`llama3.2`, privacidad total) o Groq cloud (`openai/gpt-oss-120b`, para despliegues sin GPU local) — mismo código, se elige por variable de entorno
 - **Respuestas en Streaming**: Server-Sent Events (`POST /ask/stream`) — la respuesta se muestra token a token en vez de esperar a tenerla completa
 - **Historial de Conversación**: Contexto entre preguntas (Postgres), permite preguntas de seguimiento ("¿puedes ampliar eso?")
+- **Query Rewriting**: una pregunta de seguimiento corta y sin nombres propios ("¿cuántas páginas tiene?", justo después de hablar de un libro) se reescribe primero como pregunta autocontenida usando el historial ("¿cuántas páginas tiene *ese libro*?") antes de buscar — mismo patrón que `create_history_aware_retriever` de LangChain. Sin esto, ese tipo de pregunta o no encontraba nada relevante, o (peor) encontraba un chunk de otro documento con score suficiente para colar una respuesta segura pero incorrecta
 - **Respuestas Contextualizadas**: Citas con referencias a documentos fuente
 - **Prompt Engineering**: Instrucciones estrictas para evitar alucinaciones
 - **Preguntas sobre el Catálogo, sin Alucinar**: preguntas tipo "¿cuántos documentos conoces?" no se resuelven con búsqueda semántica top-k (que nunca puede garantizar cubrir el catálogo completo) — un LLM clasifica la intención de la pregunta (independiente del idioma) y, si es agregada, se responde listando el catálogo real vía metadatos, no generando texto
@@ -60,7 +61,7 @@ El acceso está protegido con **autenticación JWT multiusuario** (token enviado
 - **Endpoint /metrics**: Exposición de métricas para scraping
 
 ### 🧪 Testing
-- **132 Tests Unitarios**: Pytest con 67% de cobertura (medido, ver nota en Trabajo Futuro sobre dónde falta cobertura)
+- **142 Tests Unitarios**: Pytest con 68% de cobertura (medido, ver nota en Trabajo Futuro sobre dónde falta cobertura)
 - **Tests de Integración**: End-to-end con servicios reales
 - **Mocks Configurados**: Para Ollama, ChromaDB, Postgres y procesadores
 - **CI**: GitHub Actions ejecuta la suite `unit` en cada push/PR (backend; ver Trabajo Futuro sobre frontend)
