@@ -120,3 +120,20 @@ bcrypt==4.2.0                 # Hashing de contraseñas (directo, no via passlib
 pytest==8.3.4                # Testing framework
 pytest-asyncio==0.24.0       # Async support for pytest
 pytest-cov==7.1.0             # Coverage reports (--cov=app, documentado en CLAUDE.md/docs/ pero no instalado hasta ahora)
+
+# --- Evaluación (RAGAS) ---
+# Mide calidad de las respuestas del RAG (faithfulness, answer relevancy,
+# context precision) contra un pequeño dataset de referencia — ver
+# tests/test_rag_eval.py, marcado @pytest.mark.eval (no corre en el CI
+# normal, necesita Ollama + ChromaDB reales).
+#
+# Sin pin de langchain en su metadata (Requires-Dist: langchain, sin
+# versión) — probado explícitamente contra nuestro langchain==0.3.30 /
+# langchain-core==0.3.85 pinneados arriba, sin conflictos (pip check
+# limpio). OJO al subir de versión mayor en el futuro: ragas se mueve
+# rápido y ya deprecó en 0.4.x la API clásica de ragas.metrics (la que
+# usamos aquí) en favor de ragas.metrics.collections (basada en
+# `instructor`, no en LangchainLLMWrapper) — si esa API clásica
+# desaparece en una v1.0, test_rag_eval.py necesitará reescribirse.
+ragas==0.4.3
+datasets==5.0.1               # Dependencia de ragas (EvaluationDataset)

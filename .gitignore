@@ -50,6 +50,7 @@ dist/
 .pytest_cache/
 .coverage
 htmlcov/
+api/tests/eval_results/
 
 # === JavaScript / Frontend ('/frontend') ===
 # Dependencies (VERY IMPORTANT!)
