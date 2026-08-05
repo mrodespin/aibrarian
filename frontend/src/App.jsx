@@ -14,7 +14,7 @@ function AuthGate() {
 
   if (isLoading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-bg-900">
+      <div className="h-dvh flex items-center justify-center bg-bg-900">
         <Spinner size="lg" />
       </div>
     );

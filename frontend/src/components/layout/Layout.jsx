@@ -11,7 +11,7 @@ export function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="h-screen flex flex-col bg-bg-900">
+    <div className="h-dvh flex flex-col bg-bg-900">
       {/* Header */}
       <Header onMenuClick={() => setSidebarOpen(true)} />
 
