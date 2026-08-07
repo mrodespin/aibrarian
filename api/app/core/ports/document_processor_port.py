@@ -1,21 +1,22 @@
 # /api/app/core/ports/document_processor_port.py
 """
-Puerto (Interfaz) para procesamiento de documentos - TFM Bibliotecario-IA
+Port (Interface) for document processing - Bibliotecario-IA
 
-Este archivo define el CONTRATO para procesar documentos de diferentes fuentes.
-Permite que el sistema soporte PDFs, Notion, Word, etc. con el mismo código.
+This file defines the CONTRACT for processing documents from different
+sources. It lets the system support PDFs, Notion, Word, etc. with the
+same code.
 
-¿Qué hace un Document Processor?
-1. CARGAR documentos desde diferentes fuentes (PDF, Notion, etc.)
-2. EXTRAER el texto del documento
-3. DIVIDIR el texto en chunks pequeños para el sistema RAG
+What does a Document Processor do?
+1. LOADS documents from different sources (PDF, Notion, etc.)
+2. EXTRACTS the document's text
+3. SPLITS the text into small chunks for the RAG system
 
-¿Por qué dividir en chunks?
-- Los LLMs tienen límite de tokens (contexto)
-- La búsqueda vectorial funciona mejor con textos cortos
-- Permite encontrar secciones específicas relevantes
+Why split into chunks?
+- LLMs have a token (context) limit
+- Vector search works better with short texts
+- Lets you find specific relevant sections
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     interface DocumentProcessorPort {
         loadDocument(source: string | Path): Promise<Document>;
         splitIntoChunks(doc: Document, size?: number, overlap?: number): Promise<Chunk[]>;
@@ -23,9 +24,9 @@ Equivalente en TypeScript:
         supportsFormat(filePath: string | Path): boolean;
     }
 
-Implementaciones existentes:
-- /adapters/outbound/pdf_processor_adapter.py (PDFs locales)
-- /adapters/outbound/notion_processor_adapter.py (páginas de Notion)
+Existing implementations:
+- /adapters/outbound/pdf_processor_adapter.py (local PDFs)
+- /adapters/outbound/notion_processor_adapter.py (Notion pages)
 """
 
 # ============================================================================
@@ -33,68 +34,69 @@ Implementaciones existentes:
 # ============================================================================
 from abc import ABC, abstractmethod
 from typing import List
-# Path es como el módulo 'path' de Node.js, pero orientado a objetos
+# Path is like Node.js's 'path' module, but object-oriented
 from pathlib import Path
 from app.core.domain.models import Document, Chunk
 
 
 # ============================================================================
-# INTERFAZ DE PROCESAMIENTO DE DOCUMENTOS
+# DOCUMENT PROCESSING INTERFACE
 # ============================================================================
 class DocumentProcessorPort(ABC):
     """
-    Interfaz abstracta para operaciones de procesamiento de documentos.
+    Abstract interface for document processing operations.
 
-    Esta interfaz permite que el sistema sea AGNÓSTICO a la fuente de datos.
-    El mismo código de negocio funciona con PDFs, Notion, Word, etc.
+    This interface lets the system be AGNOSTIC to the data source.
+    The same business logic works with PDFs, Notion, Word, etc.
 
-    Flujo de procesamiento:
-        Archivo/URL → load_document() → Document
+    Processing flow:
+        File/URL → load_document() → Document
                                             ↓
                                     split_into_chunks()
                                             ↓
                                     [Chunk, Chunk, Chunk, ...]
                                             ↓
-                            Se envían al LLM para generar embeddings
+                            Sent to the LLM to generate embeddings
                                             ↓
-                                Se almacenan en ChromaDB
+                                Stored in ChromaDB
 
-    Implementaciones actuales:
-    - PDFProcessorAdapter: Procesa archivos .pdf locales
-    - NotionProcessorAdapter: Procesa páginas de Notion vía API
+    Current implementations:
+    - PDFProcessorAdapter: Processes local .pdf files
+    - NotionProcessorAdapter: Processes Notion pages via the API
 
-    Para añadir soporte a Word, solo habría que crear:
-    - WordProcessorAdapter que implemente esta interfaz
+    To add Word support, you'd just need to create:
+    - A WordProcessorAdapter implementing this interface
     """
 
     @abstractmethod
     async def load_document(self, source: str | Path) -> Document:
         """
-        Carga un documento desde un archivo o fuente externa.
+        Loads a document from a file or external source.
 
-        Este es el PRIMER PASO del pipeline de ingesta.
-        Extrae todo el texto del documento y lo convierte en un objeto Document.
+        This is the FIRST STEP in the ingestion pipeline.
+        Extracts all of the document's text and turns it into a
+        Document object.
 
         Args:
-            source: Ruta al archivo o identificador de la fuente
-                   - Para PDFs: "/data/manual.pdf" o Path("/data/manual.pdf")
-                   - Para Notion: "https://notion.so/page-id" o el page_id
+            source: Path to the file or the source's identifier
+                   - For PDFs: "/data/manual.pdf" or Path("/data/manual.pdf")
+                   - For Notion: "https://notion.so/page-id" or the page_id
 
         Returns:
-            Document: Objeto con el contenido extraído y metadatos
-                     - content: Todo el texto del documento
+            Document: Object with the extracted content and metadata
+                     - content: All of the document's text
                      - metadata: {filename, page_count, url, etc.}
-                     - source: "pdf" o "notion"
+                     - source: "pdf" or "notion"
 
-        Ejemplo:
-            # Cargar un PDF
+        Example:
+            # Load a PDF
             doc = await processor.load_document("/data/manual.pdf")
-            print(doc.content)  # "Capítulo 1: Introducción..."
+            print(doc.content)  # "Chapter 1: Introduction..."
             print(doc.metadata)  # {"filename": "manual.pdf", "page_count": 50}
 
-        Nota sobre str | Path:
-            Es un "Union Type" de Python (como en TypeScript: string | Path)
-            Acepta tanto strings como objetos Path
+        Note on str | Path:
+            This is a Python "Union Type" (like TypeScript's string | Path)
+            Accepts both strings and Path objects
         """
         pass
 
@@ -106,50 +108,50 @@ class DocumentProcessorPort(ABC):
         chunk_overlap: int = 200
     ) -> List[Chunk]:
         """
-        Divide el contenido de un documento en chunks pequeños.
+        Splits a document's content into small chunks.
 
-        Este es el SEGUNDO PASO del pipeline de ingesta.
+        This is the SECOND STEP in the ingestion pipeline.
 
-        ¿Por qué chunk_size y chunk_overlap?
+        Why chunk_size and chunk_overlap?
 
-        chunk_size = 1000 caracteres por chunk (aprox. 200 palabras)
-        - Muy pequeño → pierde contexto
-        - Muy grande → la búsqueda es menos precisa
+        chunk_size = 1000 characters per chunk (~200 words)
+        - Too small → loses context
+        - Too large → search becomes less precise
 
-        chunk_overlap = 200 caracteres compartidos entre chunks
-        - Evita cortar ideas a la mitad
-        - Mantiene continuidad entre fragmentos
+        chunk_overlap = 200 characters shared between chunks
+        - Avoids cutting ideas in half
+        - Keeps continuity between fragments
 
-        Ejemplo visual (overlap):
-            Documento: "ABCDEFGHIJ"
+        Visual example (overlap):
+            Document: "ABCDEFGHIJ"
 
-            Sin overlap (size=5):
+            Without overlap (size=5):
               Chunk 1: "ABCDE"
               Chunk 2: "FGHIJ"
-              → Si la info importante está en "EF", se pierde
+              → If the important info is in "EF", it's lost
 
-            Con overlap (size=5, overlap=2):
+            With overlap (size=5, overlap=2):
               Chunk 1: "ABCDE"
               Chunk 2: "DEFGH"
               Chunk 3: "GHIJ"
-              → "DE" y "GH" están en dos chunks, manteniendo contexto
+              → "DE" and "GH" appear in two chunks, preserving context
 
         Args:
-            document: Documento a dividir (ya cargado con load_document)
-            chunk_size: Tamaño objetivo de cada chunk en caracteres
-                       Default: 1000 (~200 palabras)
-            chunk_overlap: Caracteres de solapamiento entre chunks
-                          Default: 200 (~40 palabras)
+            document: Document to split (already loaded with load_document)
+            chunk_size: Target size of each chunk in characters
+                       Default: 1000 (~200 words)
+            chunk_overlap: Overlap characters between chunks
+                          Default: 200 (~40 words)
 
         Returns:
-            List[Chunk]: Lista de chunks SIN embeddings todavía
-                        Los embeddings se generan después con el LLM
+            List[Chunk]: List of chunks WITHOUT embeddings yet
+                        Embeddings are generated afterward with the LLM
 
-        Ejemplo:
+        Example:
             chunks = await processor.split_into_chunks(document, size=500, overlap=100)
-            # chunks[0].content = "Capítulo 1: Introducción. Este documento..."
-            # chunks[1].content = "documento describe el sistema de..."
-            # (nótese el overlap: "documento" aparece en ambos)
+            # chunks[0].content = "Chapter 1: Introduction. This document..."
+            # chunks[1].content = "document describes the system for..."
+            # (note the overlap: "document" appears in both)
         """
         pass
 
@@ -161,55 +163,55 @@ class DocumentProcessorPort(ABC):
         chunk_overlap: int = 200
     ) -> tuple[Document, List[Chunk]]:
         """
-        Pipeline completo: carga documento y lo divide en chunks.
+        Full pipeline: loads a document and splits it into chunks.
 
-        Es un método de CONVENIENCIA que combina:
+        A CONVENIENCE method that combines:
         1. load_document()
         2. split_into_chunks()
 
-        Útil cuando quieres hacer todo el procesamiento en una sola llamada.
+        Useful when you want to do all the processing in a single call.
 
         Args:
-            source: Ruta al documento (igual que load_document)
-            chunk_size: Tamaño de chunks (igual que split_into_chunks)
-            chunk_overlap: Overlap entre chunks
+            source: Path to the document (same as load_document)
+            chunk_size: Chunk size (same as split_into_chunks)
+            chunk_overlap: Overlap between chunks
 
         Returns:
-            tuple[Document, List[Chunk]]: Tupla con ambos resultados
-                                         En TypeScript sería: [Document, Chunk[]]
+            tuple[Document, List[Chunk]]: Tuple with both results
+                                         In TypeScript this would be: [Document, Chunk[]]
 
-        Ejemplo:
-            # En lugar de:
+        Example:
+            # Instead of:
             doc = await processor.load_document("/data/manual.pdf")
             chunks = await processor.split_into_chunks(doc)
 
-            # Puedes hacer:
+            # You can do:
             doc, chunks = await processor.process_document("/data/manual.pdf")
 
-        Nota sobre tuple:
-            Python puede devolver múltiples valores empaquetados en una tupla.
-            Se "desempaquetan" con: doc, chunks = await process_document(...)
-            Es similar a destructuring en JavaScript: const [doc, chunks] = ...
+        Note on tuple:
+            Python can return multiple values packed into a tuple.
+            They're "unpacked" with: doc, chunks = await process_document(...)
+            Similar to destructuring in JavaScript: const [doc, chunks] = ...
         """
         pass
 
     @abstractmethod
     def supports_format(self, file_path: str | Path) -> bool:
         """
-        Verifica si este procesador soporta el formato del archivo.
+        Checks whether this processor supports the file's format.
 
-        Útil para:
-        - Seleccionar el procesador correcto automáticamente
-        - Validar archivos antes de procesarlos
-        - Mostrar errores claros al usuario
+        Useful for:
+        - Automatically picking the right processor
+        - Validating files before processing them
+        - Showing clear errors to the user
 
         Args:
-            file_path: Ruta al archivo a verificar
+            file_path: Path to the file to check
 
         Returns:
-            bool: True si el formato es soportado
+            bool: True if the format is supported
 
-        Ejemplo:
+        Example:
             pdf_processor = PDFProcessorAdapter()
             pdf_processor.supports_format("manual.pdf")     # True
             pdf_processor.supports_format("manual.docx")    # False
@@ -217,7 +219,7 @@ class DocumentProcessorPort(ABC):
             notion_processor = NotionProcessorAdapter()
             notion_processor.supports_format("notion://page-id")  # True
 
-        Nota: Este método NO es async porque solo verifica la extensión,
-              no necesita acceder al sistema de archivos realmente.
+        Note: This method is NOT async because it only checks the
+              extension, it doesn't need to actually access the filesystem.
         """
         pass

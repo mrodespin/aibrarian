@@ -1,22 +1,23 @@
 # /api/app/core/ports/llm_port.py
 """
-Puerto (Interfaz) para operaciones del Modelo de Lenguaje - TFM Bibliotecario-IA
+Port (Interface) for Language Model operations - Bibliotecario-IA
 
-Este archivo define el CONTRATO que debe cumplir cualquier LLM (Large Language Model).
-Es una interfaz abstracta que permite cambiar de Ollama a OpenAI sin modificar servicios.
+This file defines the CONTRACT that any LLM (Large Language Model) must
+fulfill. It's an abstract interface that lets you swap Ollama for
+OpenAI without modifying any services.
 
-¿Qué es un LLM?
-- Large Language Model = Modelo de Lenguaje Grande
-- Ejemplos: GPT-4, Llama, Mistral, Claude
-- Puede entender y generar texto en lenguaje natural
+What is an LLM?
+- Large Language Model
+- Examples: GPT-4, Llama, Mistral, Claude
+- Can understand and generate natural-language text
 
-¿Por qué dos tipos de operaciones?
-1. generate_response: Usa modelo conversacional (llama3.2) para generar texto
-2. generate_embedding: Usa modelo de embeddings (nomic-embed-text) para vectorizar
+Why two types of operations?
+1. generate_response: Uses a conversational model (llama3.2) to generate text
+2. generate_embedding: Uses an embedding model (nomic-embed-text) to vectorize text
 
-Son modelos DIFERENTES aunque ambos se accedan por Ollama.
+They're DIFFERENT models even though both are accessed through Ollama.
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     interface LLMPort {
         generateResponse(prompt: string, context?: string): Promise<string>;
         generateEmbedding(text: string): Promise<number[]>;
@@ -25,48 +26,48 @@ Equivalente en TypeScript:
         getModelInfo(): Record<string, any>;
     }
 
-La implementación real está en: /adapters/outbound/ollama_adapter.py
+The real implementation lives at: /adapters/outbound/ollama_adapter.py
 """
 
 # ============================================================================
 # IMPORTS
 # ============================================================================
-# ABC permite crear clases abstractas (interfaces)
+# ABC lets you create abstract classes (interfaces)
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any, AsyncIterator
 
 
 # ============================================================================
-# INTERFAZ DEL MODELO DE LENGUAJE
+# LANGUAGE MODEL INTERFACE
 # ============================================================================
 class LLMPort(ABC):
     """
-    Interfaz abstracta para operaciones del Modelo de Lenguaje.
+    Abstract interface for Language Model operations.
 
-    El sistema RAG necesita DOS capacidades del LLM:
+    The RAG system needs TWO capabilities from the LLM:
 
-    1. GENERACIÓN DE TEXTO (generate_response):
-       - Recibe: pregunta + contexto (chunks relevantes)
-       - Devuelve: respuesta en lenguaje natural
-       - Modelo usado: llama3.2 (conversacional)
+    1. TEXT GENERATION (generate_response):
+       - Receives: question + context (relevant chunks)
+       - Returns: a natural-language answer
+       - Model used: llama3.2 (conversational)
 
-    2. GENERACIÓN DE EMBEDDINGS (generate_embedding):
-       - Recibe: texto a vectorizar
-       - Devuelve: vector numérico [0.1, -0.2, 0.3, ...]
-       - Modelo usado: nomic-embed-text (especializado en embeddings)
+    2. EMBEDDING GENERATION (generate_embedding):
+       - Receives: text to vectorize
+       - Returns: a numeric vector [0.1, -0.2, 0.3, ...]
+       - Model used: nomic-embed-text (specialized in embeddings)
 
-    Flujo en el sistema RAG:
-        Usuario: "¿Qué es machine learning?"
+    Flow in the RAG system:
+        User: "What is machine learning?"
             ↓
-        generate_embedding("¿Qué es machine learning?")
+        generate_embedding("What is machine learning?")
             ↓
-        Vector → ChromaDB → chunks relevantes
+        Vector → ChromaDB → relevant chunks
             ↓
-        generate_response(prompt=pregunta, context=chunks)
+        generate_response(prompt=question, context=chunks)
             ↓
-        "Machine learning es una rama de la IA..."
+        "Machine learning is a branch of AI..."
 
-    Nota: ABC = Abstract Base Class (no se puede instanciar directamente)
+    Note: ABC = Abstract Base Class (can't be instantiated directly)
     """
 
     @abstractmethod
@@ -80,162 +81,162 @@ class LLMPort(ABC):
         **kwargs
     ) -> str:
         """
-        Genera una respuesta de texto usando el modelo de lenguaje.
+        Generates a text response using the language model.
 
-        ESTE MÉTODO ES EL "CEREBRO" DEL CHATBOT.
+        THIS METHOD IS THE CHATBOT'S "BRAIN".
 
-        ¿Cómo funciona internamente?
-        1. Se construye un prompt con la pregunta + contexto
-        2. Se envía al modelo (Ollama/llama3.2)
-        3. El modelo genera tokens uno a uno hasta completar
-        4. Se devuelve la respuesta completa
+        How does it work internally?
+        1. A prompt is built from the question + context
+        2. It's sent to the model (Ollama/llama3.2)
+        3. The model generates tokens one at a time until it's done
+        4. The full response is returned
 
         Args:
-            prompt: Pregunta del usuario en lenguaje natural
-                   Ejemplo: "¿Qué es machine learning?"
+            prompt: The user's question in natural language
+                   Example: "What is machine learning?"
 
-            context: Contexto opcional (chunks recuperados de ChromaDB)
-                    Ejemplo: "Según el documento X, machine learning es..."
-                    El contexto se inyecta en el prompt para dar información
+            context: Optional context (chunks retrieved from ChromaDB)
+                    Example: "According to document X, machine learning is..."
+                    The context is injected into the prompt to provide grounding
 
-            history: Turnos previos de la conversación, ya formateados como
-                    texto (ver ConversationService.get_history_prompt_block),
-                    o None si no hay historial. Se antepone al contexto en el
-                    prompt para que el modelo pueda resolver preguntas de
-                    seguimiento ("¿puedes ampliar eso?").
+            history: Previous conversation turns, already formatted as
+                    text (see ConversationService.get_history_prompt_block),
+                    or None if there's no history. It's prepended to the
+                    context in the prompt so the model can resolve
+                    follow-up questions ("can you expand on that?").
 
-            max_tokens: Límite de tokens en la respuesta (None = sin límite)
-                       Un token ≈ 0.75 palabras en español
-                       Ejemplo: max_tokens=500 ≈ 375 palabras
+            max_tokens: Token limit for the response (None = no limit)
+                       A token ≈ 0.75 words in English
+                       Example: max_tokens=500 ≈ 375 words
 
-            temperature: Controla la "creatividad" del modelo (0.0 a 1.0)
-                        - 0.0 = determinista (siempre la misma respuesta)
-                        - 0.7 = balance entre coherencia y variedad (default)
-                        - 1.0 = muy creativo/aleatorio
-                        Para Q&A técnico, mejor usar 0.3-0.5
+            temperature: Controls the model's "creativity" (0.0 to 1.0)
+                        - 0.0 = deterministic (always the same answer)
+                        - 0.7 = balance between coherence and variety (default)
+                        - 1.0 = very creative/random
+                        For technical Q&A, better to use 0.3-0.5
 
-            **kwargs: Parámetros adicionales específicos del modelo
-                     Es como ...rest en JavaScript
-                     Ejemplo: top_p=0.9, repetition_penalty=1.1
+            **kwargs: Additional model-specific parameters
+                     Like ...rest in JavaScript
+                     Example: top_p=0.9, repetition_penalty=1.1
 
         Returns:
-            str: Respuesta generada por el modelo
+            str: The model's generated response
 
-        Ejemplo de uso:
+        Usage example:
             response = await llm.generate_response(
-                prompt="¿Qué es RAG?",
-                context="RAG significa Retrieval-Augmented Generation...",
-                temperature=0.3  # Bajo para respuestas más precisas
+                prompt="What is RAG?",
+                context="RAG stands for Retrieval-Augmented Generation...",
+                temperature=0.3  # Low for more precise answers
             )
-            # response = "RAG (Retrieval-Augmented Generation) es una técnica..."
+            # response = "RAG (Retrieval-Augmented Generation) is a technique..."
         """
-        pass  # La implementación real está en ollama_adapter.py
+        pass  # The real implementation lives in ollama_adapter.py
 
     @abstractmethod
     async def generate_embedding(self, text: str) -> List[float]:
         """
-        Genera un vector embedding para un texto.
+        Generates an embedding vector for a text.
 
-        ¿Qué es un embedding?
-        - Representación numérica del "significado" de un texto
-        - Vector de ~768 números flotantes
-        - Textos similares → vectores cercanos en el espacio
+        What is an embedding?
+        - A numeric representation of a text's "meaning"
+        - A vector of ~768 floating point numbers
+        - Similar texts → vectors close together in that space
 
-        ¿Para qué sirve?
-        - Convertir la pregunta del usuario en vector
-        - Ese vector se compara con los chunks en ChromaDB
-        - Se encuentran los chunks más "semánticamente similares"
+        What's it for?
+        - Converting the user's question into a vector
+        - That vector is compared against the chunks in ChromaDB
+        - The most "semantically similar" chunks are found
 
         Args:
-            text: Texto a convertir en vector
-                 Ejemplo: "¿Cómo funciona la autenticación?"
+            text: Text to convert into a vector
+                 Example: "How does authentication work?"
 
         Returns:
-            List[float]: Vector de ~768 números
-                        Ejemplo: [0.123, -0.456, 0.789, ...]
+            List[float]: A vector of ~768 numbers
+                        Example: [0.123, -0.456, 0.789, ...]
 
-        Ejemplo:
-            # Vectorizar una pregunta
-            embedding = await llm.generate_embedding("¿Qué es Docker?")
-            # embedding = [0.1, -0.2, 0.3, ...] (768 números)
+        Example:
+            # Vectorize a question
+            embedding = await llm.generate_embedding("What is Docker?")
+            # embedding = [0.1, -0.2, 0.3, ...] (768 numbers)
 
-            # Este vector se envía a ChromaDB para buscar chunks similares
+            # This vector is sent to ChromaDB to search for similar chunks
 
-        Modelo usado: nomic-embed-text (especializado en embeddings)
-        Dimensiones: 768 (fijo para este modelo)
+        Model used: nomic-embed-text (specialized in embeddings)
+        Dimensions: 768 (fixed for this model)
         """
         pass
 
     @abstractmethod
     async def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """
-        Genera embeddings para múltiples textos en lote.
+        Generates embeddings for multiple texts in a batch.
 
-        ¿Por qué batch en lugar de uno por uno?
-        - Eficiencia: una llamada en lugar de N llamadas
-        - Menor latencia total
-        - Cuando ingestas un PDF de 100 chunks, es MUY ineficiente
-          hacer 100 llamadas individuales
+        Why batch instead of one at a time?
+        - Efficiency: one call instead of N calls
+        - Lower total latency
+        - When ingesting a 100-chunk PDF, making 100 individual calls
+          would be VERY inefficient
 
         Args:
-            texts: Lista de textos a vectorizar
-                  Ejemplo: ["Chunk 1 del PDF...", "Chunk 2 del PDF...", ...]
+            texts: List of texts to vectorize
+                  Example: ["PDF chunk 1...", "PDF chunk 2...", ...]
 
         Returns:
-            List[List[float]]: Lista de vectores, uno por cada texto
-                              Mantiene el mismo orden que la entrada
+            List[List[float]]: List of vectors, one per text
+                              Keeps the same order as the input
 
-        Ejemplo:
-            chunks = ["Texto chunk 1", "Texto chunk 2", "Texto chunk 3"]
+        Example:
+            chunks = ["Chunk 1 text", "Chunk 2 text", "Chunk 3 text"]
             embeddings = await llm.generate_embeddings_batch(chunks)
-            # embeddings[0] corresponde a chunks[0]
-            # embeddings[1] corresponde a chunks[1]
+            # embeddings[0] corresponds to chunks[0]
+            # embeddings[1] corresponds to chunks[1]
             # etc.
 
-        Nota: Internamente puede procesar en paralelo o en mini-batches
-              según las capacidades del modelo/hardware
+        Note: internally it may process in parallel or in mini-batches
+              depending on the model/hardware's capabilities
         """
         pass
 
     @abstractmethod
     async def is_available(self) -> bool:
         """
-        Verifica si el servicio LLM está disponible y respondiendo.
+        Checks whether the LLM service is available and responding.
 
-        Útil para:
-        - Health checks de la API (endpoint /health)
-        - Verificar que Ollama está corriendo antes de procesar
-        - Mostrar estado al usuario en el frontend
+        Useful for:
+        - The API's health checks (/health endpoint)
+        - Verifying Ollama is running before processing
+        - Showing status to the user in the frontend
 
         Returns:
-            bool: True si el servicio está disponible
+            bool: True if the service is available
 
-        Ejemplo:
+        Example:
             if not await llm.is_available():
-                raise ServiceUnavailableError("Ollama no está corriendo")
+                raise ServiceUnavailableError("Ollama is not running")
 
-        Implementación típica:
-        - Intenta hacer una llamada simple al modelo
-        - Si responde en < 5 segundos → True
-        - Si hay timeout o error → False
+        Typical implementation:
+        - Tries a simple call to the model
+        - Responds in < 5 seconds → True
+        - Timeout or error → False
         """
         pass
 
     async def warm_up(self) -> None:
         """
-        Precarga en memoria lo que el adaptador necesite antes de la primera
-        petición real (p.ej. descargar/cargar un modelo local).
+        Preloads into memory whatever the adapter needs before the first
+        real request (e.g. downloading/loading a local model).
 
-        No es @abstractmethod: por defecto no hace nada (implementación
-        vacía), así que los adaptadores que no lo necesiten (OllamaAdapter,
-        cuyos embeddings los sirve el propio servidor Ollama) no tienen que
-        implementarlo. GroqAdapter lo sobreescribe para precargar el modelo
-        de sentence-transformers local.
+        Not an @abstractmethod: it does nothing by default (empty
+        implementation), so adapters that don't need it (OllamaAdapter,
+        whose embeddings are served by the Ollama server itself) don't
+        have to implement it. GroqAdapter overrides it to preload the
+        local sentence-transformers model.
 
-        Se llama como tarea en segundo plano DESPUÉS de que el startup de
-        FastAPI termine (ver lifespan en main.py) — nunca debe bloquear el
-        arranque, porque uvicorn no abre el puerto hasta que el startup
-        completa (ver is_available en groq_adapter.py para el porqué).
+        Called as a background task AFTER FastAPI's startup finishes
+        (see lifespan in main.py) — it must never block startup, since
+        uvicorn doesn't open the port until startup completes (see
+        is_available in groq_adapter.py for why).
         """
         pass
 
@@ -249,23 +250,23 @@ class LLMPort(ABC):
         **kwargs
     ) -> AsyncIterator[str]:
         """
-        Versión en streaming de generate_response(): produce la respuesta
-        trozo a trozo en vez de esperar a tenerla completa.
+        Streaming version of generate_response(): yields the response
+        chunk by chunk instead of waiting for the full answer.
 
-        No es @abstractmethod (mismo patrón que warm_up): por defecto cae
-        a generate_response() y produce un único trozo con la respuesta
-        completa, así que un adaptador que no implemente streaming real
-        (p.ej. GroqAdapter en esta primera versión) sigue siendo un
-        LLMPort válido sin tener que sobreescribir nada. OllamaAdapter sí
-        lo sobreescribe con streaming real (llm.astream()).
+        Not an @abstractmethod (same pattern as warm_up): it falls back
+        by default to generate_response() and yields a single chunk with
+        the full answer, so an adapter that doesn't implement real
+        streaming (e.g. GroqAdapter in this first version) is still a
+        valid LLMPort without having to override anything. OllamaAdapter
+        does override it with real streaming (llm.astream()).
 
         Args:
-            Mismos que generate_response() — ver ahí para el detalle.
+            Same as generate_response() — see there for details.
 
         Yields:
-            str: fragmentos de la respuesta, en el orden en que se generan.
-                 Concatenados en orden, forman la misma respuesta completa
-                 que devolvería generate_response() con los mismos argumentos.
+            str: fragments of the response, in generation order.
+                 Concatenated in order, they form the same full response
+                 that generate_response() would return with the same arguments.
         """
         yield await self.generate_response(
             prompt=prompt,
@@ -279,13 +280,13 @@ class LLMPort(ABC):
     @abstractmethod
     def get_model_info(self) -> Dict[str, Any]:
         """
-        Obtiene información sobre el modelo actual.
+        Gets information about the current model.
 
-        Nota: Este método NO es async (sin await) porque la info
-              típicamente está cacheada en memoria.
+        Note: This method is NOT async (no await) because the info is
+              typically cached in memory.
 
         Returns:
-            Dict con información del modelo:
+            Dict with model information:
             {
                 "model_name": "llama3.2",
                 "embedding_model": "nomic-embed-text",
@@ -294,39 +295,39 @@ class LLMPort(ABC):
                 "base_url": "http://localhost:11434"
             }
 
-        Útil para:
-        - Endpoint /info de la API
-        - Debugging ("¿qué modelo estoy usando?")
-        - Logging y monitoreo
+        Useful for:
+        - The API's /info endpoint
+        - Debugging ("what model am I using?")
+        - Logging and monitoring
         """
         pass
 
     @abstractmethod
     async def extract_keywords(self, question: str) -> List[str]:
         """
-        Extrae palabras clave y entidades de una pregunta (Query Expansion).
+        Extracts keywords and entities from a question (Query Expansion).
 
-        ¿Por qué Query Expansion?
-        - La búsqueda semántica pura puede fallar con nombres propios
-        - Ejemplo: "Blade Runner" vs "Blade Runner 2049"
-        - Extraer keywords permite filtrar documentos antes de buscar
+        Why Query Expansion?
+        - Pure semantic search can fail with proper nouns
+        - Example: "Blade Runner" vs "Blade Runner 2049"
+        - Extracting keywords lets you filter documents before searching
 
-        Flujo:
-            Pregunta: "¿Quién dirigió Blade Runner 2049?"
+        Flow:
+            Question: "Who directed Blade Runner 2049?"
                 ↓
-            Keywords: ["Blade Runner 2049", "dirigió", "director"]
+            Keywords: ["Blade Runner 2049", "directed", "director"]
                 ↓
-            Filtro por keywords + búsqueda semántica
+            Filter by keywords + semantic search
 
         Args:
-            question: Pregunta del usuario en lenguaje natural
+            question: The user's question in natural language
 
         Returns:
-            List[str]: Lista de keywords/entidades extraídas
-                      Lista vacía si no se pueden extraer
+            List[str]: List of extracted keywords/entities
+                      Empty list if none could be extracted
 
-        Ejemplo:
-            keywords = await llm.extract_keywords("¿Qué es Docker?")
+        Example:
+            keywords = await llm.extract_keywords("What is Docker?")
             # keywords = ["Docker"]
         """
         pass
@@ -334,103 +335,104 @@ class LLMPort(ABC):
     @abstractmethod
     async def is_catalog_question(self, question: str) -> bool:
         """
-        Clasifica si una pregunta es sobre el CATÁLOGO (cuántos/qué
-        documentos hay en total) en vez de sobre el CONTENIDO de un
-        documento concreto.
+        Classifies whether a question is about the CATALOG (how
+        many/what documents there are in total) rather than about the
+        CONTENT of one specific document.
 
-        ¿Por qué hace falta esto?
-        similarity_search siempre devuelve como mucho top_k chunks — es la
-        herramienta correcta para "¿qué dice el libro X sobre Y?", pero
-        estructuralmente NO puede responder bien "¿cuántos libros
-        conoces?": no hay forma de garantizar que el top_k cubra el
-        catálogo completo. RAGService usa este método para desviar esa
-        clase de pregunta a VectorDBPort.list_documents() en vez de a
-        similarity_search (ver RAGService._build_meta_answer).
+        Why is this needed?
+        similarity_search always returns at most top_k chunks — it's the
+        right tool for "what does book X say about Y?", but it
+        structurally CANNOT answer "how many books do you know?" well:
+        there's no way to guarantee top_k covers the whole catalog.
+        RAGService uses this method to route that class of question to
+        VectorDBPort.list_documents() instead of similarity_search (see
+        RAGService._build_meta_answer).
 
-        Nota: esto es independiente de condense_question() — una pregunta
-        de catálogo no necesita reescribirse con el historial, así que
-        esta comprobación va ANTES, y solo si es False se pasa por
-        condense_question() antes de retrievar.
+        Note: this is independent from condense_question() — a catalog
+        question doesn't need rewriting with history, so this check runs
+        BEFORE that, and only if it's False does the question go through
+        condense_question() before retrieval.
 
-        ¿Por qué un LLM y no un regex de palabras clave?
-        Un regex de frases típicas solo cubre un idioma y una redacción
-        concreta. El LLM entiende la intención independientemente del
-        idioma o de cómo esté formulada la pregunta — mismo principio que
-        extract_keywords(), que también delega en el LLM en vez de en una
-        lista de patrones.
+        Why an LLM and not a keyword regex?
+        A regex of typical phrases only covers one language and one
+        specific wording. The LLM understands the intent regardless of
+        language or how the question is phrased — same principle as
+        extract_keywords(), which also delegates to the LLM instead of a
+        list of patterns.
 
-        Debe ser una llamada barata y rápida: prompt corto, respuesta de
-        una palabra, temperature baja/0 para que la clasificación sea
-        consistente. En caso de error de red/parseo, debe devolver False
-        (fallback seguro: cae al pipeline RAG normal en vez de romper la
-        pregunta por completo).
+        Must be a cheap, fast call: short prompt, single-word response,
+        low/zero temperature so the classification is consistent. On a
+        network/parsing error, it must return False (safe fallback:
+        falls back to the normal RAG pipeline instead of breaking the
+        question entirely).
 
         Args:
-            question: Pregunta del usuario en lenguaje natural, en cualquier idioma
+            question: The user's question in natural language, in any language
 
         Returns:
-            bool: True si la pregunta es sobre el catálogo/inventario de
-                  documentos, False si es sobre contenido (o si hubo error)
+            bool: True if the question is about the document
+                  catalog/inventory, False if it's about content (or if
+                  there was an error)
 
-        Ejemplo:
-            await llm.is_catalog_question("¿Cuántos libros conoces?")       # True
+        Example:
+            await llm.is_catalog_question("How many books do you know?")   # True
             await llm.is_catalog_question("How many books do you have?")   # True
-            await llm.is_catalog_question("¿Quién escribió 1984?")         # False
+            await llm.is_catalog_question("Who wrote 1984?")               # False
         """
         pass
 
     @abstractmethod
     async def condense_question(self, question: str, history: str) -> str:
         """
-        Reescribe una pregunta de seguimiento como una pregunta
-        autocontenida (standalone), incorporando el contexto necesario de
-        la conversación previa — patrón estándar en RAG conversacional
-        ("query rewriting" / "condense question", ver
-        `create_history_aware_retriever` de LangChain para la misma idea).
+        Rewrites a follow-up question as a standalone question,
+        incorporating the necessary context from the previous
+        conversation — a standard pattern in conversational RAG ("query
+        rewriting" / "condense question", see LangChain's
+        `create_history_aware_retriever` for the same idea).
 
-        ¿Por qué hace falta esto?
-        similarity_search/extract_keywords se basan SOLO en el texto de la
-        pregunta actual. Una pregunta de seguimiento corta y sin nombres
-        propios ("¿en qué año fue publicada?", "¿cuántas páginas tiene?")
-        no tiene ancla para encontrar el documento correcto — puede no
-        encontrar nada, o (peor, confirmado en producción) encontrar un
-        chunk de OTRO documento con score suficiente para colarse como
-        "relevante" y generar una respuesta segura pero incorrecta.
+        Why is this needed?
+        similarity_search/extract_keywords rely ONLY on the current
+        question's text. A short follow-up question with no proper nouns
+        ("what year was it published?", "how many pages does it have?")
+        has no anchor to find the right document — it might find
+        nothing, or (worse, confirmed in production) find a chunk from a
+        DIFFERENT document with a high enough score to sneak in as
+        "relevant" and produce a confident but wrong answer.
 
-        Al reescribir ANTES de retrievar ("¿en qué año fue publicada?" +
-        historial sobre "Cien años de soledad" → "¿En qué año fue
-        publicada Cien años de soledad?"), la búsqueda vectorial recibe
-        una pregunta autocontenida y vuelve a funcionar con el pipeline
-        normal de siempre (extract_keywords + similarity_search) — no hace
-        falta ninguna vía especial ni saltarse ChromaDB.
+        By rewriting BEFORE retrieval ("what year was it published?" +
+        history about "One Hundred Years of Solitude" → "What year was
+        One Hundred Years of Solitude published?"), the vector search
+        receives a standalone question and goes back to working with the
+        normal pipeline as always (extract_keywords + similarity_search)
+        — no special path or bypassing ChromaDB needed.
 
-        Si la pregunta ya es autocontenida (nombra el documento/tema
-        explícitamente, o no depende de turnos anteriores), debe
-        devolverse tal cual, sin reescribir — este método NO decide si
-        hace falta reescribir, siempre se le pide que lo intente; es su
-        propio prompt el que debe dejar la pregunta intacta si ya vale
-        por sí sola.
+        If the question is already standalone (explicitly names the
+        document/topic, or doesn't depend on earlier turns), it must be
+        returned unchanged, without rewriting — this method does NOT
+        decide whether rewriting is needed, it's always asked to try;
+        it's the method's own prompt that must leave the question intact
+        if it already stands on its own.
 
-        En caso de error, debe devolver la pregunta original sin tocar
-        (fallback seguro: en el peor caso el retrieval se comporta como
-        antes de tener esta función, no rompe la petición).
+        On error, it must return the original question untouched (safe
+        fallback: worst case, retrieval behaves as it did before this
+        function existed, it doesn't break the request).
 
         Args:
-            question: Pregunta de seguimiento del usuario
-            history: Turnos previos de la conversación ya formateados (ver
-                     ConversationService.get_history_prompt_block) — quien
-                     llama a este método solo debe invocarlo cuando history
-                     no es None/vacío (sin historial no hay nada que condensar)
+            question: The user's follow-up question
+            history: Previous conversation turns, already formatted (see
+                     ConversationService.get_history_prompt_block) —
+                     callers should only invoke this method when history
+                     is not None/empty (with no history there's nothing to condense)
 
         Returns:
-            str: la pregunta reescrita como standalone, o la original si
-                 ya lo era o si hubo un error
+            str: the question rewritten as standalone, or the original
+                 if it already was or if there was an error
 
-        Ejemplo:
+        Example:
             await llm.condense_question(
-                "¿En qué año fue publicada?",
-                history="Usuario: háblame de Cien años de soledad\\nAsistente: ...publicada en 1967..."
+                "What year was it published?",
+                history="User: tell me about One Hundred Years of Solitude\\nAssistant: ...published in 1967..."
             )
-            # "¿En qué año fue publicada Cien años de soledad?"
+            # "What year was One Hundred Years of Solitude published?"
         """
         pass

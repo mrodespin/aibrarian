@@ -1,12 +1,12 @@
 # /api/app/core/ports/user_repository_port.py
 """
-Puerto (Interfaz) para Repositorio de Usuarios - TFM Bibliotecario-IA
+Port (Interface) for the User Repository - Bibliotecario-IA
 
-Define el CONTRATO para persistir/consultar usuarios de autenticación.
-Igual que VectorDBPort o LLMPort, es una interfaz abstracta: no sabe si
-detrás hay Postgres, SQLite o cualquier otra cosa.
+Defines the CONTRACT for persisting/querying authentication users. Just
+like VectorDBPort or LLMPort, it's an abstract interface: it doesn't
+know whether Postgres, SQLite, or anything else is behind it.
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     interface UserRepositoryPort {
         getByEmail(email: string): Promise<User | null>;
         createUser(email: string, passwordHash: string): Promise<User>;
@@ -14,16 +14,15 @@ Equivalente en TypeScript:
 
     class UserAlreadyExistsError extends Error {}
 
-La implementación real está en: /adapters/outbound/postgres_user_adapter.py
+The real implementation lives at: /adapters/outbound/postgres_user_adapter.py
 
-Contrato importante (a diferencia de VectorDBPort/LLMPort):
-- Los métodos de este puerto NO deben "tragarse" errores de conexión/DB
-  devolviendo un valor por defecto. Deben dejar que la excepción se
-  propague. Aquí `None` significa específicamente "el usuario no existe",
-  nunca "hubo un error al consultar" — si el adaptador confundiera ambos
-  casos, un fallo temporal de la base de datos durante el login se
-  reportaría como "credenciales inválidas", que es un bug de seguridad,
-  no solo un bug funcional.
+Important contract detail (unlike VectorDBPort/LLMPort):
+- This port's methods must NOT "swallow" connection/DB errors by
+  returning a default value. They must let the exception propagate.
+  Here, `None` specifically means "the user doesn't exist", never
+  "there was an error querying" — if the adapter conflated the two, a
+  temporary database outage during login would be reported as "invalid
+  credentials", which is a security bug, not just a functional one.
 """
 
 from abc import ABC, abstractmethod
@@ -34,45 +33,45 @@ from app.core.domain.models import User
 
 class UserAlreadyExistsError(Exception):
     """
-    Se lanza al intentar crear un usuario cuyo email ya existe.
+    Raised when trying to create a user whose email already exists.
 
-    Forma parte del contrato del puerto (como un "checked exception"):
-    cualquier adaptador que implemente create_user debe lanzar esta
-    excepción concreta ante una violación de unicidad, no una genérica.
+    Part of the port's contract (like a "checked exception"): any
+    adapter implementing create_user must raise this specific exception
+    on a uniqueness violation, not a generic one.
     """
     pass
 
 
 class UserRepositoryPort(ABC):
     """
-    Interfaz abstracta para el almacenamiento de usuarios de autenticación.
+    Abstract interface for storing authentication users.
 
-    Superficie mínima: solo lo que necesitan el login (AuthService) y el
-    script de alta de usuarios (scripts/create_user.py). No hay UI de
-    registro, así que no hace falta update/delete todavía.
+    Minimal surface: only what login (AuthService) and the user
+    creation script (scripts/create_user.py) need. There's no signup
+    UI, so update/delete aren't needed yet.
 
-    Nota: ABC = Abstract Base Class
-    - No se puede instanciar directamente: UserRepositoryPort() → Error
-    - Solo se pueden crear clases que hereden e implementen los métodos
+    Note: ABC = Abstract Base Class
+    - Can't be instantiated directly: UserRepositoryPort() → Error
+    - Only subclasses that implement the methods can be created
     """
 
     @abstractmethod
     async def get_by_email(self, email: str) -> Optional[User]:
         """
-        Busca un usuario por su email (usado como login).
+        Looks up a user by their email (used as login).
 
         Args:
-            email: Email del usuario a buscar
+            email: Email of the user to look up
 
         Returns:
-            User si existe, None si no existe.
-            IMPORTANTE: los errores de conexión/DB deben propagarse
-            (raise), no traducirse a None. Ver docstring del módulo.
+            User if it exists, None if it doesn't.
+            IMPORTANT: connection/DB errors must propagate (raise), not
+            get translated into None. See the module docstring.
 
-        Ejemplo:
+        Example:
             user = await user_repository.get_by_email("ana@example.com")
             if user is None:
-                # no existe, no "hubo un error"
+                # doesn't exist, not "there was an error"
                 ...
         """
         pass
@@ -80,21 +79,21 @@ class UserRepositoryPort(ABC):
     @abstractmethod
     async def create_user(self, email: str, password_hash: str) -> User:
         """
-        Crea un usuario nuevo.
+        Creates a new user.
 
         Args:
-            email: Email del usuario (debe ser único)
-            password_hash: Hash bcrypt de la contraseña (NUNCA la
-                           contraseña en texto plano — eso se hashea
-                           antes de llegar aquí, en el CLI/AuthService)
+            email: User's email (must be unique)
+            password_hash: bcrypt hash of the password (NEVER the
+                           plaintext password — that's hashed before
+                           reaching here, in the CLI/AuthService)
 
         Returns:
-            User: el usuario recién creado (con su id asignado)
+            User: the newly created user (with its assigned id)
 
         Raises:
-            UserAlreadyExistsError: si el email ya existe
+            UserAlreadyExistsError: if the email already exists
 
-        Ejemplo:
+        Example:
             user = await user_repository.create_user(
                 "ana@example.com", "$2b$12$..."
             )

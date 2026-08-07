@@ -1,16 +1,16 @@
 # /api/app/core/ports/vector_db_port.py
 """
-Puerto (Interfaz) para Base de Datos Vectorial - TFM Bibliotecario-IA
+Port (Interface) for the Vector Database - Bibliotecario-IA
 
-Este archivo define el CONTRATO que debe cumplir cualquier base de datos vectorial.
-Es una interfaz abstracta (no tiene implementación, solo define métodos).
+This file defines the CONTRACT that any vector database must fulfill.
+It's an abstract interface (no implementation, just method definitions).
 
-¿Qué es un Puerto en Arquitectura Hexagonal?
-- Define QUÉ operaciones existen, pero NO CÓMO se implementan
-- Permite desacoplar la lógica de negocio de la tecnología específica
-- Facilita cambiar ChromaDB por Pinecone sin tocar los servicios
+What is a Port in Hexagonal Architecture?
+- Defines WHAT operations exist, but NOT HOW they're implemented
+- Decouples business logic from the specific technology
+- Makes it easy to swap ChromaDB for Pinecone without touching services
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     interface VectorDBPort {
         storeChunks(chunks: Chunk[]): Promise<boolean>;
         similaritySearch(queryEmbedding: number[]): Promise<SourceDocument[]>;
@@ -19,46 +19,46 @@ Equivalente en TypeScript:
         getCollectionStats(name: string): Promise<Record<string, any>>;
     }
 
-La implementación real está en: /adapters/outbound/chromadb_adapter.py
+The real implementation lives at: /adapters/outbound/chromadb_adapter.py
 """
 
 # ============================================================================
 # IMPORTS
 # ============================================================================
-# ABC (Abstract Base Class) permite crear clases abstractas en Python
-# abstractmethod marca métodos como "obligatorios de implementar"
+# ABC (Abstract Base Class) lets you create abstract classes in Python
+# abstractmethod marks methods as "required to implement"
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from app.core.domain.models import Chunk, SourceDocument, DocumentSummary
 
 
 # ============================================================================
-# INTERFAZ DE BASE DE DATOS VECTORIAL
+# VECTOR DATABASE INTERFACE
 # ============================================================================
 class VectorDBPort(ABC):
     """
-    Interfaz abstracta para operaciones de base de datos vectorial.
+    Abstract interface for vector database operations.
 
-    ¿Qué es una base de datos vectorial?
-    - Almacena textos como vectores numéricos (embeddings)
-    - Permite buscar textos similares usando distancia coseno
-    - Ejemplo: ChromaDB, Pinecone, Weaviate, Milvus
+    What is a vector database?
+    - Stores texts as numeric vectors (embeddings)
+    - Lets you search for similar texts using cosine distance
+    - Examples: ChromaDB, Pinecone, Weaviate, Milvus
 
-    ¿Cómo funciona?
-    1. Texto "El gato negro" → Modelo de embeddings → Vector [0.1, -0.2, 0.3, ...]
-    2. Se almacena el vector junto con el texto original
-    3. Para buscar: pregunta → vector → buscar vectores similares
+    How does it work?
+    1. Text "the black cat" → Embedding model → Vector [0.1, -0.2, 0.3, ...]
+    2. The vector is stored alongside the original text
+    3. To search: question → vector → search for similar vectors
 
-    Métodos que debe implementar cualquier adaptador:
-    - store_chunks: Guardar fragmentos de texto
-    - similarity_search: Buscar textos similares (CORE del RAG)
-    - delete_document: Eliminar un documento
-    - collection_exists: Verificar si existe una colección
-    - get_collection_stats: Obtener estadísticas
+    Methods any adapter must implement:
+    - store_chunks: Save text fragments
+    - similarity_search: Search for similar texts (RAG's CORE operation)
+    - delete_document: Delete a document
+    - collection_exists: Check whether a collection exists
+    - get_collection_stats: Get statistics
 
-    Nota: ABC = Abstract Base Class
-    - No se puede instanciar directamente: VectorDBPort() → Error
-    - Solo se pueden crear clases que hereden e implementen los métodos
+    Note: ABC = Abstract Base Class
+    - Can't be instantiated directly: VectorDBPort() → Error
+    - Only subclasses that implement the methods can be created
     """
 
     @abstractmethod
@@ -68,31 +68,31 @@ class VectorDBPort(ABC):
         collection_name: str = "documents"
     ) -> bool:
         """
-        Almacena chunks de texto con sus embeddings en la base de datos.
+        Stores text chunks with their embeddings in the database.
 
-        ¿Qué es un chunk?
-        - Fragmento de ~500-1000 caracteres de un documento
-        - Incluye: id, contenido, embedding (vector), metadatos
+        What is a chunk?
+        - A ~500-1000 character fragment of a document
+        - Includes: id, content, embedding (vector), metadata
 
         Args:
-            chunks: Lista de objetos Chunk a almacenar
-                   Cada chunk debe tener su embedding ya generado
-            collection_name: Nombre de la colección (como una "tabla" en SQL)
+            chunks: List of Chunk objects to store
+                   Each chunk must already have its embedding generated
+            collection_name: Collection name (like a "table" in SQL)
                            Default: "documents"
 
         Returns:
-            bool: True si se guardó correctamente, False si hubo error
+            bool: True if stored successfully, False on error
 
-        Ejemplo:
+        Example:
             chunks = [
-                Chunk(id="doc1_0", content="Texto...", embedding=[0.1, 0.2, ...]),
-                Chunk(id="doc1_1", content="Más texto...", embedding=[0.3, 0.4, ...])
+                Chunk(id="doc1_0", content="Text...", embedding=[0.1, 0.2, ...]),
+                Chunk(id="doc1_1", content="More text...", embedding=[0.3, 0.4, ...])
             ]
             success = await vector_db.store_chunks(chunks)
 
-        Nota: async def = función asíncrona (como async function en JavaScript)
+        Note: async def = asynchronous function (like async function in JavaScript)
         """
-        pass  # pass = no hay implementación, la clase hija debe implementar
+        pass  # pass = no implementation, the subclass must implement it
 
     @abstractmethod
     async def similarity_search(
@@ -104,55 +104,55 @@ class VectorDBPort(ABC):
         keyword_filter: Optional[str] = None
     ) -> List[SourceDocument]:
         """
-        Busca los chunks más similares a un vector de consulta.
+        Searches for the chunks most similar to a query vector.
 
-        ESTE ES EL MÉTODO MÁS IMPORTANTE DEL SISTEMA RAG.
+        THIS IS THE MOST IMPORTANT METHOD IN THE RAG SYSTEM.
 
-        ¿Cómo funciona?
-        1. Recibe el embedding (vector) de la pregunta del usuario
-        2. Compara ese vector con TODOS los vectores almacenados
-        3. Usa distancia coseno para medir similitud
-        4. Devuelve los top_k chunks más similares
+        How does it work?
+        1. Receives the embedding (vector) of the user's question
+        2. Compares that vector against ALL stored vectors
+        3. Uses cosine distance to measure similarity
+        4. Returns the top_k most similar chunks
 
-        ¿Qué es distancia coseno?
-        - Mide el ángulo entre dos vectores
-        - Score 1.0 = vectores idénticos (mismo significado)
-        - Score 0.0 = vectores perpendiculares (nada en común)
-        - Ejemplo: "perro" y "gato" → ~0.7, "perro" y "avión" → ~0.2
+        What is cosine distance?
+        - Measures the angle between two vectors
+        - Score 1.0 = identical vectors (same meaning)
+        - Score 0.0 = perpendicular vectors (nothing in common)
+        - Example: "dog" and "cat" → ~0.7, "dog" and "airplane" → ~0.2
 
-        Query Expansion (búsqueda híbrida):
-        Si se proporciona keyword_filter, primero filtra documentos que
-        contienen esa palabra clave, luego rankea por similitud semántica.
-        Útil para nombres propios y títulos específicos.
+        Query Expansion (hybrid search):
+        If keyword_filter is provided, it first filters documents
+        containing that keyword, then ranks by semantic similarity.
+        Useful for proper nouns and specific titles.
 
         Args:
-            query_embedding: Vector de la pregunta (lista de ~768 floats)
-                           Generado por el modelo de embeddings (nomic-embed-text)
-            collection_name: Colección donde buscar
-            top_k: Número de resultados a devolver (default: 4)
-            filter_metadata: Filtros opcionales, ej: {"source": "pdf"}
-            keyword_filter: Palabra clave para filtrar documentos (Query Expansion)
-                          Ejemplo: "Blade Runner" → solo chunks que contengan ese texto
+            query_embedding: The question's vector (list of ~768 floats)
+                           Generated by the embedding model (nomic-embed-text)
+            collection_name: Collection to search
+            top_k: Number of results to return (default: 4)
+            filter_metadata: Optional filters, e.g.: {"source": "pdf"}
+            keyword_filter: Keyword to filter documents by (Query Expansion)
+                          Example: "Blade Runner" → only chunks containing that text
 
         Returns:
-            List[SourceDocument]: Chunks más relevantes con:
-                - document_id: ID del documento origen
-                - chunk_content: Texto del chunk
-                - metadata: Información adicional
-                - relevance_score: Puntuación de similitud (0-1)
+            List[SourceDocument]: Most relevant chunks with:
+                - document_id: Source document ID
+                - chunk_content: The chunk's text
+                - metadata: Additional info
+                - relevance_score: Similarity score (0-1)
 
-        Ejemplo:
-            # 1. Usuario pregunta: "¿Qué es machine learning?"
-            # 2. Se genera embedding de la pregunta
-            query_vec = await llm.generate_embedding("¿Qué es machine learning?")
-            # query_vec = [0.1, -0.2, 0.3, ...] (768 números)
+        Example:
+            # 1. User asks: "What is machine learning?"
+            # 2. An embedding of the question is generated
+            query_vec = await llm.generate_embedding("What is machine learning?")
+            # query_vec = [0.1, -0.2, 0.3, ...] (768 numbers)
 
-            # 3. Se buscan chunks similares
+            # 3. Similar chunks are searched for
             results = await vector_db.similarity_search(query_vec, top_k=5)
 
-            # 4. results[0] = chunk más relevante
+            # 4. results[0] = most relevant chunk
             # results[0].relevance_score = 0.92
-            # results[0].chunk_content = "Machine learning es una rama de la IA..."
+            # results[0].chunk_content = "Machine learning is a branch of AI..."
         """
         pass
 
@@ -163,22 +163,22 @@ class VectorDBPort(ABC):
         collection_name: str = "documents"
     ) -> bool:
         """
-        Elimina todos los chunks asociados a un documento.
+        Deletes all chunks associated with a document.
 
-        ¿Por qué eliminar por document_id y no por chunk_id?
-        - Un documento puede tener MUCHOS chunks (PDF 50 páginas = ~100 chunks)
-        - Es más práctico eliminar todos a la vez
-        - Los chunks tienen document_id como "foreign key"
+        Why delete by document_id and not by chunk_id?
+        - A document can have MANY chunks (a 50-page PDF ≈ 100 chunks)
+        - It's more practical to delete them all at once
+        - Chunks have document_id as a "foreign key"
 
         Args:
-            document_id: ID del documento a eliminar
-            collection_name: Colección donde está el documento
+            document_id: ID of the document to delete
+            collection_name: Collection the document is in
 
         Returns:
-            bool: True si se eliminó correctamente
+            bool: True if deleted successfully
 
-        Ejemplo:
-            # Eliminar un PDF que ya no necesitamos
+        Example:
+            # Delete a PDF we no longer need
             await vector_db.delete_document("doc_123")
         """
         pass
@@ -186,23 +186,23 @@ class VectorDBPort(ABC):
     @abstractmethod
     async def collection_exists(self, collection_name: str) -> bool:
         """
-        Verifica si una colección existe en la base de datos.
+        Checks whether a collection exists in the database.
 
-        ¿Qué es una colección?
-        - Es como una "tabla" en bases de datos relacionales
-        - Agrupa chunks relacionados
-        - Permite tener múltiples "bases de conocimiento" separadas
+        What is a collection?
+        - Like a "table" in relational databases
+        - Groups related chunks together
+        - Lets you have multiple separate "knowledge bases"
 
         Args:
-            collection_name: Nombre de la colección a verificar
+            collection_name: Name of the collection to check
 
         Returns:
-            bool: True si existe, False si no
+            bool: True if it exists, False otherwise
 
-        Útil para:
-        - Verificar setup inicial del sistema
-        - Crear colección si no existe
-        - Validar configuración
+        Useful for:
+        - Checking the system's initial setup
+        - Creating the collection if it doesn't exist
+        - Validating configuration
         """
         pass
 
@@ -212,24 +212,24 @@ class VectorDBPort(ABC):
         collection_name: str = "documents"
     ) -> Dict[str, Any]:
         """
-        Obtiene estadísticas de una colección.
+        Gets statistics for a collection.
 
         Args:
-            collection_name: Nombre de la colección
+            collection_name: Collection name
 
         Returns:
-            Dict con estadísticas, ejemplo:
+            Dict with statistics, example:
             {
-                "count": 150,              # Número total de chunks
-                "dimensions": 768,          # Dimensiones de los embeddings
+                "count": 150,              # Total number of chunks
+                "dimensions": 768,          # Embedding dimensions
                 "collection_name": "documents"
             }
 
-        Útil para:
-        - Endpoint /stats de la API
-        - Monitoreo del sistema
-        - Verificar que hay documentos cargados
-        - Debugging ("¿se indexaron mis PDFs?")
+        Useful for:
+        - The API's /stats endpoint
+        - System monitoring
+        - Checking that documents have been loaded
+        - Debugging ("were my PDFs indexed?")
         """
         pass
 
@@ -239,27 +239,27 @@ class VectorDBPort(ABC):
         collection_name: str = "documents"
     ) -> List[DocumentSummary]:
         """
-        Lista los documentos distintos almacenados en una colección,
-        agrupando sus chunks — sin pasar por similarity_search.
+        Lists the distinct documents stored in a collection, grouping
+        their chunks — without going through similarity_search.
 
-        ¿Por qué hace falta esto si ya existe similarity_search?
-        similarity_search siempre devuelve como mucho top_k chunks, los
-        más parecidos a una pregunta. Es la herramienta correcta para
-        "¿qué dice el libro X sobre Y?", pero es la herramienta
-        EQUIVOCADA para "¿cuántos documentos tienes en total?" — con top_k
-        nunca puedes garantizar ver el catálogo completo. list_documents
-        consulta los metadatos directamente, sin ranking ni umbral de
-        relevancia, así que siempre devuelve TODOS los documentos.
+        Why is this needed if similarity_search already exists?
+        similarity_search always returns at most top_k chunks, the ones
+        most similar to a question. It's the right tool for "what does
+        book X say about Y?", but it's the WRONG tool for "how many
+        documents do you have in total?" — with top_k you can never
+        guarantee seeing the full catalog. list_documents queries the
+        metadata directly, with no ranking or relevance threshold, so it
+        always returns ALL the documents.
 
         Args:
-            collection_name: Colección a consultar
+            collection_name: Collection to query
 
         Returns:
-            List[DocumentSummary]: Uno por document_id distinto, con su
-            título, fuente y número de chunks. Orden alfabético por título.
+            List[DocumentSummary]: One per distinct document_id, with its
+            title, source and chunk count. Sorted alphabetically by title.
 
-        Útil para:
-        - Endpoint GET /documents (explorar la base de conocimiento desde el UI)
-        - RAGService respondiendo preguntas tipo "¿qué documentos conoces?"
+        Useful for:
+        - The GET /documents endpoint (browsing the knowledge base from the UI)
+        - RAGService answering questions like "what documents do you know?"
         """
         pass
