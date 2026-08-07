@@ -1,6 +1,6 @@
 # /api/app/config/settings.py
 """
-Centralized application configuration - Bibliotecario-IA
+Centralized application configuration - AIbrarian
 
 This file defines ALL of the system's configuration variables.
 Every adapter and service reads its values from here.
@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     # ===================================
     # API CONFIGURATION
     # ===================================
-    app_name: str = Field(default="Bibliotecario-IA API", description="Application name")
+    app_name: str = Field(default="AIbrarian API", description="Application name")
     app_version: str = Field(default="0.1.0", description="Application version")
     debug: bool = Field(default=False, description="Debug mode")
     # In production: debug=False (doesn't expose internal errors)
@@ -141,7 +141,7 @@ class Settings(BaseSettings):
         description="ChromaDB port"
     )
     chromadb_collection_name: str = Field(
-        default="bibliotecario_docs",      # Default collection
+        default="aibrarian_docs",      # Default collection
         description="Default ChromaDB collection name"
     )
 

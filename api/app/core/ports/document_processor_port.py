@@ -1,6 +1,6 @@
 # /api/app/core/ports/document_processor_port.py
 """
-Port (Interface) for document processing - Bibliotecario-IA
+Port (Interface) for document processing - AIbrarian
 
 This file defines the CONTRACT for processing documents from different
 sources. It lets the system support PDFs, Notion, Word, etc. with the

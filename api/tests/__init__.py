@@ -1,6 +1,6 @@
 # /api/tests/__init__.py
 """
-Test Suite for the Bibliotecario-IA API
+Test Suite for the AIbrarian API
 
 Test structure:
 - test_rag_service.py: RAG service tests (queries)

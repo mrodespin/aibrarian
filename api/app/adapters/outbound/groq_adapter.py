@@ -1,6 +1,6 @@
 # /api/app/adapters/outbound/groq_adapter.py
 """
-Groq Adapter - Concrete implementation of LLMPort - Bibliotecario-IA
+Groq Adapter - Concrete implementation of LLMPort - AIbrarian
 
 This adapter replaces OllamaAdapter for the cloud deployment (Render
 free tier), where there's no GPU or Ollama process running.

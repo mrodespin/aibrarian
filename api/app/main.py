@@ -1,6 +1,6 @@
 # /api/app/main.py
 """
-FastAPI Entry Point - Bibliotecario-IA
+FastAPI Entry Point - AIbrarian
 
 This file is the ENTRY POINT for the whole application. When you run
 `uvicorn app.main:app`, Python loads this module.
@@ -520,7 +520,7 @@ async def get_metrics():
 
     Usage with Prometheus (prometheus.yml):
         scrape_configs:
-          - job_name: 'bibliotecario-ia'
+          - job_name: 'aibrarian'
             static_configs:
               - targets: ['localhost:8000']
     """

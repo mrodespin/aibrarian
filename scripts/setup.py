@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /scripts/setup.py
 """
-Automated Installation Script - Bibliotecario-IA
+Automated Installation Script - AIbrarian
 
 This script automates the full development environment setup.
 It detects what's already installed and what's missing, then only
@@ -52,7 +52,7 @@ class Colors:
 def print_banner():
     print(f"\n{Colors.BOLD}{Colors.BLUE}")
     print("╔═══════════════════════════════════════════════════════════╗")
-    print("║     🚀 SETUP - BIBLIOTECARIO-IA 🚀                       ║")
+    print("║     🚀 SETUP - AIBRARIAN 🚀                              ║")
     print("╚═══════════════════════════════════════════════════════════╝")
     print(Colors.ENDC)
 

@@ -1,6 +1,6 @@
 # /api/app/adapters/outbound/ollama_adapter.py
 """
-Ollama Adapter - Concrete implementation of LLMPort - Bibliotecario-IA
+Ollama Adapter - Concrete implementation of LLMPort - AIbrarian
 
 This adapter connects the system to Ollama (local LLM server).
 It's the REAL implementation of the contract defined by LLMPort.

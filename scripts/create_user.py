@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /scripts/create_user.py
 """
-User Creation CLI - Bibliotecario-IA
+User Creation CLI - AIbrarian
 
 There is no signup UI in the frontend: users who can log in are created
 EXCLUSIVELY with this script, which stores them in Postgres (Neon in
@@ -63,7 +63,7 @@ MIN_PASSWORD_LENGTH = 8
 # ============================================================================
 async def main():
     parser = argparse.ArgumentParser(
-        description="Create a new user for Bibliotecario-IA (no signup UI, this script is the only way)"
+        description="Create a new user for AIbrarian (no signup UI, this script is the only way)"
     )
     parser.add_argument(
         "--email",
@@ -74,7 +74,7 @@ async def main():
     args = parser.parse_args()
 
     print("\n" + "="*60)
-    print("📚 Bibliotecario-IA - Create User")
+    print("📚 AIbrarian - Create User")
     print("="*60 + "\n")
 
     if not settings.database_url:

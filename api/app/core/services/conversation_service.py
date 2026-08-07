@@ -1,6 +1,6 @@
 # /api/app/core/services/conversation_service.py
 """
-Conversation History Service - Bibliotecario-IA
+Conversation History Service - AIbrarian
 
 Persists and retrieves a conversation's turns, and formats them as a
 text block ready to inject into the LLM's prompt (see

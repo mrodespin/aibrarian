@@ -93,7 +93,7 @@ EVAL_DATASET = [
     },
 ]
 
-EVAL_COLLECTION = "bibliotecario_eval"  # dedicada, no toca bibliotecario_docs
+EVAL_COLLECTION = "aibrarian_eval"  # dedicated collection, doesn't touch aibrarian_docs
 EVAL_RESULTS_PATH = Path(__file__).parent / "eval_results" / "latest.json"
 
 

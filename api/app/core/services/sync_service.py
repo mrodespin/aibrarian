@@ -1,6 +1,6 @@
 # /api/app/core/services/sync_service.py
 """
-Document Sync Service - Bibliotecario-IA
+Document Sync Service - AIbrarian
 
 This service ORCHESTRATES the document ingestion pipeline. It's the
 "conductor" that coordinates the three ports:

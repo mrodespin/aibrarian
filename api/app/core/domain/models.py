@@ -1,6 +1,6 @@
 # /api/app/core/domain/models.py
 """
-Domain Models - Bibliotecario-IA
+Domain Models - AIbrarian
 
 This file defines the project's data structures (entities). In
 hexagonal architecture, the domain is the core that does NOT depend on

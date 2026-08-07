@@ -1,6 +1,6 @@
 # /api/app/adapters/outbound/postgres_user_adapter.py
 """
-Postgres Adapter - Concrete implementation of UserRepositoryPort - Bibliotecario-IA
+Postgres Adapter - Concrete implementation of UserRepositoryPort - AIbrarian
 
 Stores authentication users in Postgres (Neon in production, a local
 container in development via docker-compose).

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # /scripts/verify_setup.py
 """
-Environment Verification Script - Bibliotecario-IA
+Environment Verification Script - AIbrarian
 
 This script checks that all the services and dependencies needed to run
-Bibliotecario-IA are correctly installed and configured.
+AIbrarian are correctly installed and configured.
 
 When should you use this script?
 - After cloning the repository on a new machine
@@ -790,7 +790,7 @@ async def main():
     print(f"\n{Colors.BOLD}{Colors.BLUE}")
     print("╔═══════════════════════════════════════════════════════════╗")
     print("║                                                           ║")
-    print("║     🧪 SETUP VERIFICATION - BIBLIOTECARIO-IA 🧪          ║")
+    print("║     🧪 SETUP VERIFICATION - AIBRARIAN 🧪                 ║")
     print("║                                                           ║")
     print("╚═══════════════════════════════════════════════════════════╝")
     print(f"{Colors.ENDC}\n")

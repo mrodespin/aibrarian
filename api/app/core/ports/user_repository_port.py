@@ -1,6 +1,6 @@
 # /api/app/core/ports/user_repository_port.py
 """
-Port (Interface) for the User Repository - Bibliotecario-IA
+Port (Interface) for the User Repository - AIbrarian
 
 Defines the CONTRACT for persisting/querying authentication users. Just
 like VectorDBPort or LLMPort, it's an abstract interface: it doesn't

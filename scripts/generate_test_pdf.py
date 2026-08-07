@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /scripts/generate_test_pdf.py
 """
-Test PDF Generator Script - Bibliotecario-IA
+Test PDF Generator Script - AIbrarian
 
 Generates the test_document.pdf file used to verify that the ingestion
 pipeline (load → split → embed → store) works correctly.
@@ -72,13 +72,13 @@ normal_style = styles['Normal']      # Body text
 # ============================================================================
 # PDF CONTENT
 # ============================================================================
-# The content is about the Bibliotecario-IA project itself.
+# The content is about the AIbrarian project itself.
 # This makes it possible to verify that the RAG can answer questions
 # like "What is RAG?" or "What components does the system have?"
 # grounded in this document.
 
 # Title
-elements.append(Paragraph("Bibliotecario-IA System - Test Document", title_style))
+elements.append(Paragraph("AIbrarian System - Test Document", title_style))
 elements.append(Spacer(1, 0.2*inch))
 
 elements.append(Paragraph("This is a test document used to verify the RAG (Retrieval-Augmented Generation) system.", normal_style))
@@ -124,7 +124,7 @@ elements.append(Paragraph("Python 3.12, FastAPI, LangChain, Ollama, ChromaDB, Do
 elements.append(Spacer(1, 0.3*inch))
 
 # Document metadata
-elements.append(Paragraph("Author: Bibliotecario-IA", normal_style))
+elements.append(Paragraph("Author: AIbrarian", normal_style))
 elements.append(Paragraph("Date: 2026-01-30", normal_style))
 
 # ============================================================================

@@ -1,6 +1,6 @@
 # /api/app/adapters/outbound/notion_processor_adapter.py
 """
-Notion Processing Adapter - Bibliotecario-IA
+Notion Processing Adapter - AIbrarian
 
 Concrete implementation of DocumentProcessorPort for Notion pages. This
 is the adapter that turns a Notion page into chunks for the RAG system.

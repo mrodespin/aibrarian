@@ -1,6 +1,6 @@
 # /api/app/core/ports/conversation_repository_port.py
 """
-Port (Interface) for the Conversation History Repository - Bibliotecario-IA
+Port (Interface) for the Conversation History Repository - AIbrarian
 
 Defines the CONTRACT for persisting/querying the turns (messages) of a
 conversation. Same pattern as UserRepositoryPort: an abstract interface

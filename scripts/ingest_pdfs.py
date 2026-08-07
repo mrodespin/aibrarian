@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /scripts/ingest_pdfs.py
 """
-PDF Ingestion CLI - Bibliotecario-IA
+PDF Ingestion CLI - AIbrarian
 
 This script is an ALTERNATIVE to the API for ingesting PDFs from the
 terminal. Instead of making an HTTP request to POST /sync, you run it
@@ -249,7 +249,7 @@ async def main():
     # argparse automatically builds --help and validates arguments.
     # JS equivalent: const program = new Command(); program.argument(...)
     parser = argparse.ArgumentParser(
-        description="Ingest PDF documents into Bibliotecario-IA vector database"
+        description="Ingest PDF documents into AIbrarian vector database"
     )
     parser.add_argument(
         "path",
@@ -276,7 +276,7 @@ async def main():
 
     # Script's visual banner
     print("\n" + "="*60)
-    print("📚 Bibliotecario-IA - PDF Ingestion Script")
+    print("📚 AIbrarian - PDF Ingestion Script")
     print("="*60 + "\n")
 
     # ================================================================

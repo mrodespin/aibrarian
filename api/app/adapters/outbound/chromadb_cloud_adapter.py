@@ -1,6 +1,6 @@
 # /api/app/adapters/outbound/chromadb_cloud_adapter.py
 """
-ChromaDB Cloud Adapter - Concrete implementation of VectorDBPort - Bibliotecario-IA
+ChromaDB Cloud Adapter - Concrete implementation of VectorDBPort - AIbrarian
 
 Variant of ChromaDBAdapter for the Render (free tier) deployment.
 

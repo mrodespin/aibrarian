@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /scripts/ingest_notion.py
 """
-Notion Ingestion CLI - Bibliotecario-IA
+Notion Ingestion CLI - AIbrarian
 
 This script is the CLI version for ingesting Notion content.
 Equivalent to the API's POST /sync/notion and POST /sync/notion/database
@@ -309,7 +309,7 @@ async def main():
     # CLI ARGUMENT PARSING
     # ================================================================
     parser = argparse.ArgumentParser(
-        description="Ingest Notion pages into Bibliotecario-IA vector database"
+        description="Ingest Notion pages into AIbrarian vector database"
     )
     parser.add_argument(
         "--page",
@@ -343,7 +343,7 @@ async def main():
 
     # Visual banner
     print("\n" + "="*60)
-    print("📚 Bibliotecario-IA - Notion Ingestion Script")
+    print("📚 AIbrarian - Notion Ingestion Script")
     print("="*60 + "\n")
 
     # ================================================================

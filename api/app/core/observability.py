@@ -1,6 +1,6 @@
 # /api/app/core/observability.py
 """
-Observability Module - Bibliotecario-IA
+Observability Module - AIbrarian
 
 This module centralizes all observability configuration:
 - Structured logging with structlog (JSON format)

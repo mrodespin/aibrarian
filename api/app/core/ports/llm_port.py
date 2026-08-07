@@ -1,6 +1,6 @@
 # /api/app/core/ports/llm_port.py
 """
-Port (Interface) for Language Model operations - Bibliotecario-IA
+Port (Interface) for Language Model operations - AIbrarian
 
 This file defines the CONTRACT that any LLM (Large Language Model) must
 fulfill. It's an abstract interface that lets you swap Ollama for

@@ -1,6 +1,6 @@
 # /api/app/adapters/outbound/chromadb_adapter.py
 """
-ChromaDB Adapter - Concrete implementation of VectorDBPort - Bibliotecario-IA
+ChromaDB Adapter - Concrete implementation of VectorDBPort - AIbrarian
 
 This adapter connects the system to ChromaDB (vector database). It's
 the REAL implementation of the contract defined by VectorDBPort.
@@ -146,7 +146,7 @@ class ChromaDBAdapter(VectorDBPort):
                 # get_or_create_collection: creates if missing, returns if it exists
                 self._collections[collection_name] = client.get_or_create_collection(
                     name=collection_name,
-                    metadata={"description": "Bibliotecario-IA document embeddings"}
+                    metadata={"description": "AIbrarian document embeddings"}
                 )
                 logger.info("Using collection", collection_name=collection_name)
             except Exception as e:

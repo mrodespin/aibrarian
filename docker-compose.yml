@@ -18,9 +18,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_USER=bibliotecario
-      - POSTGRES_PASSWORD=bibliotecario
-      - POSTGRES_DB=bibliotecario
+      - POSTGRES_USER=aibrarian
+      - POSTGRES_PASSWORD=aibrarian
+      - POSTGRES_DB=aibrarian
     ports:
       # 127.0.0.1, not 0.0.0.0: these credentials are fixed and trivial
       # (local dev only). Without this explicit bind, Docker publishes
@@ -30,7 +30,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bibliotecario"]
+      test: ["CMD-SHELL", "pg_isready -U aibrarian"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -83,7 +83,7 @@ services:
       - CHROMADB_PORT=8000
       - DATA_DIRECTORY=/app/data
       # Postgres runs in Docker (service name, not localhost)
-      - DATABASE_URL=postgresql://bibliotecario:bibliotecario@postgres:5432/bibliotecario
+      - DATABASE_URL=postgresql://aibrarian:aibrarian@postgres:5432/aibrarian
     depends_on:
       chromadb:
         condition: service_healthy

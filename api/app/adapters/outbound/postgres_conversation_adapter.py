@@ -1,6 +1,6 @@
 # /api/app/adapters/outbound/postgres_conversation_adapter.py
 """
-Postgres Adapter - Concrete implementation of ConversationRepositoryPort - Bibliotecario-IA
+Postgres Adapter - Concrete implementation of ConversationRepositoryPort - AIbrarian
 
 Stores conversation history (user/assistant turns) in Postgres, the
 same service (Neon in production, local container in development)

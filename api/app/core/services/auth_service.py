@@ -1,6 +1,6 @@
 # /api/app/core/services/auth_service.py
 """
-Authentication Service - Bibliotecario-IA
+Authentication Service - AIbrarian
 
 Verifies credentials and issues/validates the session JWTs that protect
 the API. It's the only service in the project without a signup UI:

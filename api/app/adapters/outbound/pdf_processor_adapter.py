@@ -1,6 +1,6 @@
 # /api/app/adapters/outbound/pdf_processor_adapter.py
 """
-PDF Processing Adapter - Bibliotecario-IA
+PDF Processing Adapter - AIbrarian
 
 Concrete implementation of DocumentProcessorPort for local PDF files.
 This is the adapter that turns a .pdf file into chunks ready to be

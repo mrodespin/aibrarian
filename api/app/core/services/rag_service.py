@@ -1,6 +1,6 @@
 # /api/app/core/services/rag_service.py
 """
-RAG (Retrieval-Augmented Generation) Service - Bibliotecario-IA
+RAG (Retrieval-Augmented Generation) Service - AIbrarian
 
 This service is the HEART of the system. It implements the full RAG
 pattern: receives a user question and returns an answer grounded in

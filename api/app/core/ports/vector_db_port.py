@@ -1,6 +1,6 @@
 # /api/app/core/ports/vector_db_port.py
 """
-Port (Interface) for the Vector Database - Bibliotecario-IA
+Port (Interface) for the Vector Database - AIbrarian
 
 This file defines the CONTRACT that any vector database must fulfill.
 It's an abstract interface (no implementation, just method definitions).
