@@ -1,18 +1,18 @@
 # /api/app/core/observability.py
 """
-Módulo de Observabilidad - TFM Bibliotecario-IA
+Observability Module - Bibliotecario-IA
 
-Este módulo centraliza toda la configuración de observabilidad:
-- Logging estructurado con structlog (JSON format)
-- Métricas con prometheus-client
-- Middleware para métricas de requests HTTP
+This module centralizes all observability configuration:
+- Structured logging with structlog (JSON format)
+- Metrics with prometheus-client
+- Middleware for HTTP request metrics
 
-¿Por qué observabilidad?
-- Logs estructurados facilitan búsqueda y análisis en producción
-- Métricas permiten monitorear rendimiento y detectar problemas
-- Es requisito en sistemas de producción modernos
+Why observability?
+- Structured logs make searching and analysis easier in production
+- Metrics let you monitor performance and catch problems
+- It's a requirement in modern production systems
 
-Uso:
+Usage:
     from app.core.observability import get_logger, REQUEST_COUNT, REQUEST_LATENCY
 
     logger = get_logger(__name__)
@@ -33,39 +33,39 @@ from starlette.responses import Response
 
 
 # ============================================================================
-# CONFIGURACIÓN DE STRUCTLOG
+# STRUCTLOG CONFIGURATION
 # ============================================================================
-# structlog es una librería para logging estructurado.
-# En lugar de strings como "Processing query: What is RAG?",
-# genera JSON: {"event": "Processing query", "question": "What is RAG?"}
+# structlog is a library for structured logging.
+# Instead of strings like "Processing query: What is RAG?", it produces
+# JSON: {"event": "Processing query", "question": "What is RAG?"}
 #
-# Ventajas del logging estructurado:
-# - Fácil de parsear y buscar en herramientas como ELK, Loki, CloudWatch
-# - Cada campo es searchable (query por question="What is RAG?")
-# - Contexto automático (timestamp, nivel, módulo)
+# Advantages of structured logging:
+# - Easy to parse and search in tools like ELK, Loki, CloudWatch
+# - Every field is searchable (query by question="What is RAG?")
+# - Automatic context (timestamp, level, module)
 
 def configure_structlog(json_format: bool = True):
     """
-    Configura structlog para toda la aplicación.
+    Configures structlog for the whole application.
 
     Args:
-        json_format: Si True, output en JSON. Si False, output human-readable.
-                    JSON es mejor para producción, human-readable para desarrollo.
+        json_format: If True, JSON output. If False, human-readable output.
+                    JSON is better for production, human-readable for development.
 
-    Esta función debe llamarse UNA sola vez al iniciar la aplicación.
+    This function should be called ONCE when the application starts.
     """
-    # Processors son funciones que transforman cada log entry.
-    # Se ejecutan en orden, cada uno puede añadir/modificar campos.
+    # Processors are functions that transform each log entry.
+    # They run in order, each one can add/modify fields.
     shared_processors = [
-        # Añade timestamp ISO 8601
+        # Adds the ISO 8601 timestamp
         structlog.stdlib.add_log_level,
-        # Añade nombre del logger (módulo)
+        # Adds the logger name (module)
         structlog.stdlib.add_logger_name,
-        # Añade timestamp
+        # Adds the timestamp
         structlog.processors.TimeStamper(fmt="iso"),
-        # Formatea excepciones de forma legible
+        # Formats exceptions in a readable way
         structlog.processors.format_exc_info,
-        # Añade información de la llamada (archivo, línea, función)
+        # Adds call-site info (file, line, function)
         structlog.processors.CallsiteParameterAdder(
             parameters=[
                 structlog.processors.CallsiteParameter.FILENAME,
@@ -76,15 +76,15 @@ def configure_structlog(json_format: bool = True):
     ]
 
     if json_format:
-        # En producción: JSON para parsing automático
+        # In production: JSON for automatic parsing
         renderer = structlog.processors.JSONRenderer()
     else:
-        # En desarrollo: formato legible con colores
+        # In development: readable format with colors
         renderer = structlog.dev.ConsoleRenderer(colors=True)
 
     structlog.configure(
         processors=shared_processors + [
-            # Prepara el mensaje para el renderer final
+            # Prepares the message for the final renderer
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
@@ -92,7 +92,7 @@ def configure_structlog(json_format: bool = True):
         cache_logger_on_first_use=True,
     )
 
-    # Configurar el formatter para stdlib logging (para librerías que usan logging estándar)
+    # Configure the formatter for stdlib logging (for libraries using standard logging)
     import logging
     handler = logging.StreamHandler()
     handler.setFormatter(structlog.stdlib.ProcessorFormatter(
@@ -110,118 +110,118 @@ def configure_structlog(json_format: bool = True):
 
 def get_logger(name: str = None) -> structlog.stdlib.BoundLogger:
     """
-    Obtiene un logger estructurado.
+    Gets a structured logger.
 
     Args:
-        name: Nombre del módulo (típicamente __name__)
+        name: Module name (typically __name__)
 
     Returns:
-        Logger configurado con structlog
+        Logger configured with structlog
 
-    Uso:
+    Usage:
         logger = get_logger(__name__)
-        logger.info("Query processed", question="¿Qué es RAG?", duration_ms=150)
+        logger.info("Query processed", question="What is RAG?", duration_ms=150)
         logger.error("Failed to connect", service="chromadb", error=str(e))
     """
     return structlog.get_logger(name)
 
 
 # ============================================================================
-# MÉTRICAS PROMETHEUS
+# PROMETHEUS METRICS
 # ============================================================================
-# Prometheus es un sistema de monitoreo que recolecta métricas via HTTP.
-# Exponemos métricas en /metrics, Prometheus las "scrapea" periódicamente.
+# Prometheus is a monitoring system that collects metrics over HTTP.
+# We expose metrics at /metrics, and Prometheus "scrapes" them periodically.
 #
-# Tipos de métricas:
-# - Counter: valor que solo aumenta (requests totales, errores)
-# - Histogram: distribución de valores (latencia, tamaño de respuesta)
-# - Gauge: valor que puede subir o bajar (conexiones activas, temperatura)
+# Metric types:
+# - Counter: a value that only goes up (total requests, errors)
+# - Histogram: distribution of values (latency, response size)
+# - Gauge: a value that can go up or down (active connections, temperature)
 
-# --- Métricas de Requests HTTP ---
+# --- HTTP Request Metrics ---
 REQUEST_COUNT = Counter(
     'http_requests_total',
-    'Total de requests HTTP recibidos',
+    'Total HTTP requests received',
     ['method', 'endpoint', 'status_code']
 )
 
 REQUEST_LATENCY = Histogram(
     'http_request_duration_seconds',
-    'Duración de requests HTTP en segundos',
+    'HTTP request duration in seconds',
     ['method', 'endpoint'],
-    # Buckets personalizados para latencias típicas de una API
+    # Custom buckets for an API's typical latencies
     buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
 )
 
-# --- Métricas del Sistema RAG ---
+# --- RAG System Metrics ---
 RAG_QUERIES_TOTAL = Counter(
     'rag_queries_total',
-    'Total de consultas RAG procesadas',
-    ['status']  # 'success' o 'error'
+    'Total RAG queries processed',
+    ['status']  # 'success' or 'error'
 )
 
 RAG_QUERY_DURATION = Histogram(
     'rag_query_duration_seconds',
-    'Tiempo de procesamiento de queries RAG',
+    'RAG query processing time',
     buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]
 )
 
 RAG_CONTEXT_CHUNKS = Histogram(
     'rag_context_chunks',
-    'Número de chunks usados como contexto por query',
+    'Number of chunks used as context per query',
     buckets=[1, 2, 3, 4, 5, 10]
 )
 
-# --- Métricas de Documentos ---
+# --- Document Metrics ---
 DOCUMENTS_SYNCED = Counter(
     'documents_synced_total',
-    'Total de documentos sincronizados',
+    'Total documents synced',
     ['source', 'status']  # source: 'pdf', 'notion'. status: 'success', 'error'
 )
 
 CHUNKS_CREATED = Counter(
     'chunks_created_total',
-    'Total de chunks creados durante sincronización'
+    'Total chunks created during sync'
 )
 
-# --- Métricas del LLM ---
+# --- LLM Metrics ---
 LLM_REQUESTS = Counter(
     'llm_requests_total',
-    'Total de requests al LLM (Ollama)',
+    'Total requests to the LLM (Ollama)',
     ['operation']  # 'generate', 'embed', 'extract_keywords'
 )
 
 LLM_LATENCY = Histogram(
     'llm_latency_seconds',
-    'Latencia de requests al LLM',
+    'LLM request latency',
     ['operation'],
     buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0]
 )
 
-# --- Métricas de Vector DB ---
+# --- Vector DB Metrics ---
 VECTOR_SEARCH_LATENCY = Histogram(
     'vector_search_latency_seconds',
-    'Latencia de búsquedas en ChromaDB',
+    'ChromaDB search latency',
     buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0]
 )
 
 
 # ============================================================================
-# MIDDLEWARE DE MÉTRICAS HTTP
+# HTTP METRICS MIDDLEWARE
 # ============================================================================
 class MetricsMiddleware(BaseHTTPMiddleware):
     """
-    Middleware que registra métricas de cada request HTTP.
+    Middleware that records metrics for every HTTP request.
 
-    Captura:
-    - Conteo de requests por método/endpoint/status
-    - Latencia de cada request
+    Captures:
+    - Request count by method/endpoint/status
+    - Latency of each request
 
-    ¿Qué es un middleware?
-    - Código que se ejecuta ANTES y DESPUÉS de cada request
-    - Permite interceptar requests sin modificar los endpoints
-    - Como un "envoltorio" alrededor de toda la aplicación
+    What is a middleware?
+    - Code that runs BEFORE and AFTER every request
+    - Lets you intercept requests without modifying the endpoints
+    - Like a "wrapper" around the whole application
 
-    Equivalente conceptual en Express:
+    Conceptual Express equivalent:
         app.use((req, res, next) => {
             const start = Date.now();
             res.on('finish', () => {
@@ -234,31 +234,31 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """
-        Intercepta cada request para registrar métricas.
+        Intercepts each request to record metrics.
 
         Args:
-            request: Request HTTP entrante
-            call_next: Función que ejecuta el siguiente handler (el endpoint)
+            request: Incoming HTTP request
+            call_next: Function that runs the next handler (the endpoint)
 
         Returns:
-            Response del endpoint
+            The endpoint's response
         """
-        # Extraer información del request
+        # Extract info from the request
         method = request.method
-        # Normalizar path para evitar cardinalidad alta en métricas
-        # ej: /documents/abc123 → /documents/{id}
+        # Normalize the path to avoid high cardinality in metrics
+        # e.g.: /documents/abc123 → /documents/{id}
         path = self._normalize_path(request.url.path)
 
-        # Medir tiempo de procesamiento
+        # Measure processing time
         start_time = time.perf_counter()
 
-        # Ejecutar el request (llama al endpoint)
+        # Run the request (calls the endpoint)
         response = await call_next(request)
 
-        # Calcular duración
+        # Compute the duration
         duration = time.perf_counter() - start_time
 
-        # Registrar métricas (excepto para /metrics para evitar recursión)
+        # Record metrics (except for /metrics, to avoid recursion)
         if path != "/metrics":
             REQUEST_COUNT.labels(
                 method=method,
@@ -275,25 +275,25 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
     def _normalize_path(self, path: str) -> str:
         """
-        Normaliza paths para reducir cardinalidad de métricas.
+        Normalizes paths to reduce metric cardinality.
 
-        Problema: /documents/abc123 y /documents/xyz789 son endpoints diferentes
-                  pero conceptualmente son el mismo (DELETE document by ID).
-                  Si no normalizamos, tendríamos infinitas combinaciones.
+        Problem: /documents/abc123 and /documents/xyz789 are different
+                 endpoints but conceptually the same one (DELETE document
+                 by ID). Without normalizing, we'd get infinite combinations.
 
-        Solución: Reemplazar IDs variables por placeholders.
+        Solution: replace variable IDs with placeholders.
 
         Args:
-            path: Path original del request
+            path: The request's original path
 
         Returns:
-            Path normalizado
+            The normalized path
         """
         parts = path.split('/')
         normalized = []
 
         for part in parts:
-            # Detectar si parece un ID (alphanumeric largo o UUID)
+            # Detect whether it looks like an ID (long alphanumeric or UUID)
             if len(part) > 8 and part.replace('-', '').isalnum():
                 normalized.append('{id}')
             else:
@@ -303,20 +303,20 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 
 # ============================================================================
-# ENDPOINT DE MÉTRICAS
+# METRICS ENDPOINT
 # ============================================================================
 async def metrics_endpoint() -> Response:
     """
-    Handler para el endpoint /metrics.
+    Handler for the /metrics endpoint.
 
-    Genera el output en formato Prometheus (texto plano con métricas).
-    Prometheus hace scrape de este endpoint periódicamente.
+    Generates the output in Prometheus format (plain text with metrics).
+    Prometheus scrapes this endpoint periodically.
 
     Returns:
-        Response con métricas en formato Prometheus
+        Response with metrics in Prometheus format
 
-    Ejemplo de output:
-        # HELP http_requests_total Total de requests HTTP recibidos
+    Example output:
+        # HELP http_requests_total Total HTTP requests received
         # TYPE http_requests_total counter
         http_requests_total{method="GET",endpoint="/health",status_code="200"} 42.0
         http_requests_total{method="POST",endpoint="/ask",status_code="200"} 15.0
