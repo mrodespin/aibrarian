@@ -1,33 +1,33 @@
 # /api/app/adapters/outbound/chromadb_adapter.py
 """
-Adaptador ChromaDB - Implementación concreta de VectorDBPort - TFM Bibliotecario-IA
+ChromaDB Adapter - Concrete implementation of VectorDBPort - Bibliotecario-IA
 
-Este adaptador conecta el sistema con ChromaDB (base de datos vectorial).
-Es la implementación REAL del contrato definido en VectorDBPort.
+This adapter connects the system to ChromaDB (vector database). It's
+the REAL implementation of the contract defined by VectorDBPort.
 
-¿Qué es ChromaDB?
-- Base de datos especializada en almacenar y buscar vectores
-- Permite búsqueda semántica (por significado, no por palabras exactas)
-- Se ejecuta como servidor separado (similar a como PostgreSQL)
-- Accesible por HTTP en localhost:8000
+What is ChromaDB?
+- A database specialized in storing and searching vectors
+- Enables semantic search (by meaning, not exact words)
+- Runs as a separate server (similar to PostgreSQL)
+- Reachable over HTTP at localhost:8000
 
-¿Qué es una colección?
-- Como una tabla en SQL, pero para vectores
-- Cada colección almacena chunks de un tipo de documentación
-- Ejemplo: "tech_docs", "tutorials", "faq"
+What is a collection?
+- Like a table in SQL, but for vectors
+- Each collection stores chunks for one type of documentation
+- Example: "tech_docs", "tutorials", "faq"
 
-Datos almacenados por chunk en ChromaDB:
-- id: identificador único del chunk
-- embedding: vector numérico [0.1, -0.2, 0.3, ...] (768 dimensiones)
-- document: texto original del chunk
-- metadata: diccionario con info extra {document_id, source, page, ...}
+Data stored per chunk in ChromaDB:
+- id: the chunk's unique identifier
+- embedding: numeric vector [0.1, -0.2, 0.3, ...] (768 dimensions)
+- document: the chunk's original text
+- metadata: dict with extra info {document_id, source, page, ...}
 
-Patrones implementados:
-- Lazy Initialization: el cliente solo se crea cuando se necesita
-- Cache de colecciones: cada colección se obtiene una sola vez
-- Formato columnar: ChromaDB necesita datos en listas paralelas
+Patterns implemented:
+- Lazy Initialization: the client is only created when needed
+- Collection cache: each collection is fetched only once
+- Columnar format: ChromaDB needs data as parallel lists
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     class ChromaDBAdapter implements VectorDBPort {
         private client: ChromaClient | null = null;
         private collections: Map<string, Collection> = new Map();
@@ -44,16 +44,16 @@ Equivalente en TypeScript:
 # IMPORTS
 # ============================================================================
 import time
-import chromadb  # Cliente oficial de ChromaDB
-from chromadb.config import Settings as ChromaSettings  # Configuración de ChromaDB
+import chromadb  # ChromaDB's official client
+from chromadb.config import Settings as ChromaSettings  # ChromaDB configuration
 from typing import List, Dict, Any, Optional
 
-# Importamos el PUERTO (interfaz) que implementamos
+# Import the PORT (interface) we're implementing
 from app.core.ports.vector_db_port import VectorDBPort
 from app.core.domain.models import Chunk, SourceDocument, DocumentSummary
 from app.config.settings import settings
 
-# Observabilidad: logging estructurado y métricas
+# Observability: structured logging and metrics
 from app.core.observability import get_logger, VECTOR_SEARCH_LATENCY
 
 
@@ -61,48 +61,49 @@ logger = get_logger(__name__)
 
 
 # ============================================================================
-# ADAPTADOR CHROMADB
+# CHROMADB ADAPTER
 # ============================================================================
 class ChromaDBAdapter(VectorDBPort):
     """
-    Implementación concreta de VectorDBPort usando ChromaDB.
+    Concrete implementation of VectorDBPort using ChromaDB.
 
-    Esta clase es el ÚNICO lugar del sistema que conoce detalles de ChromaDB.
-    El resto del código solo habla con la interfaz VectorDBPort.
+    This class is the ONLY place in the system that knows ChromaDB-
+    specific details. Everywhere else in the code only talks to the
+    VectorDBPort interface.
 
-    Si mañana cambias a Pinecone o Weaviate, solo cambias este archivo.
+    If you switch to Pinecone or Weaviate someday, you only change this file.
 
-    Estado interno:
-    - _client: conexión al servidor ChromaDB (lazy, se crea la primera vez)
-    - _collections: cache de colecciones (evita pedir la misma colección repetido)
+    Internal state:
+    - _client: connection to the ChromaDB server (lazy, created the first time)
+    - _collections: collection cache (avoids re-fetching the same collection repeatedly)
     """
 
     def __init__(self):
         """
-        Inicializa el adaptador con lazy initialization.
+        Initializes the adapter with lazy initialization.
 
-        NO se conecta a ChromaDB aquí. La conexión se crea
-        la primera vez que se necesita (_get_client).
+        Does NOT connect to ChromaDB here. The connection is created the
+        first time it's needed (_get_client).
 
-        _collections es un dict que actúa como cache:
+        _collections is a dict acting as a cache:
         { "tech_docs": <Collection>, "tutorials": <Collection> }
-        Equivalente JS: private collections = new Map<string, Collection>()
+        JS equivalent: private collections = new Map<string, Collection>()
         """
         self._client = None
         self._collections = {}
 
     def _get_client(self) -> chromadb.HttpClient:
         """
-        Obtiene o crea la conexión al servidor ChromaDB (Lazy Singleton).
+        Gets or creates the connection to the ChromaDB server (Lazy Singleton).
 
-        Mismo patrón que en OllamaAdapter: la conexión se crea
-        una sola vez y se reutiliza en todas las operaciones.
+        Same pattern as OllamaAdapter: the connection is created once and
+        reused across all operations.
 
-        HttpClient conecta al servidor ChromaDB por HTTP.
-        anonymized_telemetry=False: deshabilita telemetría (privacidad).
+        HttpClient connects to the ChromaDB server over HTTP.
+        anonymized_telemetry=False: disables telemetry (privacy).
 
         Returns:
-            chromadb.HttpClient: Cliente conectado al servidor ChromaDB
+            chromadb.HttpClient: Client connected to the ChromaDB server
         """
         if self._client is None:
             try:
@@ -110,7 +111,7 @@ class ChromaDBAdapter(VectorDBPort):
                     host=settings.chromadb_host,  # localhost
                     port=settings.chromadb_port,  # 8000
                     settings=ChromaSettings(
-                        anonymized_telemetry=False  # No envía datos a Chroma
+                        anonymized_telemetry=False  # Doesn't send data to Chroma
                     )
                 )
                 logger.info("Connected to ChromaDB", url=settings.chromadb_url)
@@ -121,28 +122,28 @@ class ChromaDBAdapter(VectorDBPort):
 
     def _get_or_create_collection(self, collection_name: str):
         """
-        Obtiene una colección existente o la crea si no existe.
+        Gets an existing collection or creates it if it doesn't exist.
 
-        Doble patrón:
-        1. Cache local: si ya la tenemos en _collections, la devolvemos
-        2. ChromaDB get_or_create: si no existe en el servidor, la crea
+        Double pattern:
+        1. Local cache: if we already have it in _collections, return it
+        2. ChromaDB get_or_create: if it doesn't exist on the server, create it
 
-        get_or_create_collection es un método de ChromaDB que hace:
-        - Si la colección existe → la retorna
-        - Si no existe → la crea y la retorna
-        Es como un "upsert" pero para colecciones.
+        get_or_create_collection is a ChromaDB method that does:
+        - If the collection exists → returns it
+        - If it doesn't exist → creates it and returns it
+        It's like an "upsert" but for collections.
 
         Args:
-            collection_name: Nombre de la colección (ej: "tech_docs")
+            collection_name: Collection name (e.g. "tech_docs")
 
         Returns:
-            Collection: Objeto de colección de ChromaDB
+            Collection: ChromaDB collection object
         """
-        # Primero verificamos en el cache local
+        # First check the local cache
         if collection_name not in self._collections:
             client = self._get_client()
             try:
-                # get_or_create_collection: crea si no existe, retorna si existe
+                # get_or_create_collection: creates if missing, returns if it exists
                 self._collections[collection_name] = client.get_or_create_collection(
                     name=collection_name,
                     metadata={"description": "Bibliotecario-IA document embeddings"}
@@ -154,7 +155,7 @@ class ChromaDBAdapter(VectorDBPort):
         return self._collections[collection_name]
 
     # ========================================================================
-    # MÉTODOS PRINCIPALES - Implementación de VectorDBPort
+    # MAIN METHODS - VectorDBPort implementation
     # ========================================================================
 
     async def store_chunks(
@@ -163,30 +164,30 @@ class ChromaDBAdapter(VectorDBPort):
         collection_name: str = "documents"
     ) -> bool:
         """
-        Almacena chunks con sus embeddings en ChromaDB.
+        Stores chunks with their embeddings in ChromaDB.
 
-        Este método convierte los objetos Chunk en el FORMATO COLUMNAR
-        que necesita ChromaDB: 4 listas paralelas donde la posición i
-        de cada lista corresponde al mismo chunk.
+        This method converts the Chunk objects into the COLUMNAR FORMAT
+        ChromaDB needs: 4 parallel lists where position i in each list
+        corresponds to the same chunk.
 
-        Formato columnar:
+        Columnar format:
             ids        = ["chunk_0", "chunk_1", "chunk_2"]
             embeddings = [[0.1,...], [0.2,...], [0.3,...]]
-            documents  = ["texto 0", "texto 1", "texto 2"]
+            documents  = ["text 0", "text 1", "text 2"]
             metadatas  = [{...},     {...},     {...}    ]
 
-            ids[0] ↔ embeddings[0] ↔ documents[0] ↔ metadatas[0] = mismo chunk
+            ids[0] ↔ embeddings[0] ↔ documents[0] ↔ metadatas[0] = same chunk
 
-        ¿Por qué columnar y no por filas?
-        ChromaDB está optimizado internamente para almacenar vectores
-        en arrays contiguos de memoria. El formato columnar permite esto.
+        Why columnar instead of row-based?
+        ChromaDB is internally optimized to store vectors in contiguous
+        memory arrays. The columnar format enables this.
 
         Args:
-            chunks: Lista de chunks CON embeddings ya generados
-            collection_name: Colección destino en ChromaDB
+            chunks: List of chunks WITH embeddings already generated
+            collection_name: Target collection in ChromaDB
 
         Returns:
-            bool: True si se almacenó correctamente
+            bool: True if stored successfully
         """
         try:
             if not chunks:
@@ -196,33 +197,33 @@ class ChromaDBAdapter(VectorDBPort):
             collection = self._get_or_create_collection(collection_name)
 
             # ============================================================
-            # PREPARAR DATOS EN FORMATO COLUMNAR
+            # PREPARE DATA IN COLUMNAR FORMAT
             # ============================================================
-            # List comprehension para extraer cada campo de los chunks
-            # Equivalente JS: chunks.map(chunk => chunk.id)
+            # List comprehension to extract each field from the chunks
+            # JS equivalent: chunks.map(chunk => chunk.id)
             ids = [chunk.id for chunk in chunks]
             embeddings = [chunk.embedding for chunk in chunks if chunk.embedding]
             documents = [chunk.content for chunk in chunks]
 
-            # Metadatas: spread operator {**chunk.metadata} copia los metadatos
-            # y añade document_id para poder eliminar por documento después
-            # Equivalente JS: chunks.map(c => ({...c.metadata, documentId: c.documentId}))
+            # Metadatas: spread operator {**chunk.metadata} copies the metadata
+            # and adds document_id so it can later be deleted by document
+            # JS equivalent: chunks.map(c => ({...c.metadata, documentId: c.documentId}))
             metadatas = [
                 {**chunk.metadata, "document_id": chunk.document_id}
                 for chunk in chunks
             ]
 
-            # Validación: todos los chunks deben tener embedding
-            # Si alguno falta, ChromaDB fallaría con un error confuso
+            # Validation: every chunk must have an embedding
+            # If one is missing, ChromaDB would fail with a confusing error
             if not embeddings or len(embeddings) != len(chunks):
                 logger.error("All chunks must have embeddings")
                 return False
 
             # ============================================================
-            # ALMACENAR EN CHROMADB
+            # STORE IN CHROMADB
             # ============================================================
-            # collection.add() es el método principal de ChromaDB
-            # Recibe las 4 listas en paralelo
+            # collection.add() is ChromaDB's main method
+            # Receives the 4 lists in parallel
             collection.add(
                 ids=ids,
                 embeddings=embeddings,
@@ -250,95 +251,96 @@ class ChromaDBAdapter(VectorDBPort):
         keyword_filter: Optional[str] = None
     ) -> List[SourceDocument]:
         """
-        Realiza búsqueda por similitud en ChromaDB con soporte para Query Expansion.
+        Runs a similarity search in ChromaDB with Query Expansion support.
 
-        ESTE ES EL MÉTODO MÁS IMPORTANTE DEL SISTEMA.
-        Es donde ocurre la búsqueda semántica: dado el vector de una pregunta,
-        encuentra los chunks más semánticamente similares.
+        THIS IS THE SYSTEM'S MOST IMPORTANT METHOD.
+        This is where semantic search happens: given a question's vector,
+        it finds the most semantically similar chunks.
 
-        QUERY EXPANSION (búsqueda híbrida):
-        Si se proporciona keyword_filter, primero filtra documentos que contienen
-        esa palabra clave (case-insensitive), luego rankea por similitud semántica.
-        Esto mejora resultados para nombres propios y títulos específicos.
+        QUERY EXPANSION (hybrid search):
+        If keyword_filter is given, it first filters documents containing
+        that keyword (case-insensitive), then ranks by semantic
+        similarity. This improves results for proper nouns and specific
+        titles.
 
-        ¿Cómo funciona internamente?
-        1. ChromaDB calcula la distancia L2 entre el vector de la pregunta
-           y TODOS los vectores almacenados en la colección
-        2. Ordena por distancia (menor distancia = más similar)
-        3. Devuelve los top_k más cercanos
+        How does it work internally?
+        1. ChromaDB computes the L2 distance between the question's
+           vector and ALL vectors stored in the collection
+        2. Sorts by distance (smaller distance = more similar)
+        3. Returns the top_k closest ones
 
-        Formato de respuesta de ChromaDB (anidado):
-            results["ids"]       = [["id_0", "id_1", "id_2"]]      # [0] = primera query
-            results["documents"] = [["texto_0", "texto_1", ...]]
-            results["distances"] = [[0.1, 0.3, 0.7]]               # menor = más similar
+        ChromaDB's response format (nested):
+            results["ids"]       = [["id_0", "id_1", "id_2"]]      # [0] = first query
+            results["documents"] = [["text_0", "text_1", ...]]
+            results["distances"] = [[0.1, 0.3, 0.7]]               # smaller = more similar
             results["metadatas"] = [[{...}, {...}, {...}]]
 
-        ¿Por qué resultados anidados con [0]?
-        ChromaDB soporta múltiples queries simultáneas.
-        Como enviamos una sola query, los resultados están en el índice [0].
+        Why nested results with [0]?
+        ChromaDB supports multiple simultaneous queries.
+        Since we send a single query, the results are at index [0].
 
         Args:
-            query_embedding: Vector de la pregunta del usuario
-            collection_name: Colección donde buscar
-            top_k: Número máximo de resultados (ej: 3 chunks más relevantes)
-            filter_metadata: Filtro opcional por metadatos
-                           Ejemplo: {"source": "pdf"} → solo chunks de PDFs
-            keyword_filter: Palabra clave para filtrar documentos (Query Expansion)
-                           Ejemplo: "Blade Runner" → solo chunks que contengan ese texto
+            query_embedding: The user's question, as a vector
+            collection_name: Collection to search
+            top_k: Maximum number of results (e.g. the 3 most relevant chunks)
+            filter_metadata: Optional filter by metadata
+                           Example: {"source": "pdf"} → only PDF chunks
+            keyword_filter: Keyword to filter documents by (Query Expansion)
+                           Example: "Blade Runner" → only chunks containing that text
 
         Returns:
-            List[SourceDocument]: Chunks relevantes ordenados por similitud
+            List[SourceDocument]: Relevant chunks, sorted by similarity
         """
         try:
             collection = self._get_or_create_collection(collection_name)
 
             # ============================================================
-            # QUERY A CHROMADB (con soporte para Query Expansion)
+            # QUERY TO CHROMADB (with Query Expansion support)
             # ============================================================
-            # query_embeddings en lista porque ChromaDB acepta batch queries
-            # include: qué campos devolver (por defecto solo ids)
-            # where: filtro por metadatos (como WHERE en SQL)
-            # where_document: filtro por contenido del documento (keyword search)
+            # query_embeddings is a list because ChromaDB accepts batch queries
+            # include: which fields to return (only ids by default)
+            # where: filter by metadata (like WHERE in SQL)
+            # where_document: filter by document content (keyword search)
 
-            # Construir filtro de documento si se proporciona keyword
+            # Build the document filter if a keyword was given
             where_document = None
             if keyword_filter:
-                # $contains busca substring en el contenido del documento
+                # $contains searches for a substring in the document's content
                 where_document = {"$contains": keyword_filter}
                 logger.info("Applying keyword filter", keyword=keyword_filter)
 
             start_time = time.perf_counter()
 
             results = collection.query(
-                query_embeddings=[query_embedding],  # Lista con una sola query
-                n_results=top_k,                     # Máximo de resultados
-                where=filter_metadata,               # Filtro opcional (None = sin filtro)
-                where_document=where_document,       # Filtro por contenido (Query Expansion)
-                include=["documents", "metadatas", "distances"]  # Campos a incluir
+                query_embeddings=[query_embedding],  # List with a single query
+                n_results=top_k,                     # Max number of results
+                where=filter_metadata,               # Optional filter (None = no filter)
+                where_document=where_document,       # Filter by content (Query Expansion)
+                include=["documents", "metadatas", "distances"]  # Fields to include
             )
 
             # ============================================================
-            # CONVERTIR RESULTADOS A SourceDocument
+            # CONVERT RESULTS INTO SourceDocument
             # ============================================================
             source_docs = []
-            # Verificamos que hay resultados antes de iterar
+            # Check there are results before iterating
             if results and results["ids"] and results["ids"][0]:
-                # enumerate para tener el índice i junto con cada doc_id
+                # enumerate to get index i alongside each doc_id
                 for i, doc_id in enumerate(results["ids"][0]):
-                    # Accedemos con [0][i] porque: [0] = primera query, [i] = i-ésimo resultado
+                    # Accessed with [0][i] because: [0] = first query, [i] = i-th result
                     metadata = results["metadatas"][0][i] if results["metadatas"] else {}
                     document = results["documents"][0][i] if results["documents"] else ""
                     distance = results["distances"][0][i] if results["distances"] else 0.0
 
                     # ============================================================
-                    # CONVERSIÓN: Distancia L2 → Score de similitud (0 a 1)
+                    # CONVERSION: L2 distance → similarity score (0 to 1)
                     # ============================================================
-                    # ChromaDB usa distancia L2 (menor = más cercano = más similar)
-                    # Pero queremos un score donde MAYOR = más similar
-                    # Fórmula: similitud = 1 / (1 + distancia)
-                    #   distancia = 0   → similitud = 1.0 (match perfecto)
-                    #   distancia = 1   → similitud = 0.5
-                    #   distancia = 9   → similitud = 0.1 (muy diferente)
+                    # ChromaDB uses L2 distance (smaller = closer = more similar)
+                    # But we want a score where HIGHER = more similar
+                    # Formula: similarity = 1 / (1 + distance)
+                    #   distance = 0   → similarity = 1.0 (perfect match)
+                    #   distance = 1   → similarity = 0.5
+                    #   distance = 9   → similarity = 0.1 (very different)
                     similarity_score = 1.0 / (1.0 + distance)
 
                     source_docs.append(
@@ -350,7 +352,7 @@ class ChromaDBAdapter(VectorDBPort):
                         )
                     )
 
-            # Registrar métricas
+            # Record metrics
             duration = time.perf_counter() - start_time
             VECTOR_SEARCH_LATENCY.observe(duration)
 
@@ -364,7 +366,7 @@ class ChromaDBAdapter(VectorDBPort):
 
         except Exception as e:
             logger.error("Similarity search failed", error=str(e))
-            return []  # En caso de error, retorna lista vacía (no lanza excepción)
+            return []  # On error, return an empty list (doesn't raise an exception)
 
     async def delete_document(
         self,
@@ -372,29 +374,29 @@ class ChromaDBAdapter(VectorDBPort):
         collection_name: str = "documents"
     ) -> bool:
         """
-        Elimina todos los chunks asociados a un documento.
+        Deletes all chunks associated with a document.
 
-        Usa filtro por metadatos para encontrar y eliminar todos los chunks
-        que pertenecen a ese document_id.
+        Uses a metadata filter to find and delete every chunk belonging
+        to that document_id.
 
-        ¿Por qué por metadatos y no por ID?
-        - Un documento genera MÚLTIPLES chunks (ej: un PDF de 50 páginas)
-        - Cada chunk tiene su propio ID único
-        - Pero todos comparten el mismo document_id en sus metadatos
-        - Con where={"document_id": X} eliminamos todos de una vez
+        Why by metadata and not by ID?
+        - A document produces MULTIPLE chunks (e.g. a 50-page PDF)
+        - Each chunk has its own unique ID
+        - But they all share the same document_id in their metadata
+        - With where={"document_id": X} we delete them all at once
 
         Args:
-            document_id: ID del documento (todos sus chunks se eliminan)
-            collection_name: Colección donde está el documento
+            document_id: Document ID (all its chunks get deleted)
+            collection_name: Collection the document is in
 
         Returns:
-            bool: True si la operación fue exitosa
+            bool: True if the operation succeeded
         """
         try:
             collection = self._get_or_create_collection(collection_name)
 
-            # where funciona como un filtro WHERE en SQL
-            # Elimina todos los chunks con ese document_id en metadatos
+            # where works like a WHERE filter in SQL
+            # Deletes every chunk with that document_id in its metadata
             collection.delete(
                 where={"document_id": document_id}
             )
@@ -408,25 +410,25 @@ class ChromaDBAdapter(VectorDBPort):
 
     async def collection_exists(self, collection_name: str) -> bool:
         """
-        Verifica si una colección existe en ChromaDB.
+        Checks whether a collection exists in ChromaDB.
 
-        Obtiene la lista de todas las colecciones del servidor
-        y comprueba si alguna tiene el nombre buscado.
+        Fetches the list of all collections on the server and checks
+        whether any of them has the name we're looking for.
 
-        any(): retorna True si al menos un elemento cumple la condición
-        Equivalente JS: collections.some(col => col.name === collectionName)
+        any(): returns True if at least one element satisfies the condition
+        JS equivalent: collections.some(col => col.name === collectionName)
 
         Args:
-            collection_name: Nombre de la colección a buscar
+            collection_name: Name of the collection to look for
 
         Returns:
-            bool: True si la colección existe
+            bool: True if the collection exists
         """
         try:
             client = self._get_client()
             collections = client.list_collections()
-            # any() con generator expression: eficiente porque se detiene
-            # en el primer match (no recorre toda la lista si ya encontró)
+            # any() with a generator expression: efficient because it stops
+            # at the first match (doesn't scan the whole list once found)
             return any(col.name == collection_name for col in collections)
         except Exception as e:
             logger.error("Failed to check collection existence", error=str(e), collection_name=collection_name)
@@ -437,35 +439,35 @@ class ChromaDBAdapter(VectorDBPort):
         collection_name: str = "documents"
     ) -> Dict[str, Any]:
         """
-        Obtiene estadísticas de una colección de ChromaDB.
+        Gets statistics for a ChromaDB collection.
 
-        collection.count() retorna el número total de chunks almacenados.
-        Útil para:
-        - Mostrar al usuario cuántos documentos están indexados
-        - El endpoint GET /info de la API
-        - Verificar que la ingesta funcionó correctamente
+        collection.count() returns the total number of stored chunks.
+        Useful for:
+        - Showing the user how many documents are indexed
+        - The API's GET /info endpoint
+        - Verifying ingestion worked correctly
 
         Args:
-            collection_name: Colección a consultar
+            collection_name: Collection to query
 
         Returns:
-            Dict con estadísticas de la colección
+            Dict with the collection's statistics
         """
         try:
             collection = self._get_or_create_collection(collection_name)
-            # count() retorna el total de embeddings en la colección
+            # count() returns the total number of embeddings in the collection
             count = collection.count()
 
             return {
                 "collection_name": collection_name,
-                "document_count": count,  # Total de chunks almacenados
+                "document_count": count,  # Total stored chunks
                 "status": "active"
             }
 
         except Exception as e:
             logger.error("Failed to get collection stats", error=str(e), collection_name=collection_name)
-            # En error, retornamos estructura válida con el error
-            # El frontend no falla al parsear
+            # On error, return a valid structure with the error included
+            # This way the frontend doesn't fail to parse it
             return {
                 "collection_name": collection_name,
                 "document_count": 0,
@@ -478,44 +480,46 @@ class ChromaDBAdapter(VectorDBPort):
         collection_name: str = "documents"
     ) -> List[DocumentSummary]:
         """
-        Lista los documentos distintos de una colección, agrupando chunks
-        por su "document_id" en metadata.
+        Lists the distinct documents in a collection, grouping chunks by
+        their "document_id" in metadata.
 
-        A diferencia de similarity_search, esto NO hace ranking por
-        similitud ni aplica top_k: trae TODOS los chunks de la colección
-        (collection.get(), sin query_embeddings) y los agrupa. A esta
-        escala (decenas/cientos de chunks) es barato; si la colección
-        creciera mucho (miles de chunks) habría que paginar con
-        limit/offset — no implementado en este MVP.
+        Unlike similarity_search, this does NOT rank by similarity or
+        apply top_k: it fetches ALL chunks in the collection
+        (collection.get(), with no query_embeddings) and groups them. At
+        this scale (tens/hundreds of chunks) it's cheap; if the
+        collection grew a lot (thousands of chunks) it would need
+        limit/offset pagination — not implemented in this MVP.
 
-        ¿Cómo se obtiene "title" y "source" de cada documento?
-        - title: metadata["title"] si existe y no es "Untitled" (páginas
-          de Notion sin título — ver NotionProcessorAdapter._extract_title),
-          si no metadata["filename"] (PDFs), si no el propio document_id.
-        - source: no viene como campo explícito en los metadatos de cada
-          chunk, así que se infiere del prefijo determinista del
-          document_id ("pdf_..." / "notion_...", ver cómo lo generan
-          PDFProcessorAdapter.load_document y NotionProcessorAdapter.load_document).
+        How are each document's "title" and "source" obtained?
+        - title: metadata["title"] if it exists and isn't "Untitled"
+          (Notion pages with no title — see
+          NotionProcessorAdapter._extract_title), otherwise
+          metadata["filename"] (PDFs), otherwise the document_id itself.
+        - source: doesn't come as an explicit field in each chunk's
+          metadata, so it's inferred from the document_id's deterministic
+          prefix ("pdf_..." / "notion_...", see how
+          PDFProcessorAdapter.load_document and
+          NotionProcessorAdapter.load_document generate it).
 
         Args:
-            collection_name: Colección a consultar
+            collection_name: Collection to query
 
         Returns:
-            List[DocumentSummary]: uno por document_id, orden alfabético por título
+            List[DocumentSummary]: one per document_id, alphabetically sorted by title
         """
         try:
             collection = self._get_or_create_collection(collection_name)
 
-            # include=["metadatas"]: no hace falta traer embeddings ni
-            # documents (el texto de los chunks), solo sus metadatos
+            # include=["metadatas"]: no need to fetch embeddings or
+            # documents (the chunks' text), just their metadata
             result = collection.get(include=["metadatas"])
 
             ids = result.get("ids") or []
             metadatas = result.get("metadatas") or []
 
-            # Agrupa chunks por document_id, contando cuántos hay de cada uno
-            # y quedándonos con los metadatos del primero que veamos (todos
-            # los chunks de un mismo documento comparten title/filename)
+            # Groups chunks by document_id, counting how many there are of
+            # each and keeping the metadata of the first one we see (every
+            # chunk of the same document shares title/filename)
             grouped: Dict[str, Dict[str, Any]] = {}
             for chunk_id, metadata in zip(ids, metadatas):
                 metadata = metadata or {}
