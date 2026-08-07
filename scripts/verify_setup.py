@@ -11,17 +11,18 @@ para ejecutar Bibliotecario-IA estén correctamente instalados y configurados.
 - Cuando algo no funciona y quieres verificar que el entorno está correcto
 - Antes de ejecutar la API por primera vez
 
-Checks que realiza (10 en total):
+Checks que realiza (11 en total):
     1. Versión de Python (se requiere 3.11+)
     2. Dependencias Python instaladas
     3. Ollama: instalación, servicio y modelos
     4. Docker: instalación y daemon activo
     5. ChromaDB: disponibilidad del servicio
-    6. Estructura del proyecto: directorios necesarios
-    7. Directorio de datos: presencia de PDFs
-    8. API: health check (opcional, no falla si no está corriendo)
-    9. Node.js: versión 18+ (para el frontend)
-    10. Frontend: dependencias instaladas (node_modules)
+    6. Postgres: disponibilidad + DATABASE_URL/JWT_SECRET_KEY en api/.env
+    7. Estructura del proyecto: directorios necesarios
+    8. Directorio de datos: presencia de PDFs
+    9. API: health check (opcional, no falla si no está corriendo)
+    10. Node.js: versión 18+ (para el frontend)
+    11. Frontend: dependencias instaladas (node_modules)
 
 Nota sobre rutas relativas:
     Este script se ejecuta desde el directorio scripts/ y usa rutas
@@ -39,7 +40,9 @@ Uso:
 import sys
 import subprocess
 import asyncio
+import socket
 from pathlib import Path
+from urllib.parse import urlparse
 
 # ============================================================================
 # COLORES PARA TERMINAL
@@ -151,7 +154,18 @@ def check_dependencies():
     project_root = Path(__file__).parent.parent
     venv_path = project_root / "api" / "venv"
 
-    required_packages = ['fastapi', 'uvicorn', 'langchain', 'chromadb', 'pydantic', 'httpx']
+    required_packages = [
+        'fastapi', 'uvicorn', 'langchain', 'chromadb', 'pydantic', 'httpx',
+        # Añadidos junto con observabilidad y auth (ver api/requirements.txt);
+        # antes de esto, el check pasaba en verde aunque estos 5 faltaran.
+        'structlog', 'prometheus_client', 'asyncpg', 'bcrypt', 'jwt',
+    ]
+
+    # El import ('jwt') no coincide con el nombre de distribución en PyPI
+    # ('PyJWT') ni con el prefijo de su .dist-info ('pyjwt'). Todos los
+    # demás paquetes de la lista sí coinciden (salvo guion/guion bajo, que
+    # ya normaliza el código de abajo), así que solo hace falta este caso.
+    DIST_NAME_OVERRIDES = {'jwt': 'PyJWT'}
 
     if not in_venv:
         # No estamos en venv, verificar si existe api/venv
@@ -176,14 +190,16 @@ def check_dependencies():
         for package in required_packages:
             # Buscar el paquete en site-packages
             # Puede ser un directorio o un .dist-info
+            display_name = DIST_NAME_OVERRIDES.get(package, package)
             package_normalized = package.replace('-', '_')
+            dist_prefix = DIST_NAME_OVERRIDES.get(package, package_normalized).replace('-', '_').lower()
             package_dir = site_packages / package_normalized
-            dist_info = list(site_packages.glob(f"{package_normalized}*.dist-info"))
+            dist_info = list(site_packages.glob(f"{dist_prefix}*.dist-info"))
 
             if package_dir.exists() or dist_info:
-                print_success(f"{package} instalado")
+                print_success(f"{display_name} instalado")
             else:
-                print_error(f"{package} NO instalado")
+                print_error(f"{display_name} NO instalado")
                 all_ok = False
 
         if not all_ok:
@@ -198,11 +214,12 @@ def check_dependencies():
 
     all_ok = True
     for package in required_packages:
+        display_name = DIST_NAME_OVERRIDES.get(package, package)
         try:
             __import__(package.replace('-', '_'))
-            print_success(f"{package} instalado")
+            print_success(f"{display_name} instalado")
         except ImportError:
-            print_error(f"{package} NO instalado")
+            print_error(f"{display_name} NO instalado")
             all_ok = False
 
     if not all_ok:
@@ -378,6 +395,79 @@ def check_chromadb():
         return False
 
 
+def check_postgres():
+    """
+    Verifica Postgres (usuarios/autenticación) y que api/.env tenga
+    DATABASE_URL/JWT_SECRET_KEY configuradas.
+
+    No hay registro en el frontend: el login exige que exista al menos un
+    usuario dado de alta con scripts/create_user.py, y eso a su vez exige
+    Postgres arriba y DATABASE_URL configurada. Sin esto la app entera
+    queda inutilizable aunque el resto del entorno esté perfecto — por eso
+    es un check obligatorio, no opcional como el de la API.
+
+    A diferencia de check_chromadb() (heartbeat HTTP real), aquí solo
+    comprobamos que el puerto acepta conexiones TCP: Postgres no habla
+    HTTP, y añadir asyncpg (el driver del proyecto) sólo para este check
+    acoplaría un script de infraestructura genérico a una dependencia
+    específica de la app.
+
+    Returns:
+        bool: True si api/.env tiene DATABASE_URL/JWT_SECRET_KEY y Postgres
+              responde en el host:puerto configurado.
+    """
+    print_header("6. Verificando Postgres (usuarios/autenticación)")
+
+    project_root = Path(__file__).parent.parent
+    env_file = project_root / 'api' / '.env'
+
+    if not env_file.exists():
+        print_error("api/.env NO existe")
+        print_info("Ejecuta: python3 scripts/setup.py")
+        return False
+
+    # Parseo simple KEY=VALUE, igual que hace setup.py al generar el
+    # archivo — no hace falta python-dotenv para esto.
+    env_vars = {}
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        env_vars[key.strip()] = value.strip()
+
+    database_url = env_vars.get('DATABASE_URL')
+    if not database_url:
+        print_error("DATABASE_URL no está configurada en api/.env")
+        return False
+    print_success("DATABASE_URL configurada")
+
+    jwt_secret = env_vars.get('JWT_SECRET_KEY')
+    if not jwt_secret:
+        print_error("JWT_SECRET_KEY no está configurada en api/.env")
+        return False
+    if jwt_secret == 'change-me-generate-a-random-secret':
+        print_warning("JWT_SECRET_KEY sigue siendo el placeholder de .env.example")
+        print_info('Genera uno propio: python3 -c "import secrets; print(secrets.token_hex(32))"')
+    else:
+        print_success("JWT_SECRET_KEY configurada")
+
+    # Conexión TCP cruda al host:puerto de DATABASE_URL. No valida
+    # credenciales ni que la tabla `users` exista (eso lo hace
+    # create_user.py al conectar), solo que Postgres esté escuchando.
+    try:
+        parsed = urlparse(database_url)
+        host = parsed.hostname or 'localhost'
+        port = parsed.port or 5432
+        with socket.create_connection((host, port), timeout=3):
+            print_success(f"Postgres responde en {host}:{port}")
+            return True
+    except Exception as e:
+        print_error(f"Postgres NO responde: {e}")
+        print_info("Ejecuta: docker-compose up -d postgres")
+        return False
+
+
 def check_project_structure():
     """
     Verifica que los directorios principales del proyecto existan.
@@ -391,7 +481,7 @@ def check_project_structure():
     Returns:
         bool: True si todos los directorios existen
     """
-    print_header("6. Verificando Estructura del Proyecto")
+    print_header("7. Verificando Estructura del Proyecto")
 
     # Calcular rutas desde la ubicación del script
     project_root = Path(__file__).parent.parent
@@ -428,7 +518,7 @@ def check_data_directory():
     Returns:
         bool: True si el directorio existe (independientemente de su contenido)
     """
-    print_header("7. Verificando Directorio de Datos")
+    print_header("8. Verificando Directorio de Datos")
 
     # Calcular ruta desde la ubicación del script
     project_root = Path(__file__).parent.parent
@@ -471,7 +561,7 @@ async def check_api_health():
         bool: True si la API está corriendo y responde. False en cualquier
               otro caso, pero NO se considera error crítico.
     """
-    print_header("8. Verificando API (opcional)")
+    print_header("9. Verificando API (opcional)")
 
     try:
         import httpx
@@ -517,7 +607,7 @@ def check_nodejs():
     Returns:
         bool: True si Node.js 18+ está instalado
     """
-    print_header("9. Verificando Node.js")
+    print_header("10. Verificando Node.js")
 
     try:
         result = subprocess.run(
@@ -581,7 +671,7 @@ def check_frontend():
     Returns:
         bool: True si el frontend está listo para usar
     """
-    print_header("10. Verificando Frontend")
+    print_header("11. Verificando Frontend")
 
     project_root = Path(__file__).parent.parent
     frontend_dir = project_root / 'frontend'
@@ -664,9 +754,11 @@ def print_summary(results, optional_results):
         print_info("\nPróximos pasos:")
         print_info("1. Iniciar Ollama: ollama serve")
         print_info("2. Iniciar Docker: docker-compose up -d")
-        print_info("3. Iniciar Frontend: cd frontend && npm run dev")
-        print_info("4. Abrir en navegador: http://localhost:5173")
-        print_info("5. Ingestar PDFs desde la interfaz o con: python scripts/ingest_pdfs.py")
+        print_info("3. Crear tu usuario (no hay registro en el frontend):")
+        print_info("   python scripts/create_user.py --email tu@email.com")
+        print_info("4. Iniciar Frontend: cd frontend && npm run dev")
+        print_info("5. Abrir en navegador: http://localhost:5173")
+        print_info("6. Ingestar PDFs desde la interfaz o con: python scripts/ingest_pdfs.py")
     else:
         print_warning("⚠️  Hay algunos problemas que debes solucionar")
         print_info("\nRevisa los errores marcados con ❌ arriba")
@@ -679,11 +771,11 @@ def print_summary(results, optional_results):
 # ============================================================================
 async def main():
     """
-    Función principal: ejecuta los 10 checks en secuencia y muestra el resumen.
+    Función principal: ejecuta los 11 checks en secuencia y muestra el resumen.
 
     Los checks se ejecutan en orden de dependencia lógica:
     1. Python y dependencias primero (sin estas nada funciona)
-    2. Servicios externos (Ollama, Docker, ChromaDB)
+    2. Servicios externos (Ollama, Docker, ChromaDB, Postgres)
     3. Estructura local del proyecto
     4. API (último de backend)
     5. Node.js y frontend (para la interfaz web)
@@ -710,6 +802,7 @@ async def main():
     results['ollama'] = check_ollama()
     results['docker'] = check_docker()
     results['chromadb'] = check_chromadb()
+    results['postgres'] = check_postgres()
     results['structure'] = check_project_structure()
     results['data'] = check_data_directory()
 
