@@ -1,7 +1,7 @@
 /**
  * Auth API — login/logout/me
- * La sesión viaja como JWT en el header Authorization (ver client.js),
- * guardado en localStorage (ver tokenStorage.js) tras el login.
+ * The session travels as a JWT in the Authorization header (see
+ * client.js), stored in localStorage (see tokenStorage.js) after login.
  */
 
 import { api } from './client';

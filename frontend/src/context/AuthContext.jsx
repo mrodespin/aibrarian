@@ -1,8 +1,8 @@
 /**
  * Auth context
- * Determina si hay sesión activa llamando a /auth/me al montar (el
- * JWT guardado en localStorage viaja como header Authorization, ver
- * api/client.js y api/tokenStorage.js).
+ * Determines whether there's an active session by calling /auth/me on
+ * mount (the JWT saved in localStorage travels as the Authorization
+ * header, see api/client.js and api/tokenStorage.js).
  */
 
 import { createContext, useState, useEffect, useCallback } from 'react';
@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
         const data = await authApi.me();
         setUser(data);
       } catch {
-        // Sin sesión válida (401) u otro error: tratamos como no autenticado
+        // No valid session (401) or another error: treat as unauthenticated
         setUser(null);
       } finally {
         setIsLoading(false);

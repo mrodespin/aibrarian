@@ -2,16 +2,16 @@
  * Simple markdown renderer
  * For full markdown support, consider adding react-markdown
  *
- * Separado de markdown.jsx (que solo exporta el componente MarkdownContent)
- * porque react-refresh/only-export-components exige que un archivo que
- * exporta un componente no mezcle exports de otro tipo (aquí, una función
- * de utilidad) — si no, Fast Refresh no puede recargar en caliente ese
- * archivo sin perder el estado de React.
+ * Separated from markdown.jsx (which only exports the MarkdownContent
+ * component) because react-refresh/only-export-components requires
+ * that a file exporting a component not mix in exports of another kind
+ * (here, a utility function) — otherwise Fast Refresh can't hot-reload
+ * that file without losing React's state.
  */
 
 /**
- * Escapa entidades HTML para que el texto no pueda inyectar markup/scripts
- * cuando se inserta luego vía dangerouslySetInnerHTML.
+ * Escapes HTML entities so the text can't inject markup/scripts when
+ * later inserted via dangerouslySetInnerHTML.
  */
 function escapeHtml(text) {
   return text

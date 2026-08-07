@@ -1,34 +1,34 @@
 /**
- * Mantiene --app-height y --app-offset-top sincronizadas con la ventana
- * realmente visible en iOS Safari, como fallback para cuando
- * `interactive-widget=resizes-content` (ver index.html) no está soportado.
+ * Keeps --app-height and --app-offset-top in sync with the window
+ * that's actually visible on iOS Safari, as a fallback for when
+ * `interactive-widget=resizes-content` (see index.html) isn't supported.
  *
- * Por qué existe: `100dvh` se ajusta cuando aparece/desaparece la barra de
- * herramientas de Safari, pero NO se ajusta cuando aparece el teclado
- * virtual. El "layout viewport" (del que depende `dvh`, y el sistema de
- * coordenadas del documento) conserva su altura y posición completas,
- * mientras que el "visual viewport" (lo que el usuario realmente ve) se
- * encoge Y se desplaza (`offsetTop`) bajo el teclado, porque Safari intenta
- * mantener visible el input enfocado sin hacer un scroll real del
- * documento (que ya bloqueamos con `overflow: hidden` en html/body).
+ * Why this exists: `100dvh` adjusts when Safari's toolbar shows/hides,
+ * but it does NOT adjust when the virtual keyboard appears. The
+ * "layout viewport" (what `dvh` depends on, and the document's
+ * coordinate system) keeps its full height and position, while the
+ * "visual viewport" (what the user actually sees) shrinks AND shifts
+ * (`offsetTop`) under the keyboard, because Safari tries to keep the
+ * focused input visible without doing a real scroll of the document
+ * (which we already block via `overflow: hidden` on html/body).
  *
- * Si solo corrigiéramos la altura (como hacía la versión anterior de este
- * hook) sin corregir también el offset, el contenedor de la app se queda
- * anclado en la coordenada y=0 del documento mientras la ventana visible
- * mira un trozo desplazado de esa misma página: el resultado es que el
- * input parece "flotar" a media pantalla con un hueco vacío debajo, que es
- * justo el bug que se veía en producción.
+ * If we only fixed the height (as this hook's previous version did)
+ * without also fixing the offset, the app's container stays anchored
+ * at the document's y=0 coordinate while the visible window looks at a
+ * shifted slice of that same page: the result is that the input
+ * appears to "float" mid-screen with an empty gap below it, which is
+ * exactly the bug seen in production.
  *
- * La solución (el mismo patrón que documenta web.dev para VisualViewport):
- * anclar el contenedor con `position: fixed` (clase `.h-app` en index.css,
- * fuera del flujo normal del documento) y trasladarlo verticalmente por
- * `visualViewport.offsetTop`, además de fijar su altura a
- * `visualViewport.height`.
+ * The fix (the same pattern web.dev documents for VisualViewport):
+ * anchor the container with `position: fixed` (the `.h-app` class in
+ * index.css, outside the document's normal flow) and translate it
+ * vertically by `visualViewport.offsetTop`, in addition to setting its
+ * height to `visualViewport.height`.
  *
- * Equivalente conceptual en JS/TS "vanilla": es lo mismo que un
- * `window.addEventListener('resize', ...)`, pero escuchando el
- * `VisualViewport` en lugar de `window`, que en Safari es la única fuente
- * fiable de qué parte de la página está realmente a la vista.
+ * Conceptual "vanilla" JS/TS equivalent: it's the same as a
+ * `window.addEventListener('resize', ...)`, but listening on
+ * `VisualViewport` instead of `window`, which on Safari is the only
+ * reliable source for which part of the page is actually in view.
  */
 import { useEffect } from 'react';
 
@@ -46,8 +46,8 @@ export function useViewportHeight() {
 
     setViewportVars();
 
-    // Sin soporte de visualViewport (navegadores antiguos) nos quedamos
-    // con el fallback CSS (100dvh, sin offset) definido en index.css.
+    // Without visualViewport support (older browsers) we fall back to
+    // the CSS fallback (100dvh, no offset) defined in index.css.
     if (!viewport) return undefined;
 
     viewport.addEventListener('resize', setViewportVars);

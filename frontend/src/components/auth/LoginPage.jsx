@@ -1,5 +1,5 @@
 /**
- * Login page — pantalla mostrada cuando no hay sesión activa
+ * Login page — shown when there's no active session
  */
 
 import { useState } from 'react';
@@ -21,7 +21,7 @@ export function LoginPage() {
     try {
       await login(email, password);
     } catch (err) {
-      setError(err.message || 'Error al iniciar sesión');
+      setError(err.message || 'Login failed');
     } finally {
       setIsLoading(false);
     }
@@ -41,7 +41,7 @@ export function LoginPage() {
             autoFocus
           />
           <Input
-            label="Contraseña"
+            label="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -55,10 +55,10 @@ export function LoginPage() {
             {isLoading ? (
               <>
                 <Spinner size="sm" className="mr-2" />
-                Entrando...
+                Logging in...
               </>
             ) : (
-              'Entrar'
+              'Log in'
             )}
           </Button>
         </form>

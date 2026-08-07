@@ -1,6 +1,6 @@
 /**
- * Componente que renderiza markdown simple como HTML.
- * La lógica de conversión vive en utils/renderMarkdown.js.
+ * Component that renders simple markdown as HTML.
+ * The conversion logic lives in utils/renderMarkdown.js.
  */
 import { renderMarkdown } from './renderMarkdown';
 

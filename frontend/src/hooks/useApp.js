@@ -1,11 +1,12 @@
 /**
- * Hook para consumir el AppContext (estado de salud/stats + polling).
+ * Hook to consume the AppContext (health/stats state + polling).
  *
- * Vive en un archivo aparte de context/AppContext.jsx (que solo exporta el
- * componente AppProvider) porque react-refresh/only-export-components exige
- * que un archivo de componente no mezcle exports de componentes con exports
- * de otro tipo (aquí, un hook) — si no, Fast Refresh no puede recargar en
- * caliente ese archivo sin perder el estado de React.
+ * Lives in a separate file from context/AppContext.jsx (which only
+ * exports the AppProvider component) because
+ * react-refresh/only-export-components requires that a component file
+ * not mix component exports with exports of another kind (here, a
+ * hook) — otherwise Fast Refresh can't hot-reload that file without
+ * losing React's state.
  */
 import { useContext } from 'react';
 import AppContext from '../context/AppContext';

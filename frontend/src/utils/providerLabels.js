@@ -1,9 +1,10 @@
 /**
- * Etiquetas legibles para los proveedores configurados en el backend
- * (settings.llm_provider / settings.vector_db_provider, ver api/app/config/settings.py).
- * El endpoint /health expone esos valores en `config.llm_provider` /
- * `config.vector_db_provider` — se usan aquí para no dejar "Ollama"/"ChromaDB"
- * fijos en la UI cuando en realidad está corriendo Groq/Chroma Cloud (Render).
+ * Human-readable labels for the providers configured on the backend
+ * (settings.llm_provider / settings.vector_db_provider, see
+ * api/app/config/settings.py). The /health endpoint exposes those
+ * values in `config.llm_provider` / `config.vector_db_provider` — used
+ * here so the UI doesn't hardcode "Ollama"/"ChromaDB" when Groq/Chroma
+ * Cloud (Render) is actually running.
  */
 
 export function llmProviderLabel(provider) {

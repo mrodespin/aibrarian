@@ -1,10 +1,11 @@
 /**
- * Hook para consumir el AuthContext (sesión/usuario actual).
+ * Hook to consume the AuthContext (session/current user).
  *
- * Vive en un archivo aparte de context/AuthContext.jsx (que solo exporta el
- * componente AuthProvider) por la misma razón que hooks/useApp.js: mezclar
- * un export de componente con un export de hook en el mismo archivo rompe
- * react-refresh/only-export-components y con ello el Fast Refresh.
+ * Lives in a separate file from context/AuthContext.jsx (which only
+ * exports the AuthProvider component) for the same reason as
+ * hooks/useApp.js: mixing a component export with a hook export in the
+ * same file breaks react-refresh/only-export-components, and with it
+ * Fast Refresh.
  */
 import { useContext } from 'react';
 import AuthContext from '../context/AuthContext';
