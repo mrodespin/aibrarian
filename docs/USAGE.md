@@ -1,42 +1,42 @@
 # 📚 API & Services Documentation (tfm-bibliotecario-ia)
 
-Esta documentación detalla todos los servicios, puertos y endpoints de la API del proyecto Bibliotecario-IA.
+This documentation covers every service, port, and endpoint of the Bibliotecario-IA project's API.
 
-> **Autenticación:** desde que se añadió login, todos los endpoints salvo `/`, `/health` y `/metrics` requieren una sesión válida (JWT emitido por `POST /auth/login`, enviado como `Authorization: Bearer <token>` en el resto de peticiones — no como cookie, para evitar el bloqueo de cookies cross-site del ITP de Safari cuando frontend y API están en dominios distintos). Los ejemplos cURL de esta guía asumen que ya has hecho login y estás reutilizando el token. Ver la sección [Autenticación](#-autenticación) más abajo.
+> **Authentication:** since login was added, every endpoint except `/`, `/health` and `/metrics` requires a valid session (a JWT issued by `POST /auth/login`, sent as `Authorization: Bearer <token>` on the rest of the requests — not as a cookie, to avoid Safari ITP blocking cross-site cookies when the frontend and API are on different domains). The cURL examples in this guide assume you've already logged in and are reusing the token. See the [Authentication](#-authentication) section below.
 
 ---
 
-## 🌐 Servicios del Proyecto
+## 🌐 Project Services
 
-Cuando ejecutas el sistema, estos son los servicios que necesitas:
+When you run the system, these are the services involved:
 
-| Servicio | URL Local | URL Interna (Docker) | Propósito |
+| Service | Local URL | Internal URL (Docker) | Purpose |
 | :--- | :--- | :--- | :--- |
-| **FastAPI API** | `http://localhost:8000` | `http://api:8000` | API principal del proyecto (ingesta y consultas) |
-| **ChromaDB** | `http://localhost:8001` | `http://chromadb:8000` | Base de datos vectorial para embeddings |
-| **Ollama** | `http://localhost:11434` | `http://ollama:11434` | LLM local (generación de texto y embeddings) |
-| **Postgres** | `localhost:5432` | `postgres:5432` | Usuarios/autenticación |
+| **FastAPI API** | `http://localhost:8000` | `http://api:8000` | The project's main API (ingestion and queries) |
+| **ChromaDB** | `http://localhost:8001` | `http://chromadb:8000` | Vector database for embeddings |
+| **Ollama** | `http://localhost:11434` | `http://ollama:11434` | Local LLM (text generation and embeddings) |
+| **Postgres** | `localhost:5432` | `postgres:5432` | Users/authentication |
 
-**Nota sobre puertos:** ChromaDB expone el puerto 8001 en el host para evitar conflicto con la API (que usa 8000). Internamente en Docker, ChromaDB usa el puerto 8000.
+**Note on ports:** ChromaDB exposes port 8001 on the host to avoid clashing with the API (which uses 8000). Internally in Docker, ChromaDB uses port 8000.
 
 ---
 
-## 🤖 Endpoints de la API FastAPI
+## 🤖 FastAPI Endpoints
 
-API principal del proyecto ejecutándose en `http://localhost:8000`. Los endpoints marcados con 🔒 requieren sesión (token de `/auth/login` enviado como header `Authorization: Bearer <token>`).
+The project's main API, running on `http://localhost:8000`. Endpoints marked with 🔒 require a session (a token from `/auth/login`, sent as an `Authorization: Bearer <token>` header).
 
-### 🔐 Autenticación
+### 🔐 Authentication
 
-No hay registro público — los usuarios se crean con `scripts/create_user.py` (ver [Scripts CLI](#-scripts-cli)).
+There's no public signup — users are created with `scripts/create_user.py` (see [CLI Scripts](#-cli-scripts)).
 
-#### `POST /auth/login` - Iniciar Sesión
+#### `POST /auth/login` - Log In
 
-Verifica credenciales y, si son correctas, devuelve un JWT de sesión (24h por defecto) en el cuerpo de la respuesta. El cliente debe guardarlo y reenviarlo como header `Authorization: Bearer <access_token>` en el resto de peticiones.
+Verifies credentials and, if correct, returns a session JWT (24h by default) in the response body. The client must store it and resend it as the `Authorization: Bearer <access_token>` header on the rest of the requests.
 
 **Request Body:**
 ```json
 {
-  "email": "tu@email.com",
+  "email": "you@email.com",
   "password": "..."
 }
 ```
@@ -45,26 +45,26 @@ Verifica credenciales y, si son correctas, devuelve un JWT de sesión (24h por d
 ```json
 {
   "id": 1,
-  "email": "tu@email.com",
+  "email": "you@email.com",
   "access_token": "eyJhbGciOi...",
   "token_type": "bearer"
 }
 ```
 
-**Response (401):** credenciales incorrectas.
+**Response (401):** incorrect credentials.
 
-**Ejemplo cURL:**
+**cURL example:**
 ```bash
 TOKEN=$(curl -s -X POST "http://localhost:8000/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"email": "tu@email.com", "password": "..."}' | jq -r .access_token)
+  -d '{"email": "you@email.com", "password": "..."}' | jq -r .access_token)
 ```
 
 ---
 
-#### `POST /auth/logout` - Cerrar Sesión
+#### `POST /auth/logout` - Log Out
 
-El JWT es stateless (sin blocklist server-side): este endpoint no invalida nada, es el cliente quien debe descartar el token guardado.
+The JWT is stateless (no server-side blocklist): this endpoint doesn't invalidate anything — it's the client's job to discard the stored token.
 
 **Response (200 OK):**
 ```json
@@ -73,32 +73,32 @@ El JWT es stateless (sin blocklist server-side): este endpoint no invalida nada,
 
 ---
 
-#### `GET /auth/me` - Usuario Actual 🔒
+#### `GET /auth/me` - Current User 🔒
 
-Devuelve el usuario de la sesión activa. Útil para comprobar si un token sigue siendo válido.
+Returns the active session's user. Useful for checking whether a token is still valid.
 
 **Response (200 OK):**
 ```json
 {
   "id": 1,
-  "email": "tu@email.com"
+  "email": "you@email.com"
 }
 ```
 
-**Response (401):** sin token o token inválido/expirado.
+**Response (401):** no token, or an invalid/expired token.
 
-**Ejemplo cURL** (reutiliza el `access_token` obtenido en el login):
+**cURL example** (reuses the `access_token` obtained at login):
 ```bash
 curl -H "Authorization: Bearer $TOKEN" "http://localhost:8000/auth/me"
 ```
 
 ---
 
-### 📊 Endpoints de Utilidad
+### 📊 Utility Endpoints
 
-#### `GET /` - Health Check Básico
+#### `GET /` - Basic Health Check
 
-Verifica que la API esté ejecutándose. **Sin autenticación** — es el endpoint que usa Render como healthcheck del servicio.
+Verifies the API is running. **No authentication** — this is the endpoint Render uses as the service's healthcheck.
 
 **Response (200 OK):**
 ```json
@@ -114,9 +114,9 @@ Verifica que la API esté ejecutándose. **Sin autenticación** — es el endpoi
 
 ---
 
-#### `GET /health` - Health Check Detallado
+#### `GET /health` - Detailed Health Check
 
-Verifica el estado de todos los servicios y configuración. **Sin autenticación.**
+Verifies the status of every service and the configuration. **No authentication.**
 
 **Response (200 OK):**
 ```json
@@ -137,13 +137,13 @@ Verifica el estado de todos los servicios y configuración. **Sin autenticación
 }
 ```
 
-> La clave `services.ollama` refleja la disponibilidad del LLM activo aunque sea Groq (se mantiene el nombre por compatibilidad con el frontend, ver ADR-007).
+> The `services.ollama` key reflects the active LLM's availability even when it's Groq (the name is kept for frontend compatibility, see ADR-007).
 
 ---
 
-#### `GET /stats` - Estadísticas de la Colección 🔒
+#### `GET /stats` - Collection Statistics 🔒
 
-Obtiene información sobre la base de conocimientos. **Requiere sesión.**
+Retrieves information about the knowledge base. **Requires a session.**
 
 **Response (200 OK):**
 ```json
@@ -163,17 +163,17 @@ Obtiene información sobre la base de conocimientos. **Requiere sesión.**
 
 ---
 
-## 📥 Endpoints de Ingesta (MVP)
+## 📥 Ingestion Endpoints (MVP)
 
-### `POST /sync` - Sincronizar PDF Individual 🔒
+### `POST /sync` - Sync a Single PDF 🔒
 
-Procesa un archivo PDF y lo indexa en la base de datos vectorial.
+Processes a PDF file and indexes it in the vector database.
 
 **Request Body:**
 ```json
 {
-  "file_path": "./data/documento.pdf",
-  "collection_name": "bibliotecario_docs"  // Opcional
+  "file_path": "./data/document.pdf",
+  "collection_name": "bibliotecario_docs"  // Optional
 }
 ```
 
@@ -188,7 +188,7 @@ Procesa un archivo PDF y lo indexa en la base de datos vectorial.
 }
 ```
 
-**Ejemplo cURL:**
+**cURL example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync" \
   -H "Content-Type: application/json" \
@@ -199,24 +199,24 @@ curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync" \
 
 ---
 
-### `POST /sync/upload` - Subir y Sincronizar PDF 🔒
+### `POST /sync/upload` - Upload and Sync a PDF 🔒
 
-Como `/sync`, pero acepta el archivo directamente (`multipart/form-data`) en vez de una ruta local — es lo que usa el panel de sincronización del frontend, y el único que funciona en producción (donde el servidor no tiene acceso al filesystem del cliente).
+Like `/sync`, but accepts the file itself (`multipart/form-data`) instead of a local path — this is what the frontend's sync panel uses, and the only one that works in production (where the server has no access to the client's filesystem).
 
-**Ejemplo cURL:**
+**cURL example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/upload" \
-  -F "file=@documento.pdf"
+  -F "file=@document.pdf"
 ```
 
 ---
 
-### `POST /sync/directory` - Sincronizar Directorio de PDFs 🔒
+### `POST /sync/directory` - Sync a Directory of PDFs 🔒
 
-Procesa todos los archivos PDF de un directorio.
+Processes every PDF file in a directory.
 
 **Query Parameters:**
-- `directory_path` (opcional): Ruta del directorio. Por defecto usa `./data`
+- `directory_path` (optional): the directory's path. Defaults to `./data`
 
 **Response (200 OK):**
 ```json
@@ -236,32 +236,32 @@ Procesa todos los archivos PDF de un directorio.
 }
 ```
 
-**Ejemplo cURL:**
+**cURL example:**
 ```bash
-# Usar directorio por defecto (./data)
+# Use the default directory (./data)
 curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/directory"
 
-# Especificar directorio
-curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/directory?directory_path=/ruta/a/pdfs"
+# Specify a directory
+curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/directory?directory_path=/path/to/pdfs"
 ```
 
 ---
 
-## 🔗 Endpoints de Integración con Notion
+## 🔗 Notion Integration Endpoints
 
-### `POST /sync/notion` - Sincronizar Página de Notion 🔒
+### `POST /sync/notion` - Sync a Notion Page 🔒
 
-Procesa una página de Notion y la indexa en la base de datos vectorial.
+Processes a Notion page and indexes it in the vector database.
 
-**Prerrequisitos:**
-- Variable de entorno `NOTION_API_KEY` configurada
-- Página compartida con tu integración de Notion
+**Prerequisites:**
+- The `NOTION_API_KEY` environment variable set
+- The page shared with your Notion integration
 
 **Request Body:**
 ```json
 {
-  "page_id": "a1b2c3d4e5f6",  // ID o URL de la página
-  "collection_name": "bibliotecario_docs"  // Opcional
+  "page_id": "a1b2c3d4e5f6",  // Page ID or URL
+  "collection_name": "bibliotecario_docs"  // Optional
 }
 ```
 
@@ -276,27 +276,27 @@ Procesa una página de Notion y la indexa en la base de datos vectorial.
 }
 ```
 
-**Ejemplo cURL:**
+**cURL example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/notion" \
   -H "Content-Type: application/json" \
   -d '{
-    "page_id": "https://www.notion.so/Mi-Pagina-abc123..."
+    "page_id": "https://www.notion.so/My-Page-abc123..."
   }'
 ```
 
 ---
 
-### `POST /sync/notion/database` - Sincronizar Base de Datos de Notion 🔒
+### `POST /sync/notion/database` - Sync a Notion Database 🔒
 
-Procesa todas las páginas de una base de datos de Notion.
+Processes every page in a Notion database.
 
 **Request Body:**
 ```json
 {
-  "database_id": "a1b2c3d4e5f6",  // Opcional, usa env var si no se proporciona
-  "max_pages": 10,  // Opcional, limita el número de páginas
-  "collection_name": "bibliotecario_docs"  // Opcional
+  "database_id": "a1b2c3d4e5f6",  // Optional, uses the env var if not provided
+  "max_pages": 10,  // Optional, caps the number of pages
+  "collection_name": "bibliotecario_docs"  // Optional
 }
 ```
 
@@ -311,13 +311,13 @@ Procesa todas las páginas de una base de datos de Notion.
       "document_id": "notion_page1",
       "chunks_created": 10,
       "success": true,
-      "message": "Synced 'Título de la Página'"
+      "message": "Synced 'Page Title'"
     }
   ]
 }
 ```
 
-**Ejemplo cURL:**
+**cURL example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/notion/database" \
   -H "Content-Type: application/json" \
@@ -329,30 +329,30 @@ curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/notio
 
 ---
 
-## 💬 Endpoint de Consultas
+## 💬 Query Endpoint
 
-### `POST /ask` - Hacer Pregunta al Sistema RAG 🔒
+### `POST /ask` - Ask the RAG System a Question 🔒
 
-Realiza una pregunta sobre los documentos indexados y obtiene una respuesta generada por IA.
+Asks a question about the indexed documents and gets an AI-generated answer.
 
 **Request Body:**
 ```json
 {
-  "question": "¿Cuál es el tema principal del documento?",
-  "session_id": "user_session_123",  // Opcional
-  "max_results": 4  // Opcional, número de chunks de contexto (1-10)
+  "question": "What is the document's main topic?",
+  "session_id": "user_session_123",  // Optional
+  "max_results": 4  // Optional, number of context chunks (1-10)
 }
 ```
 
 **Response (200 OK):**
 ```json
 {
-  "question": "¿Cuál es el tema principal del documento?",
-  "answer": "El tema principal del documento es la implementación de sistemas RAG...",
+  "question": "What is the document's main topic?",
+  "answer": "The document's main topic is the implementation of RAG systems...",
   "source_documents": [
     {
       "document_id": "pdf_a1b2c3d4",
-      "chunk_content": "Los sistemas RAG combinan recuperación de información...",
+      "chunk_content": "RAG systems combine information retrieval...",
       "metadata": {
         "filename": "manual.pdf",
         "page": 1,
@@ -366,25 +366,25 @@ Realiza una pregunta sobre los documentos indexados y obtiene una respuesta gene
 }
 ```
 
-**Ejemplo cURL:**
+**cURL example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/ask" \
   -H "Content-Type: application/json" \
   -d '{
-    "question": "¿Qué es RAG?"
+    "question": "What is RAG?"
   }'
 ```
 
 ---
 
-## 🗑️ Endpoint de Eliminación
+## 🗑️ Deletion Endpoint
 
-### `DELETE /documents/{document_id}` - Eliminar Documento 🔒
+### `DELETE /documents/{document_id}` - Delete a Document 🔒
 
-Elimina todos los chunks de un documento de la base de datos vectorial.
+Deletes every chunk of a document from the vector database.
 
 **Path Parameters:**
-- `document_id`: ID del documento a eliminar
+- `document_id`: the ID of the document to delete
 
 **Response (200 OK):**
 ```json
@@ -394,191 +394,191 @@ Elimina todos los chunks de un documento de la base de datos vectorial.
 }
 ```
 
-**Ejemplo cURL:**
+**cURL example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" -X DELETE "http://localhost:8000/documents/pdf_a1b2c3d4"
 ```
 
 ---
 
-## 🛠️ Scripts CLI
+## 🛠️ CLI Scripts
 
-Además de la API, el proyecto incluye scripts de automatización en el directorio `scripts/`:
+Besides the API, the project includes automation scripts in the `scripts/` directory:
 
-### 1. `setup.py` - Instalación Automática
+### 1. `setup.py` - Automated Installation
 
-Instala y configura todo el entorno de desarrollo interactivamente.
+Installs and configures the whole development environment interactively.
 
 ```bash
 python3 scripts/setup.py
 ```
 
-**Qué hace:** Verifica OS, instala Homebrew/Ollama/Docker, configura Python/venv, crea .env (con un `JWT_SECRET_KEY` generado), levanta ChromaDB + Postgres + API en Docker, ejecuta `verify_setup.py` y, al final, ofrece crear tu usuario (`create_user.py`) — no hay UI de registro, así que sin esto no puedes hacer login.
+**What it does:** checks the OS, installs Homebrew/Ollama/Docker, sets up Python/venv, creates `.env` (with a generated `JWT_SECRET_KEY`), brings up ChromaDB + Postgres + API in Docker, runs `verify_setup.py`, and finally offers to create your user (`create_user.py`) — there's no signup UI, so without this you can't log in.
 
 ---
 
-### 2. `verify_setup.py` - Verificación del Entorno
+### 2. `verify_setup.py` - Environment Verification
 
-Verifica que todos los servicios estén correctamente instalados (11 checks: Python, dependencias, Ollama, Docker, ChromaDB, Postgres/auth, estructura, data, API, Node.js, frontend).
+Verifies that every service is correctly installed (11 checks: Python, dependencies, Ollama, Docker, ChromaDB, Postgres/auth, project structure, data, API, Node.js, frontend).
 
 ```bash
 python scripts/verify_setup.py
 ```
 
-**Salida:** Reporte coloreado con ✅ éxito, ❌ error, ⚠️ advertencia.
+**Output:** a colored report with ✅ success, ❌ error, ⚠️ warning.
 
 ---
 
-### 3. `ingest_pdfs.py` - Ingesta de PDFs
+### 3. `ingest_pdfs.py` - PDF Ingestion
 
-Procesa PDFs y los ingesta en ChromaDB. Alternativa CLI a los endpoints `/sync` de la API.
+Processes PDFs and ingests them into ChromaDB. CLI alternative to the API's `/sync` endpoints.
 
 ```bash
-# Procesar todos los PDFs en /data
+# Process every PDF in /data
 python scripts/ingest_pdfs.py
 
-# Procesar un directorio específico
-python scripts/ingest_pdfs.py /ruta/a/pdfs
+# Process a specific directory
+python scripts/ingest_pdfs.py /path/to/pdfs
 
-# Procesar un archivo específico
-python scripts/ingest_pdfs.py --file documento.pdf
+# Process a specific file
+python scripts/ingest_pdfs.py --file document.pdf
 
-# Usar colección diferente
-python scripts/ingest_pdfs.py --collection mi_coleccion
+# Use a different collection
+python scripts/ingest_pdfs.py --collection my_collection
 ```
 
-**Prerequisito:** `source api/venv/bin/activate` (necesita dependencias de FastAPI/LangChain)
+**Prerequisite:** `source api/venv/bin/activate` (needs the FastAPI/LangChain dependencies)
 
 ---
 
-### 4. `ingest_notion.py` - Ingesta de Notion
+### 4. `ingest_notion.py` - Notion Ingestion
 
-Ingesta contenido de Notion. Alternativa CLI a `/sync/notion`.
+Ingests Notion content. CLI alternative to `/sync/notion`.
 
 ```bash
-# Página individual
+# A single page
 python scripts/ingest_notion.py --page PAGE_ID
 
-# Base de datos completa
+# A whole database
 python scripts/ingest_notion.py --database DATABASE_ID
 
-# Limitar páginas
+# Cap the number of pages
 python scripts/ingest_notion.py --database DATABASE_ID --max 10
 ```
 
-**Prerequisito:**
-- `NOTION_API_KEY` en `api/.env`
+**Prerequisite:**
+- `NOTION_API_KEY` in `api/.env`
 - `source api/venv/bin/activate`
 
 ---
 
-### 5. `generate_test_pdf.py` - Genera PDF de Prueba
+### 5. `generate_test_pdf.py` - Generate a Test PDF
 
-Genera `data/test_document.pdf` con contenido sobre el proyecto para testing.
+Generates `data/test_document.pdf` with content about the project, for testing.
 
 ```bash
 python scripts/generate_test_pdf.py
 ```
 
-**Output:** `data/test_document.pdf` (~2 páginas)
+**Output:** `data/test_document.pdf` (~2 pages)
 
 ---
 
-### 6. `create_user.py` - Crear Usuario de Login
+### 6. `create_user.py` - Create a Login User
 
-No hay UI de registro — es la única forma de dar de alta un usuario. Pide la contraseña de forma interactiva (`getpass`, dos veces para confirmar) en vez de como argumento, para que no quede en el historial de la shell.
+There's no signup UI — this is the only way to create a user. Asks for the password interactively (`getpass`, twice to confirm) instead of as an argument, so it never lands in the shell history.
 
 ```bash
-python scripts/create_user.py --email tu@email.com
+python scripts/create_user.py --email you@email.com
 ```
 
-**Prerequisito:**
-- `DATABASE_URL` configurada en `api/.env` (local) o como variable de entorno (p. ej. para crear el primer usuario contra Neon en producción)
+**Prerequisite:**
+- `DATABASE_URL` set in `api/.env` (local) or as an environment variable (e.g. to create the first user against Neon in production)
 - `source api/venv/bin/activate`
 
-**Salida:** `✅ User created: tu@email.com (id=1)`. Crea también la tabla `users` si no existe todavía (idempotente).
+**Output:** `✅ User created: you@email.com (id=1)`. Also creates the `users` table if it doesn't exist yet (idempotent).
 
 ---
 
-## 🔐 Configuración de Notion
+## 🔐 Notion Setup
 
-Para usar los endpoints de Notion:
+To use the Notion endpoints:
 
-1. **Crear integración en Notion:**
-   - Ve a https://www.notion.so/my-integrations
-   - Crea una nueva integración
-   - Copia el "Internal Integration Token"
+1. **Create a Notion integration:**
+   - Go to https://www.notion.so/my-integrations
+   - Create a new integration
+   - Copy the "Internal Integration Token"
 
-2. **Configurar variable de entorno:**
+2. **Set the environment variable:**
    ```bash
    export NOTION_API_KEY=secret_xxxxxxxxxxxxx
    ```
 
-3. **Compartir páginas:**
-   - Abre la página en Notion
-   - Click en "..." → "Add connections"
-   - Selecciona tu integración
+3. **Share pages:**
+   - Open the page in Notion
+   - Click "..." → "Add connections"
+   - Select your integration
 
 ---
 
-## 📖 Documentación Interactiva
+## 📖 Interactive Documentation
 
-FastAPI genera documentación interactiva automáticamente:
+FastAPI automatically generates interactive documentation:
 
 - **Swagger UI:** http://localhost:8000/docs
 - **ReDoc:** http://localhost:8000/redoc
 
-Desde estas interfaces puedes:
-- Ver todos los endpoints disponibles
-- Probar las llamadas a la API directamente
-- Ver los esquemas de request/response
-- Generar código de ejemplo
+From these interfaces you can:
+- See every available endpoint
+- Try API calls directly
+- View request/response schemas
+- Generate example code
 
 ---
 
-## 🚀 Flujo de Trabajo Típico
+## 🚀 Typical Workflow
 
-### 1. Crear usuario e iniciar sesión (una vez)
+### 1. Create a user and log in (once)
 
 ```bash
-python scripts/create_user.py --email tu@email.com
+python scripts/create_user.py --email you@email.com
 
 TOKEN=$(curl -s -X POST "http://localhost:8000/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"email": "tu@email.com", "password": "..."}' | jq -r .access_token)
+  -d '{"email": "you@email.com", "password": "..."}' | jq -r .access_token)
 ```
 
-### 2. Indexar Documentos
+### 2. Index Documents
 
 ```bash
-# Opción A: PDFs locales
+# Option A: local PDFs
 curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/directory"
 
-# Opción B: Página de Notion
+# Option B: a Notion page
 curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/sync/notion" \
   -H "Content-Type: application/json" \
   -d '{"page_id": "abc123..."}'
 ```
 
-### 3. Verificar Ingesta
+### 3. Verify Ingestion
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/stats
 ```
 
-### 4. Hacer Preguntas
+### 4. Ask Questions
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/ask" \
   -H "Content-Type: application/json" \
   -d '{
-    "question": "¿De qué tratan los documentos indexados?"
+    "question": "What are the indexed documents about?"
   }'
 ```
 
 ---
 
-## 🐛 Solución de Problemas
+## 🐛 Troubleshooting
 
 ### `401 Not authenticated`
 
@@ -588,17 +588,17 @@ curl -H "Authorization: Bearer $TOKEN" -X POST "http://localhost:8000/ask" \
 }
 ```
 
-**Solución:** falta el token (o expiró, dura 24h por defecto). Repite el login y reutiliza el `access_token` devuelto:
+**Fix:** the token is missing (or expired — 24h by default). Log in again and reuse the returned `access_token`:
 ```bash
 TOKEN=$(curl -s -X POST "http://localhost:8000/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"email": "tu@email.com", "password": "..."}' | jq -r .access_token)
-# ...y usa -H "Authorization: Bearer $TOKEN" en las siguientes peticiones
+  -d '{"email": "you@email.com", "password": "..."}' | jq -r .access_token)
+# ...then use -H "Authorization: Bearer $TOKEN" on the following requests
 ```
 
-Si no tienes usuario todavía: `python scripts/create_user.py --email tu@email.com`.
+If you don't have a user yet: `python scripts/create_user.py --email you@email.com`.
 
-### Ollama no disponible
+### Ollama unavailable
 
 ```json
 {
@@ -606,20 +606,20 @@ Si no tienes usuario todavía: `python scripts/create_user.py --email tu@email.c
 }
 ```
 
-**Solución:**
+**Fix:**
 ```bash
-# Iniciar Ollama
+# Start Ollama
 ollama serve
 
-# Verificar modelos instalados
+# Check installed models
 ollama list
 
-# Descargar modelos necesarios
+# Pull the required models
 ollama pull llama3.2
 ollama pull nomic-embed-text
 ```
 
-### ChromaDB no disponible
+### ChromaDB unavailable
 
 ```json
 {
@@ -627,13 +627,13 @@ ollama pull nomic-embed-text
 }
 ```
 
-**Solución:**
+**Fix:**
 ```bash
-# Iniciar ChromaDB con Docker
+# Start ChromaDB with Docker
 docker-compose up -d chromadb
 ```
 
-### Error al sincronizar Notion
+### Error syncing Notion
 
 ```json
 {
@@ -641,12 +641,12 @@ docker-compose up -d chromadb
 }
 ```
 
-**Solución:**
+**Fix:**
 ```bash
-# Configurar API key
+# Set the API key
 export NOTION_API_KEY=secret_xxxxxxxxxxxxx
 
-# O añadirlo al archivo .env
+# Or add it to the .env file
 echo "NOTION_API_KEY=secret_xxxxxxxxxxxxx" >> api/.env
 ```
 
@@ -654,52 +654,52 @@ echo "NOTION_API_KEY=secret_xxxxxxxxxxxxx" >> api/.env
 
 ## 🖥️ Frontend (React + Vite)
 
-El proyecto incluye un frontend web para interactuar con el sistema RAG.
+The project includes a web frontend for interacting with the RAG system.
 
-### Requisitos
+### Requirements
 
-- **Node.js 18+** (recomendado: usar `nvm` o `fnm`)
-- **npm** (incluido con Node.js)
+- **Node.js 18+** (recommended: use `nvm` or `fnm`)
+- **npm** (included with Node.js)
 
-### Instalación
+### Installation
 
 ```bash
-# 1. Ir al directorio frontend
+# 1. Go to the frontend directory
 cd frontend
 
-# 2. Instalar dependencias
+# 2. Install dependencies
 npm install
 
-# 3. Configurar variables de entorno (opcional)
+# 3. Configure environment variables (optional)
 cp .env.example .env
-# Editar .env si la API no está en localhost:8000
+# Edit .env if the API isn't on localhost:8000
 ```
 
-### Ejecución
+### Running It
 
 ```bash
-# Modo desarrollo (con hot-reload)
+# Development mode (with hot-reload)
 cd frontend
 npm run dev
 ```
 
-El frontend estará disponible en: **http://localhost:5173**
+The frontend will be available at: **http://localhost:5173**
 
-### Build de Producción
+### Production Build
 
 ```bash
-# Generar build optimizado
+# Generate an optimized build
 npm run build
 
-# Los archivos se generan en frontend/dist/
+# Files are generated under frontend/dist/
 ```
 
-### Configuración
+### Configuration
 
-El frontend se configura mediante variables de entorno en `frontend/.env`:
+The frontend is configured via environment variables in `frontend/.env`:
 
-| Variable | Valor por defecto | Descripción |
+| Variable | Default | Description |
 |----------|-------------------|-------------|
-| `VITE_API_URL` | `http://localhost:8000` | URL de la API FastAPI |
+| `VITE_API_URL` | `http://localhost:8000` | The FastAPI API's URL |
 
 ---
