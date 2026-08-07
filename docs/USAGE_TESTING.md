@@ -1,67 +1,67 @@
-# 🧪 Guía de Testing - Bibliotecario-IA
+# 🧪 Testing Guide - Bibliotecario-IA
 
-Documentación completa de la suite de tests del backend.
+Full documentation of the backend test suite.
 
-## 📂 Estructura
+## 📂 Structure
 
 ```
 api/tests/
-├── conftest.py                     # Fixtures compartidas (mocks, test data)
-├── test_rag_service.py             # Tests del servicio RAG
-├── test_sync_service.py            # Tests del pipeline de ingesta
-├── test_api.py                     # Tests de endpoints FastAPI
-├── test_auth_service.py            # Tests de AuthService (login, JWT)
-├── test_auth_endpoints.py          # Tests de /auth/* y protección de endpoints
-├── test_notion_service.py          # Tests del adaptador/endpoints de Notion
-├── test_groq_adapter.py            # Tests del adaptador Groq (LLMPort cloud)
-├── test_chromadb_cloud_adapter.py  # Tests del adaptador Chroma Cloud (VectorDBPort cloud)
-└── test_integration.py             # Tests E2E con servicios reales (Ollama + ChromaDB)
+├── conftest.py                     # Shared fixtures (mocks, test data)
+├── test_rag_service.py             # RAGService tests
+├── test_sync_service.py            # Ingestion pipeline tests
+├── test_api.py                     # FastAPI endpoint tests
+├── test_auth_service.py            # AuthService tests (login, JWT)
+├── test_auth_endpoints.py          # /auth/* and endpoint-protection tests
+├── test_notion_service.py          # Notion adapter/endpoint tests
+├── test_groq_adapter.py            # Groq adapter tests (cloud LLMPort)
+├── test_chromadb_cloud_adapter.py  # Chroma Cloud adapter tests (cloud VectorDBPort)
+└── test_integration.py             # E2E tests with real services (Ollama + ChromaDB)
 ```
 
-**Total:** 90 tests unitarios (`pytest -m unit`, lo que corre CI) + tests de integración marcados aparte (necesitan Ollama/ChromaDB reales)
+**Total:** 142 unit tests (`pytest -m unit`, what CI runs) + integration tests marked separately (need real Ollama/ChromaDB)
 
 ## 🚀 Quick Start
 
 ```bash
-# 1. Activar venv
+# 1. Activate the venv
 cd api
 source venv/bin/activate
 
-# 2. Instalar pytest (ya incluido en requirements.txt)
+# 2. Install pytest (already in requirements.txt)
 pip install -r requirements.txt
 
-# 3. Ejecutar todos los tests
+# 3. Run all tests
 pytest
 
-# 4. Ver tests en modo verbose
+# 4. Verbose mode
 pytest -v
 ```
 
-## 📝 Tipos de Tests
+## 📝 Test Types
 
-### 🔷 Tests Unitarios (`@pytest.mark.unit`)
+### 🔷 Unit Tests (`@pytest.mark.unit`)
 
-Tests **rápidos** con mocks, sin dependencias externas.
+**Fast** tests with mocks, no external dependencies.
 
 ```bash
-# Ejecutar solo tests unitarios
+# Run only unit tests
 pytest -m unit
 
-# Tiempo: ~1-2 segundos total
+# Time: ~10-15 seconds total
 ```
 
-**Qué testean:**
-- Lógica de negocio (RAGService, SyncService)
-- Validación de inputs
-- Manejo de errores
-- Edge cases (queries vacías, documentos grandes, etc.)
-- Endpoints HTTP (con mocks)
+**What they cover:**
+- Business logic (RAGService, SyncService)
+- Input validation
+- Error handling
+- Edge cases (empty queries, large documents, etc.)
+- HTTP endpoints (mocked)
 
-### 🔶 Tests de Integración (`@pytest.mark.integration`)
+### 🔶 Integration Tests (`@pytest.mark.integration`)
 
-Tests con **servicios reales** (Ollama + ChromaDB).
+Tests against **real services** (Ollama + ChromaDB).
 
-**Prerequisitos:**
+**Prerequisites:**
 ```bash
 # Terminal 1: Ollama
 ollama serve
@@ -70,114 +70,114 @@ ollama serve
 docker-compose up chromadb
 ```
 
-**Ejecución:**
+**Running:**
 ```bash
 pytest -m integration
 
-# Tiempo: ~10-30 segundos
+# Time: ~10-30 seconds
 ```
 
-**Qué testean:**
-- Conectividad real con Ollama
-- Conectividad real con ChromaDB
-- Flujo E2E: ingesta → storage → query → respuesta
+**What they cover:**
+- Real connectivity to Ollama
+- Real connectivity to ChromaDB
+- E2E flow: ingestion → storage → query → response
 
-## 🎯 Comandos Útiles
+## 🎯 Useful Commands
 
-### Ejecución Básica
+### Basic Execution
 
 ```bash
-# Todos los tests
+# All tests
 pytest
 
-# Solo tests unitarios (rápidos)
+# Only unit tests (fast)
 pytest -m unit
 
-# Solo tests de integración
+# Only integration tests
 pytest -m integration
 
-# Solo un archivo específico
+# A single file
 pytest tests/test_rag_service.py
 
-# Solo una función
+# A single test function
 pytest tests/test_rag_service.py::test_query_success
 ```
 
-### Filtrado
+### Filtering
 
 ```bash
-# Tests que contengan "query" en el nombre
+# Tests with "query" in the name
 pytest -k "query"
 
-# Excluir tests lentos
+# Skip slow tests
 pytest -m "not slow"
 
-# Excluir integración (solo unitarios)
+# Skip integration (unit only)
 pytest -m "not integration"
 
-# Tests E2E únicamente
+# E2E tests only
 pytest -m e2e
 ```
 
 ### Debugging
 
 ```bash
-# Ver prints/logs durante ejecución
+# Show prints/logs during the run
 pytest -s
 
-# Verbose + mostrar variables locales en failures
+# Verbose + show local variables on failures
 pytest -vv --showlocals
 
-# Parar en el primer fallo
+# Stop at the first failure
 pytest -x
 
-# Ejecutar solo los últimos tests que fallaron
+# Re-run only the last failed tests
 pytest --lf
 
-# Entrar en debugger Python al fallar
+# Drop into the Python debugger on failure
 pytest --pdb
 ```
 
-### Cobertura
+### Coverage
 
 ```bash
-# Generar reporte de cobertura
+# Generate a coverage report
 pytest --cov=app tests/
 
-# Cobertura con reporte HTML
+# Coverage with an HTML report
 pytest --cov=app --cov-report=html tests/
-# Ver en: htmlcov/index.html
+# View at: htmlcov/index.html
 ```
 
-## 📊 Cobertura de Tests
+## 📊 Test Coverage
 
-| Fichero | Qué testea |
+| File | What it tests |
 |---------|------------|
-| `test_rag_service.py` | RAGService: query feliz, embeddings, vector search, generación, validación, límite de contexto, errores de Ollama/ChromaDB, edge cases |
-| `test_sync_service.py` | SyncService: ingesta completa, validación de paths, errores de processor/embedding/ChromaDB, chunking |
-| `test_api.py` | Endpoints FastAPI (con `test_client` ya autenticado, ver conftest.py): validación de requests, códigos de error HTTP, CORS |
-| `test_auth_service.py` | AuthService: login correcto/incorrecto, propagación de errores del repositorio (no se confunden con credenciales inválidas), emisión/validación de JWT, token expirado, token con secreto distinto |
-| `test_auth_endpoints.py` | `/auth/login`, `/auth/logout`, `/auth/me`, y que endpoints protegidos devuelvan 401 sin sesión / no-401 con `dependency_overrides` |
-| `test_notion_service.py` | Adaptador de Notion + endpoints `/sync/notion*` |
-| `test_groq_adapter.py` | Adaptador Groq (LLMPort cloud): generación, extracción de keywords, embeddings locales (ONNX/sentence-transformers) |
-| `test_chromadb_cloud_adapter.py` | Adaptador Chroma Cloud (VectorDBPort cloud): validación de credenciales, caché de cliente |
-| `test_integration.py` | E2E con Ollama + ChromaDB reales: pipeline completo, conectividad |
+| `test_rag_service.py` | RAGService: happy-path query, embeddings, vector search, generation, validation, context limit, Ollama/ChromaDB errors, edge cases |
+| `test_sync_service.py` | SyncService: full ingestion, path validation, processor/embedding/ChromaDB errors, chunking |
+| `test_api.py` | FastAPI endpoints (using an already-authenticated `test_client`, see conftest.py): request validation, HTTP error codes, CORS |
+| `test_auth_service.py` | AuthService: correct/incorrect login, repository-error propagation (not confused with invalid credentials), JWT issuance/validation, expired token, token signed with a different secret |
+| `test_auth_endpoints.py` | `/auth/login`, `/auth/logout`, `/auth/me`, and that protected endpoints return 401 with no session / non-401 with `dependency_overrides` |
+| `test_notion_service.py` | Notion adapter + `/sync/notion*` endpoints |
+| `test_groq_adapter.py` | Groq adapter (cloud LLMPort): generation, keyword extraction, local embeddings (ONNX/sentence-transformers) |
+| `test_chromadb_cloud_adapter.py` | Chroma Cloud adapter (cloud VectorDBPort): credential validation, client caching |
+| `test_integration.py` | E2E with real Ollama + ChromaDB: full pipeline, connectivity |
 
-Conteo exacto y actualizado: `pytest --collect-only -q` (90 tests unitarios a fecha de este documento, ver badge del [README](../README.md)).
+Exact, up-to-date count: `pytest --collect-only -q` (142 unit tests as of this document, see the [README](../README.md) badge).
 
-## 🔧 Configuración
+## 🔧 Configuration
 
 ### pytest.ini
 
-Ubicación: `/api/pytest.ini`
+Location: `/api/pytest.ini`
 
-**Marcadores personalizados:**
-- `@pytest.mark.unit`: Tests unitarios (rápidos)
-- `@pytest.mark.integration`: Tests con servicios reales
-- `@pytest.mark.slow`: Tests lentos (>1s)
-- `@pytest.mark.e2e`: Tests end-to-end
+**Custom markers:**
+- `@pytest.mark.unit`: unit tests (fast)
+- `@pytest.mark.integration`: tests against real services
+- `@pytest.mark.slow`: slow tests (>1s)
+- `@pytest.mark.e2e`: end-to-end tests
 
-**Configuración:**
+**Configuration:**
 ```ini
 [pytest]
 testpaths = tests
@@ -187,84 +187,84 @@ addopts = -v --tb=short --strict-markers
 
 ### conftest.py
 
-Fixtures compartidas automáticamente disponibles:
+Shared fixtures automatically available:
 
 **Mocks:**
-- `mock_ollama`: Mock del adaptador Ollama
-- `mock_chromadb`: Mock de ChromaDB
-- `mock_pdf_processor`: Mock del procesador PDF
-- `mock_user_repository`: Mock de UserRepositoryPort (un usuario de prueba: `test@example.com` / `testpass123`)
+- `mock_ollama`: mock of the Ollama adapter
+- `mock_chromadb`: mock of ChromaDB
+- `mock_pdf_processor`: mock of the PDF processor
+- `mock_user_repository`: mock of UserRepositoryPort (one test user: `test@example.com` / `testpass123`)
 
-**Servicios con mocks:**
-- `rag_service_with_mocks`: RAGService listo para tests
-- `sync_service_with_mocks`: SyncService listo para tests
-- `auth_service_with_mocks`: AuthService listo para tests
+**Services with mocks:**
+- `rag_service_with_mocks`: RAGService ready for tests
+- `sync_service_with_mocks`: SyncService ready for tests
+- `auth_service_with_mocks`: AuthService ready for tests
 
-**Cliente API:**
-- `test_client`: TestClient de FastAPI, **ya autenticado** (override de `get_current_user` con un usuario de prueba) — pensado para tests que verifican lógica de negocio, no el login en sí. Los tests que sí prueban autenticación (`test_auth_endpoints.py`) usan su propio fixture `client`, sin este override.
+**API client:**
+- `test_client`: FastAPI `TestClient`, **already authenticated** (overrides `get_current_user` with a test user) — meant for tests that check business logic, not login itself. Tests that actually exercise authentication (`test_auth_endpoints.py`) use their own `client` fixture, without this override.
 
-**Datos de prueba:**
-- `sample_document`: Document de ejemplo
-- `sample_chunks`: Lista de Chunks
-- `sample_query`: Query de ejemplo
-- `sample_query_response`: QueryResponse de ejemplo
+**Test data:**
+- `sample_document`: a sample Document
+- `sample_chunks`: a list of Chunks
+- `sample_query`: a sample Query
+- `sample_query_response`: a sample QueryResponse
 
-> `JWT_SECRET_KEY` se fija a un valor de test (`os.environ.setdefault(...)`) al principio de `conftest.py`, antes de importar `app.main` — necesario porque `Settings()` se instancia en el import y los tests de auth necesitan un secreto real para firmar/verificar tokens.
+> `JWT_SECRET_KEY` is pinned to a test value (`os.environ.setdefault(...)`) at the top of `conftest.py`, before `app.main` is imported — needed because `Settings()` is instantiated at import time and the auth tests need a real secret to sign/verify tokens.
 
 ## 🐛 Debugging Tests
 
-### Test falla con "AssertionError"
+### Test fails with "AssertionError"
 
 ```bash
-# Ver traceback completo + variables locales
+# Full traceback + local variables
 pytest -vv --showlocals tests/test_rag_service.py::test_query_success
 
-# Añadir prints para debugging
+# Add prints for debugging
 pytest -s tests/test_rag_service.py::test_query_success
 ```
 
-### Tests de integración fallan
+### Integration tests fail
 
 **Error: "Ollama connection failed"**
 ```bash
-# Verificar Ollama
+# Check Ollama
 curl http://localhost:11434/api/tags
 
-# Si no responde, iniciarlo
+# If it doesn't respond, start it
 ollama serve
 ```
 
 **Error: "ChromaDB connection failed"**
 ```bash
-# Verificar ChromaDB
+# Check ChromaDB
 curl http://localhost:8001/api/v2/heartbeat
 
-# Si no responde, iniciarlo
+# If it doesn't respond, start it
 docker-compose up -d chromadb
 ```
 
 **Error: "test_document.pdf not found"**
 ```bash
-# Generar PDF de prueba
+# Generate the test PDF
 python scripts/generate_test_pdf.py
 
-# Verificar
+# Verify
 ls -la data/test_document.pdf
 ```
 
-### ImportError o ModuleNotFoundError
+### ImportError or ModuleNotFoundError
 
 ```bash
-# Asegurarte de estar en el venv
+# Make sure you're in the venv
 source venv/bin/activate
 
-# Reinstalar dependencias
+# Reinstall dependencies
 pip install -r requirements.txt
 ```
 
 ## ✅ CI/CD Integration
 
-Ejemplo para GitHub Actions:
+Example for GitHub Actions:
 
 ```yaml
 # .github/workflows/test.yml
@@ -294,34 +294,34 @@ jobs:
           cd api
           pytest -m unit -v
 
-      # Tests de integración requieren servicios
-      # (configurar Ollama/ChromaDB en CI si necesario)
+      # Integration tests need real services running
+      # (set up Ollama/ChromaDB in CI if needed)
 ```
 
-## 📈 Próximos Pasos
+## 📈 Next Steps
 
-### Expandir Cobertura
+### Expand Coverage
 
-- [ ] Tests de adaptadores (ChromaDB, Ollama, PDF)
-- [ ] Tests de models (Document, Chunk, etc.)
-- [ ] Tests de configuración (settings.py)
-- [ ] Tests de errores específicos de LangChain
+- [ ] Adapter tests (ChromaDB, Ollama, PDF)
+- [ ] Model tests (Document, Chunk, etc.)
+- [ ] Configuration tests (settings.py)
+- [ ] LangChain-specific error tests
 
-### Mejorar Tests de Integración
+### Improve Integration Tests
 
-- [ ] Test con múltiples PDFs
-- [ ] Test con Notion real
-- [ ] Test de performance (queries por segundo)
-- [ ] Test de carga (muchos documentos)
+- [ ] Test with multiple PDFs
+- [ ] Test against real Notion
+- [ ] Performance test (queries per second)
+- [ ] Load test (many documents)
 
-### Herramientas Adicionales
+### Additional Tooling
 
-- [x] `pytest-cov`: Coverage reports (ya en `requirements.txt`)
-- [ ] `pytest-xdist`: Tests en paralelo (`pytest -n auto`)
-- [ ] `pytest-benchmark`: Performance benchmarks
-- [ ] `pytest-html`: Reportes HTML bonitos
+- [x] `pytest-cov`: coverage reports (already in `requirements.txt`)
+- [ ] `pytest-xdist`: parallel tests (`pytest -n auto`)
+- [ ] `pytest-benchmark`: performance benchmarks
+- [ ] `pytest-html`: nicer HTML reports
 
 ---
 
-**Cobertura actual:** 90 tests unitarios, 62% de cobertura (concentrada en los *services*, mockeados — los adapters que hablan con servicios reales están peor cubiertos, ver [README](../README.md#-trabajo-futuro))
-**Tiempo ejecución:** ~7-12s (unitarios, según máquina), variable en integración (dependen de Ollama/ChromaDB reales)
+**Current coverage:** 142 unit tests, 68% coverage (concentrated in the *services*, which are mocked — the adapters that talk to real services are less well covered, see [README](../README.md#-trabajo-futuro))
+**Run time:** ~10-15s (unit, machine-dependent), variable for integration (depends on real Ollama/ChromaDB)
