@@ -1,13 +1,13 @@
 # /api/tests/test_chromadb_adapter.py
 """
-Tests unitarios de ChromaDBAdapter.list_documents().
+Unit tests for ChromaDBAdapter.list_documents().
 
-No existía un test file para la lógica propia de ChromaDBAdapter (solo
-para ChromaCloudAdapter, que reutiliza toda esta lógica y solo cambia
-_get_client — ver test_chromadb_cloud_adapter.py). Aquí se mockea
-_get_or_create_collection() directamente en vez del cliente HTTP completo,
-porque list_documents() es puro procesamiento de lo que devuelve
-collection.get() — no hace falta simular la capa de transporte.
+There was no test file for ChromaDBAdapter's own logic (only for
+ChromaCloudAdapter, which reuses all of this logic and only changes
+_get_client — see test_chromadb_cloud_adapter.py). Here,
+_get_or_create_collection() is mocked directly instead of the full HTTP
+client, because list_documents() is pure processing of whatever
+collection.get() returns — no need to simulate the transport layer.
 """
 
 import pytest
@@ -17,7 +17,7 @@ from app.adapters.outbound.chromadb_adapter import ChromaDBAdapter
 
 
 def _mock_collection(ids, metadatas):
-    """Crea una colección falsa cuyo .get() devuelve el shape de ChromaDB."""
+    """Creates a fake collection whose .get() returns ChromaDB's shape."""
     collection = MagicMock()
     collection.get.return_value = {"ids": ids, "metadatas": metadatas}
     return collection
@@ -26,7 +26,7 @@ def _mock_collection(ids, metadatas):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_list_documents_groups_chunks_by_document_id():
-    """3 chunks de 2 documentos distintos → 2 DocumentSummary con chunk_count correcto."""
+    """3 chunks from 2 distinct documents → 2 DocumentSummary with the right chunk_count."""
     adapter = ChromaDBAdapter()
     collection = _mock_collection(
         ids=["notion_a_chunk_0", "notion_a_chunk_1", "pdf_b_chunk_0"],
@@ -53,7 +53,7 @@ async def test_list_documents_groups_chunks_by_document_id():
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_list_documents_falls_back_to_filename_when_title_is_untitled():
-    """Título "Untitled" (bug de _extract_title ya arreglado, pero por si acaso) usa filename."""
+    """"Untitled" title (a _extract_title bug already fixed, but just in case) falls back to filename."""
     adapter = ChromaDBAdapter()
     collection = _mock_collection(
         ids=["notion_x_chunk_0"],
@@ -88,7 +88,7 @@ async def test_list_documents_sorted_alphabetically_by_title():
     collection = _mock_collection(
         ids=["notion_z_chunk_0", "notion_a_chunk_0"],
         metadatas=[
-            {"document_id": "notion_z", "title": "Zorba el Griego"},
+            {"document_id": "notion_z", "title": "Zorba the Greek"},
             {"document_id": "notion_a", "title": "1984"},
         ],
     )
@@ -96,7 +96,7 @@ async def test_list_documents_sorted_alphabetically_by_title():
     with patch.object(adapter, "_get_or_create_collection", return_value=collection):
         summaries = await adapter.list_documents("docs")
 
-    assert [s.title for s in summaries] == ["1984", "Zorba el Griego"]
+    assert [s.title for s in summaries] == ["1984", "Zorba the Greek"]
 
 
 @pytest.mark.unit
@@ -114,7 +114,7 @@ async def test_list_documents_empty_collection_returns_empty_list():
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_list_documents_returns_empty_list_on_error():
-    """Mismo contrato que get_collection_stats/similarity_search: nunca lanza, degrada a vacío."""
+    """Same contract as get_collection_stats/similarity_search: never raises, degrades to empty."""
     adapter = ChromaDBAdapter()
 
     with patch.object(adapter, "_get_or_create_collection", side_effect=RuntimeError("boom")):

@@ -1,12 +1,12 @@
 # /api/tests/test_chromadb_cloud_adapter.py
 """
-Tests de ChromaCloudAdapter - Ver ADR-007.
+ChromaCloudAdapter tests - See ADR-007.
 
-ChromaCloudAdapter hereda toda su lógica de negocio (store_chunks,
-similarity_search, delete_document, ...) de ChromaDBAdapter sin cambios;
-esa lógica ya se ejerce indirectamente vía mock_chromadb en
-test_rag_service.py / test_sync_service.py. Aquí solo se prueba lo que
-este adaptador SÍ cambia: cómo obtiene el cliente de conexión.
+ChromaCloudAdapter inherits all of its business logic (store_chunks,
+similarity_search, delete_document, ...) from ChromaDBAdapter
+unchanged; that logic is already exercised indirectly via mock_chromadb
+in test_rag_service.py / test_sync_service.py. Here we only test what
+this adapter DOES change: how it obtains the connection client.
 """
 
 import pytest
@@ -18,7 +18,7 @@ from app.adapters.outbound.chromadb_adapter import ChromaDBAdapter
 
 @pytest.mark.unit
 def test_is_subclass_of_chromadb_adapter():
-    """Confirma que hereda (y por tanto reutiliza) toda la lógica de VectorDBPort."""
+    """Confirms it inherits (and therefore reuses) all of VectorDBPort's logic."""
     assert issubclass(ChromaCloudAdapter, ChromaDBAdapter)
 
 
@@ -67,7 +67,7 @@ def test_get_client_uses_cloud_client_with_settings(monkeypatch):
 
 @pytest.mark.unit
 def test_get_client_is_cached(monkeypatch):
-    """Segunda llamada no debe reconectar (mismo patrón lazy-singleton que ChromaDBAdapter)."""
+    """A second call must not reconnect (same lazy-singleton pattern as ChromaDBAdapter)."""
     monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_api_key", "test-key")
     monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_tenant", "my-tenant")
     monkeypatch.setattr("app.adapters.outbound.chromadb_cloud_adapter.settings.chroma_cloud_database", "my-db")
