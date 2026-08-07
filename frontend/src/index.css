@@ -63,9 +63,10 @@
 /* Global styles - Dark Mode */
 html {
   /* Fallback para navegadores sin JS o sin soporte de visualViewport;
-     useViewportHeight() la sobrescribe con la altura real en px. Ver
+     useViewportHeight() las sobrescribe con valores reales en px. Ver
      hooks/useViewportHeight.js para el porqué (salto del teclado en iOS). */
   --app-height: 100dvh;
+  --app-offset-top: 0px;
 }
 
 html,
@@ -87,11 +88,21 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Altura real de la app: dvh como fallback, sobrescrita en runtime por
-   --app-height (ver useViewportHeight) para reaccionar al teclado en iOS. */
+/* Contenedor raíz de la app, anclado fuera del flujo del documento.
+   `position: fixed` + traslación por --app-offset-top es necesario porque
+   el "layout viewport" (sistema de coordenadas del documento) no se mueve
+   cuando aparece el teclado en iOS, pero el "visual viewport" (lo visible)
+   sí se desplaza; sin compensar ese offset, este contenedor se queda
+   anclado en y=0 mientras la ventana visible mira un trozo desplazado de
+   la página. dvh/0px son el fallback para navegadores sin JS o sin
+   soporte de visualViewport; useViewportHeight sobrescribe ambas variables
+   en runtime. Ver ese hook para el detalle completo. */
 .h-app {
+  position: fixed;
+  inset: 0;
   height: 100dvh;
   height: var(--app-height);
+  transform: translateY(var(--app-offset-top));
 }
 
 /* Scrollbar styling - Dark */
