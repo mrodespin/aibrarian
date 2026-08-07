@@ -245,7 +245,7 @@ async def test_query_all_chunks_below_threshold_returns_no_info(rag_service_with
 
     # Assert
     assert response.source_documents == []
-    assert "no encontré información relevante" in response.answer
+    assert "couldn't find relevant information" in response.answer
 
 
 @pytest.mark.unit
@@ -414,7 +414,7 @@ async def test_meta_question_lists_full_catalog_without_search_or_generation(
 
     assert "1984" in response.answer
     assert "Deep Learning" in response.answer
-    assert response.answer.startswith("Conozco 2 documentos")
+    assert response.answer.startswith("I know 2 documents")
     assert response.source_documents == []
     mock_ollama.is_catalog_question.assert_awaited_once_with(query.question)
     mock_chromadb.list_documents.assert_awaited_once()
@@ -435,7 +435,7 @@ async def test_meta_question_with_empty_catalog(rag_service_with_mocks, mock_oll
     query = Query(question="¿Cuántos documentos tienes?")
     response = await rag_service_with_mocks.ask_question(query)
 
-    assert "no tengo ningún documento" in response.answer.lower()
+    assert "don't have any documents" in response.answer.lower()
 
 
 @pytest.mark.unit
@@ -612,7 +612,7 @@ async def test_stream_no_relevant_context_yields_fallback_token(rag_service_with
     assert events[0] == {"type": "sources", "source_documents": []}
     token_events = [e for e in events if e["type"] == "token"]
     assert len(token_events) == 1
-    assert "no encontré información relevante" in token_events[0]["text"]
+    assert "couldn't find relevant information" in token_events[0]["text"]
     assert events[-1]["type"] == "done"
 
 

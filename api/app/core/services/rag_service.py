@@ -1,27 +1,28 @@
 # /api/app/core/services/rag_service.py
 """
-Servicio RAG (Retrieval-Augmented Generation) - TFM Bibliotecario-IA
+RAG (Retrieval-Augmented Generation) Service - Bibliotecario-IA
 
-Este servicio es el CORAZÓN del sistema. Implementa el patrón RAG completo:
-recibe una pregunta del usuario y devuelve una respuesta basada en documentos.
+This service is the HEART of the system. It implements the full RAG
+pattern: receives a user question and returns an answer grounded in
+documents.
 
-¿Qué es RAG?
-- Retrieval-Augmented Generation = Generación Aumentada por Recuperación
-- Combina búsqueda vectorial (ChromaDB) con generación de texto (LLM)
-- El LLM NO inventa respuestas: las basa en chunks reales de los documentos
+What is RAG?
+- Retrieval-Augmented Generation
+- Combines vector search (ChromaDB) with text generation (LLM)
+- The LLM does NOT make up answers: it grounds them in real chunks from the documents
 
-¿Diferencia con SyncService?
-- SyncService: Datos → ChromaDB (pipeline de INGESTA)
-- RAGService:  ChromaDB → Respuesta (pipeline de CONSULTA)
+Difference from SyncService?
+- SyncService: Data → ChromaDB (INGESTION pipeline)
+- RAGService:  ChromaDB → Answer (QUERY pipeline)
 
-Pipeline RAG completo:
-    Pregunta → Embedding → Búsqueda → Contexto → LLM → Respuesta
+Full RAG pipeline:
+    Question → Embedding → Search → Context → LLM → Answer
 
-Solo necesita 2 puertos (no el DocumentProcessor, pues no procesa docs):
-- LLMPort: Para generar embeddings y respuestas
-- VectorDBPort: Para buscar chunks relevantes
+Only needs 2 ports (not DocumentProcessor, since it doesn't process docs):
+- LLMPort: To generate embeddings and answers
+- VectorDBPort: To search for relevant chunks
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     class RAGService {
         constructor(
             private llm: LLMPort,
@@ -33,7 +34,7 @@ Equivalente en TypeScript:
         async getCollectionInfo(): Promise<Record<string, any>> { ... }
     }
 
-Endpoints que usan este servicio:
+Endpoints that use this service:
 - POST /query → ask_question()
 - GET /info  → get_collection_info()
 """
@@ -45,7 +46,7 @@ import logging
 import time
 from typing import AsyncIterator, Dict, Any, Optional
 
-# Solo importamos LLM y VectorDB (no necesitamos DocumentProcessor)
+# We only import LLM and VectorDB (we don't need DocumentProcessor)
 from app.core.ports.llm_port import LLMPort
 from app.core.ports.vector_db_port import VectorDBPort
 from app.core.domain.models import Query, QueryResult, SourceDocument, DocumentSummary
@@ -56,21 +57,21 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# SERVICIO RAG
+# RAG SERVICE
 # ============================================================================
 class RAGService:
     """
-    Servicio para responder preguntas usando el pipeline RAG.
+    Service for answering questions using the RAG pipeline.
 
-    Este es el servicio principal que los usuarios interactúan indirectamente.
-    Cuando alguien hace una pregunta por la API, este servicio:
-    1. Busca información relevante en ChromaDB
-    2. Construye un contexto con esa información
-    3. Le pide al LLM que responda basándose en ese contexto
+    This is the main service users interact with indirectly. When
+    someone asks a question through the API, this service:
+    1. Searches ChromaDB for relevant information
+    2. Builds a context from that information
+    3. Asks the LLM to answer based on that context
 
-    Ventaja del patrón RAG vs un LLM solo:
-    - Sin RAG: El LLM responde con su conocimiento general (puede inventar)
-    - Con RAG: El LLM responde basándose en TUS documentos (más preciso)
+    Advantage of the RAG pattern over a bare LLM:
+    - Without RAG: the LLM answers from its general knowledge (can make things up)
+    - With RAG: the LLM answers grounded in YOUR documents (more accurate)
     """
 
     def __init__(
@@ -79,15 +80,15 @@ class RAGService:
         vector_db: VectorDBPort
     ):
         """
-        Inicializa el servicio RAG con las dependencias requeridas.
+        Initializes the RAG service with its required dependencies.
 
-        Solo necesita 2 puertos (a diferencia de SyncService que necesita 3):
-        - LLM: Para vectorizar la pregunta y generar la respuesta
-        - VectorDB: Para buscar chunks relevantes
+        Only needs 2 ports (unlike SyncService, which needs 3):
+        - LLM: To vectorize the question and generate the answer
+        - VectorDB: To search for relevant chunks
 
         Args:
-            llm: Adaptador del modelo de lenguaje (Ollama)
-            vector_db: Adaptador de base de datos vectorial (ChromaDB)
+            llm: Language model adapter (Ollama)
+            vector_db: Vector database adapter (ChromaDB)
         """
         self.llm = llm
         self.vector_db = vector_db
@@ -99,71 +100,73 @@ class RAGService:
         history: Optional[str] = None
     ) -> QueryResult:
         """
-        Responde una pregunta usando el pipeline RAG completo con Query Expansion.
+        Answers a question using the full RAG pipeline with Query Expansion.
 
-        ESTE ES EL MÉTODO PRINCIPAL DEL SISTEMA.
-        Es el que se invoca cuando un usuario hace una pregunta.
+        THIS IS THE SYSTEM'S MAIN METHOD.
+        It's the one invoked when a user asks a question.
 
-        Atajo previo (antes de ①): antes de tocar la BD vectorial,
-        LLMPort.is_catalog_question() comprueba si la pregunta es sobre el
-        catálogo en sí ("¿cuántos documentos tienes?") → si lo es, se
-        responde con _build_meta_answer(), sin retrieval.
+        Earlier shortcut (before ①): before touching the vector DB,
+        LLMPort.is_catalog_question() checks whether the question is
+        about the catalog itself ("how many documents do you have?") →
+        if so, it's answered with _build_meta_answer(), with no retrieval.
 
-        Si NO es una pregunta de catálogo y hay `history`, la pregunta pasa
-        antes por LLMPort.condense_question() — patrón estándar de RAG
-        conversacional ("query rewriting" / "condense question", ver
-        `create_history_aware_retriever` de LangChain): reescribe una
-        pregunta de seguimiento corta ("¿en qué año se publicó?") como una
-        pregunta autocontenida ("¿en qué año se publicó Cien años de
-        soledad?") usando el historial. Existe porque una pregunta de
-        seguimiento sin nombres propios puede hacer que similarity_search
-        devuelva un chunk de OTRO documento con score suficiente para
-        "parecer" relevante — visto en producción, no es hipotético — y
-        ahí ya no hay señal de que algo fue mal después del hecho. Con la
-        pregunta ya autocontenida, el pipeline de retrieval de siempre
-        (extract_keywords + similarity_search) vuelve a funcionar sin
-        necesitar ninguna vía especial.
+        If it's NOT a catalog question and there's `history`, the
+        question first goes through LLMPort.condense_question() —
+        standard conversational RAG pattern ("query rewriting" /
+        "condense question", see LangChain's
+        `create_history_aware_retriever` for the same idea): rewrites a
+        short follow-up question ("what year was it published?") as a
+        standalone question ("what year was One Hundred Years of
+        Solitude published?") using the history. It exists because a
+        follow-up question with no proper nouns can make
+        similarity_search return a chunk from a DIFFERENT document with
+        a score high enough to "look" relevant — seen in production, not
+        hypothetical — and by then there's no signal anything went wrong
+        after the fact. With the question already standalone, the usual
+        retrieval pipeline (extract_keywords + similarity_search) works
+        again without needing any special path.
 
-        Pipeline con Query Expansion:
-            ⓪ Condensar si hay historial → condense_question() [NUEVO]
-            ① Extraer keywords         → extract_keywords()
-            ② Vectorizar pregunta      → generate_embedding()
-            ③ Buscar con keywords      → similarity_search(keyword_filter)
-            ④ Fallback semántico       → similarity_search() sin filtro
-            ⑤ Construir contexto       → _build_context()
-            ⑥ Generar respuesta        → generate_response()
-            ⑦ Devolver resultado       → QueryResult
+        Pipeline with Query Expansion:
+            ⓪ Condense if there's history → condense_question() [NEW]
+            ① Extract keywords         → extract_keywords()
+            ② Vectorize the question   → generate_embedding()
+            ③ Search with keywords     → similarity_search(keyword_filter)
+            ④ Semantic fallback        → similarity_search() with no filter
+            ⑤ Build context            → _build_context()
+            ⑥ Generate the answer      → generate_response()
+            ⑦ Return the result        → QueryResult
 
-        ¿Qué es Query Expansion?
-        Técnica que mejora la búsqueda para nombres propios y títulos:
-        - Extraemos keywords de la pregunta (ej: "Blade Runner 2049")
-        - Buscamos documentos que contengan esas keywords
-        - Si no hay resultados, hacemos búsqueda semántica pura
+        What is Query Expansion?
+        A technique that improves search for proper nouns and titles:
+        - We extract keywords from the question (e.g. "Blade Runner 2049")
+        - We search for documents containing those keywords
+        - If there are no results, we fall back to pure semantic search
 
         Args:
-            query: Objeto Query con:
-                   - question: la pregunta del usuario
-                   - max_results: máximo de chunks a recuperar
-                   - session_id: ID de sesión (usado por el endpoint /ask para
-                     recuperar `history`, no leído aquí directamente)
-            collection_name: Colección de ChromaDB (opcional)
-            history: Bloque de texto con turnos previos de la conversación
-                     (ya formateado por ConversationService.get_history_prompt_block),
-                     o None si no hay historial / la conversación no tiene session_id.
-                     Alimenta tanto la condensación de la pregunta (retrieval)
-                     como el prompt de generación final.
+            query: Query object with:
+                   - question: the user's question
+                   - max_results: max number of chunks to retrieve
+                   - session_id: session ID (used by the /ask endpoint to
+                     fetch `history`, not read directly here)
+            collection_name: ChromaDB collection (optional)
+            history: Text block with previous conversation turns
+                     (already formatted by
+                     ConversationService.get_history_prompt_block), or
+                     None if there's no history / the conversation has no
+                     session_id. Feeds both question condensing
+                     (retrieval) and the final generation prompt.
 
         Returns:
-            QueryResult con:
-                - answer: respuesta generada por el LLM
-                - source_documents: chunks que se usaron como contexto
-                - processing_time: tiempo total de la operación
+            QueryResult with:
+                - answer: the LLM's generated answer
+                - source_documents: chunks used as context
+                - processing_time: total operation time
 
-        Ejemplo:
-            query = Query(question="¿Qué es Docker?", max_results=3)
+        Example:
+            query = Query(question="What is Docker?", max_results=3)
             result = await rag_service.ask_question(query)
-            print(result.answer)  # "Docker es una plataforma..."
-            print(len(result.source_documents))  # 3 fuentes usadas
+            print(result.answer)  # "Docker is a platform..."
+            print(len(result.source_documents))  # 3 sources used
         """
         start_time = time.time()
         collection = collection_name or settings.chromadb_collection_name
@@ -182,13 +185,13 @@ class RAGService:
             retrieval_question = await self._condense_if_needed(query.question, history)
             source_documents = await self._retrieve(retrieval_question, query.max_results, collection)
 
-            # Si no hay resultados relevantes, no llamamos al LLM
-            # Ahorra recursos y evita que invente una respuesta
+            # If there are no relevant results, we don't call the LLM
+            # Saves resources and avoids it making up an answer
             if not source_documents:
                 logger.warning("No relevant context found in database")
                 return QueryResult(
                     question=query.question,
-                    answer="Lo siento, no encontré información relevante en la base de conocimientos para responder a tu pregunta.",
+                    answer="Sorry, I couldn't find relevant information in the knowledge base to answer your question.",
                     source_documents=[],
                     session_id=query.session_id,
                     processing_time=time.time() - start_time
@@ -197,37 +200,37 @@ class RAGService:
             logger.info(f"Retrieved {len(source_documents)} relevant documents")
 
             # ================================================================
-            # PASO 3: Construir el contexto a partir de los chunks
+            # STEP 3: Build the context from the chunks
             # ================================================================
-            # Convierte la lista de SourceDocuments en un texto formateado
-            # que se inyectará al LLM como contexto
+            # Converts the list of SourceDocuments into formatted text
+            # that will be injected into the LLM as context
             context = self._build_context(source_documents)
 
             # ================================================================
-            # PASO 4: Generar respuesta usando el LLM con contexto
+            # STEP 4: Generate the answer using the LLM with context
             # ================================================================
-            # El LLM recibe:
-            # - prompt: retrieval_question (la pregunta ya condensada si
-            #   hacía falta — autocontenida, se lee bien igual que la
-            #   original si no necesitaba reescritura)
-            # - context: los chunks relevantes formateados
-            # El LLM debe basar su respuesta SOLO en ese contexto
+            # The LLM receives:
+            # - prompt: retrieval_question (the question already condensed
+            #   if it needed to be — standalone, reads the same as the
+            #   original if it didn't need rewriting)
+            # - context: the relevant chunks, formatted
+            # The LLM must base its answer ONLY on that context
             answer = await self.llm.generate_response(
                 prompt=retrieval_question,
                 context=context,
-                history=history,                          # Turnos previos, o None
-                temperature=settings.rag_temperature,    # 0.3 por defecto, para precisión
-                max_tokens=settings.llm_max_tokens       # Límite de respuesta
+                history=history,                          # Previous turns, or None
+                temperature=settings.rag_temperature,    # 0.3 by default, for precision
+                max_tokens=settings.llm_max_tokens       # Response limit
             )
 
             processing_time = time.time() - start_time
             logger.info(f"Generated answer in {processing_time:.2f}s")
 
             # ================================================================
-            # PASO 5: Devolver resultado con respuesta y fuentes
+            # STEP 5: Return the result with the answer and sources
             # ================================================================
-            # El QueryResult incluye source_documents para que el frontend
-            # pueda mostrar "esta respuesta se basó en estas fuentes"
+            # QueryResult includes source_documents so the frontend can
+            # show "this answer was based on these sources"
             return QueryResult(
                 question=query.question,
                 answer=answer,
@@ -237,14 +240,14 @@ class RAGService:
             )
 
         except Exception as e:
-            # En caso de error, devolvemos un QueryResult con mensaje
-            # en español al usuario (no lanzamos la excepción)
+            # On error, we return a QueryResult with a message for the
+            # user (we don't raise the exception)
             error_msg = f"Failed to process question: {str(e)}"
             logger.error(error_msg, exc_info=True)
 
             return QueryResult(
                 question=query.question,
-                answer=f"Lo siento, ocurrió un error al procesar tu pregunta: {str(e)}",
+                answer=f"Sorry, an error occurred while processing your question: {str(e)}",
                 source_documents=[],
                 session_id=query.session_id,
                 processing_time=time.time() - start_time
@@ -257,32 +260,33 @@ class RAGService:
         history: Optional[str] = None
     ) -> AsyncIterator[Dict[str, Any]]:
         """
-        Versión en streaming de ask_question(): produce la respuesta trozo a
-        trozo en vez de esperar a tenerla completa antes de devolver nada.
+        Streaming version of ask_question(): yields the answer chunk by
+        chunk instead of waiting to have the whole thing before returning anything.
 
-        Usa exactamente el mismo retrieval que ask_question() (ver _retrieve),
-        así que el filtro de relevancia y el fallback de Query Expansion se
-        comportan igual en ambos métodos — solo cambia cómo se consume la
-        generación (stream_response() en vez de generate_response()).
+        Uses exactly the same retrieval as ask_question() (see
+        _retrieve), so the relevance filter and the Query Expansion
+        fallback behave the same in both methods — only how the
+        generation is consumed changes (stream_response() instead of
+        generate_response()).
 
-        Yields (en este orden):
+        Yields (in this order):
             {"type": "sources", "source_documents": [...]}
-                Una sola vez, justo después del retrieval, antes de generar.
+                Once, right after retrieval, before generating.
             {"type": "token", "text": "..."}
-                Uno por cada fragmento de texto generado, en orden. Si no
-                hubo chunks relevantes, se emite un único token con el
-                mensaje de fallback (mismo texto que devuelve ask_question
-                en ese caso) en vez de intentar generar de verdad.
+                One per generated text fragment, in order. If there were
+                no relevant chunks, a single token is emitted with the
+                fallback message (same text ask_question returns in that
+                case) instead of actually trying to generate.
             {"type": "done", "processing_time": ..., "session_id": ...}
-                Una sola vez, al final.
+                Once, at the end.
 
         Args:
-            Mismos que ask_question() — ver ahí para el detalle.
+            Same as ask_question() — see there for details.
         """
         start_time = time.time()
         collection = collection_name or settings.chromadb_collection_name
 
-        # Mismo atajo de catálogo que ask_question() — ver LLMPort.is_catalog_question.
+        # Same catalog shortcut as ask_question() — see LLMPort.is_catalog_question.
         if await self.llm.is_catalog_question(query.question):
             answer = await self._build_meta_answer(collection)
             yield {"type": "sources", "source_documents": []}
@@ -294,7 +298,7 @@ class RAGService:
             }
             return
 
-        # Mismo condense_question() que ask_question() — ver ahí para el porqué.
+        # Same condense_question() as ask_question() — see there for why.
         retrieval_question = await self._condense_if_needed(query.question, history)
         source_documents = await self._retrieve(retrieval_question, query.max_results, collection)
         yield {"type": "sources", "source_documents": source_documents}
@@ -303,7 +307,7 @@ class RAGService:
             logger.warning("No relevant context found in database")
             yield {
                 "type": "token",
-                "text": "Lo siento, no encontré información relevante en la base de conocimientos para responder a tu pregunta."
+                "text": "Sorry, I couldn't find relevant information in the knowledge base to answer your question."
             }
             yield {
                 "type": "done",
@@ -334,21 +338,22 @@ class RAGService:
 
     async def _condense_if_needed(self, question: str, history: Optional[str]) -> str:
         """
-        Reescribe `question` como pregunta autocontenida vía
-        LLMPort.condense_question() si hay historial — si no hay historial
-        no hay nada que condensar, se devuelve tal cual sin llamar al LLM.
+        Rewrites `question` as a standalone question via
+        LLMPort.condense_question() if there's history — if there's no
+        history there's nothing to condense, it's returned unchanged
+        without calling the LLM.
 
-        Extraído a su propio método porque ask_question() y
-        ask_question_stream() lo necesitan exactamente igual, antes de
-        _retrieve() en ambos casos.
+        Extracted into its own method because ask_question() and
+        ask_question_stream() need it exactly the same way, before
+        _retrieve() in both cases.
 
         Args:
-            question: Pregunta del usuario, tal cual
-            history: Turnos previos de la conversación, o None
+            question: The user's question, as-is
+            history: Previous conversation turns, or None
 
         Returns:
-            str: pregunta lista para retrieval (condensada, o la original
-                 si no había historial que consultar)
+            str: question ready for retrieval (condensed, or the
+                 original if there was no history to consult)
         """
         if not history:
             return question
@@ -356,59 +361,59 @@ class RAGService:
 
     async def _retrieve(self, question: str, max_results: int, collection: str) -> list[SourceDocument]:
         """
-        Ejecuta el retrieval con Query Expansion (keyword + fallback
-        semántico) y aplica el filtro de relevancia — compartido entre
-        ask_question() y ask_question_stream(), que solo difieren en cómo
-        se consume la generación posterior.
+        Runs retrieval with Query Expansion (keyword + semantic
+        fallback) and applies the relevance filter — shared between
+        ask_question() and ask_question_stream(), which only differ in
+        how the subsequent generation is consumed.
 
         Pipeline:
-            ① Extraer keywords         → extract_keywords()
-            ② Vectorizar pregunta      → generate_embedding()
-            ③ Buscar con keywords      → similarity_search(keyword_filter)
-            ④ Fallback semántico       → similarity_search() sin filtro
-            (③ y ④ pasan siempre por _filter_by_relevance)
+            ① Extract keywords         → extract_keywords()
+            ② Vectorize the question   → generate_embedding()
+            ③ Search with keywords     → similarity_search(keyword_filter)
+            ④ Semantic fallback        → similarity_search() with no filter
+            (③ and ④ always go through _filter_by_relevance)
 
         Args:
-            question: Pregunta a usar para retrieval — YA condensada si
-                      hacía falta (ver _condense_if_needed), no
-                      necesariamente la pregunta original tal cual la
-                      escribió el usuario
-            max_results: top_k a pedir a similarity_search (de Query.max_results)
-            collection: Nombre de la colección de ChromaDB donde buscar
+            question: Question to use for retrieval — ALREADY condensed
+                      if it needed to be (see _condense_if_needed), not
+                      necessarily the original question exactly as the
+                      user typed it
+            max_results: top_k to request from similarity_search (from Query.max_results)
+            collection: Name of the ChromaDB collection to search
 
         Returns:
-            list[SourceDocument]: chunks relevantes (puede ser vacía)
+            list[SourceDocument]: relevant chunks (can be empty)
         """
-        # Truncamos la pregunta a 50 chars solo para el log
-        # [:50] es slicing en Python (como substring en JS)
+        # Truncate the question to 50 chars just for the log
+        # [:50] is Python slicing (like substring in JS)
         logger.info(f"Processing question: {question[:50]}...")
 
         # ================================================================
-        # PASO 1: Extraer keywords para Query Expansion
+        # STEP 1: Extract keywords for Query Expansion
         # ================================================================
-        # El LLM identifica nombres propios, títulos, etc.
-        # Ejemplo: "¿Quién dirigió Blade Runner?" → ["Blade Runner"]
+        # The LLM identifies proper nouns, titles, etc.
+        # Example: "Who directed Blade Runner?" → ["Blade Runner"]
         keywords = await self.llm.extract_keywords(question)
         logger.info(f"Extracted keywords: {keywords}")
 
         # ================================================================
-        # PASO 2: Vectorizar la pregunta
+        # STEP 2: Vectorize the question
         # ================================================================
-        # La pregunta se convierte en un vector numérico
-        # Este vector se usará para buscar chunks similares
+        # The question is converted into a numeric vector
+        # This vector will be used to search for similar chunks
         query_embedding = await self.llm.generate_embedding(question)
         logger.debug(f"Generated query embedding of dimension: {len(query_embedding)}")
 
         # ================================================================
-        # PASO 3: Buscar con Query Expansion (keyword + semantic)
+        # STEP 3: Search with Query Expansion (keyword + semantic)
         # ================================================================
-        # Intentamos buscar con cada keyword extraída
-        # Si encontramos resultados, usamos esos; si no, fallback semántico
+        # We try searching with each extracted keyword
+        # If we find results, we use those; otherwise, semantic fallback
         source_documents = []
 
         if keywords:
-            # Intentar búsqueda con la primera keyword más relevante
-            # (normalmente es el nombre propio o título)
+            # Try searching with the most relevant keyword first
+            # (usually the proper noun or title)
             for keyword in keywords:
                 source_documents = await self.vector_db.similarity_search(
                     query_embedding=query_embedding,
@@ -419,13 +424,13 @@ class RAGService:
                 source_documents = self._filter_by_relevance(source_documents)
                 if source_documents:
                     logger.info(f"Found {len(source_documents)} docs with keyword '{keyword}'")
-                    break  # Encontramos resultados, no seguir buscando
+                    break  # We found results, stop searching
 
         # ================================================================
-        # PASO 4: Fallback a búsqueda semántica pura
+        # STEP 4: Fall back to pure semantic search
         # ================================================================
-        # Si no hay keywords o no encontramos resultados con keywords,
-        # hacemos búsqueda semántica sin filtros
+        # If there are no keywords or we found no results with keywords,
+        # we do a semantic search with no filters
         if not source_documents:
             logger.info("No results with keywords, falling back to semantic search")
             source_documents = await self.vector_db.similarity_search(
@@ -439,46 +444,47 @@ class RAGService:
 
     async def _build_meta_answer(self, collection: str) -> str:
         """
-        Construye una respuesta determinista listando el catálogo completo.
+        Builds a deterministic answer listing the full catalog.
 
-        A diferencia de la clasificación previa (LLMPort.is_catalog_question,
-        que sí usa el LLM para decidir SI desviar la pregunta aquí), este
-        método NO pasa por el LLM para construir la respuesta en sí: para
-        "¿cuántos documentos tienes?" no hay nada que generar, solo listar
-        — así se elimina cualquier riesgo de alucinación en el CONTENIDO
-        de la respuesta (el listado es siempre exacto, viene directo de
-        list_documents()).
+        Unlike the earlier classification (LLMPort.is_catalog_question,
+        which does use the LLM to decide WHETHER to route the question
+        here), this method does NOT go through the LLM to build the
+        answer itself: for "how many documents do you have?" there's
+        nothing to generate, just list — which removes any risk of
+        hallucination in the answer's CONTENT (the listing is always
+        exact, it comes straight from list_documents()).
 
         Args:
-            collection: Colección de ChromaDB a consultar
+            collection: ChromaDB collection to query
 
         Returns:
-            str: Listado numerado de documentos, o un mensaje si no hay ninguno
+            str: Numbered list of documents, or a message if there are none
         """
         documents = await self.vector_db.list_documents(collection)
         if not documents:
-            return "Todavía no tengo ningún documento indexado en mi base de conocimiento."
+            return "I don't have any documents indexed in my knowledge base yet."
 
-        lines = [f"Conozco {len(documents)} documentos en mi base de conocimiento:\n"]
+        lines = [f"I know {len(documents)} documents in my knowledge base:\n"]
         lines += [f"{i}. {doc.title}" for i, doc in enumerate(documents, 1)]
         return "\n".join(lines)
 
     def _filter_by_relevance(self, source_documents: list[SourceDocument]) -> list[SourceDocument]:
         """
-        Descarta chunks cuyo relevance_score está por debajo del umbral mínimo.
+        Drops chunks whose relevance_score is below the minimum threshold.
 
-        ¿Por qué hace falta esto?
-        ChromaDB siempre devuelve exactamente top_k resultados (los más cercanos
-        disponibles), aunque ninguno sea realmente relevante para la pregunta.
-        Sin este filtro, esos chunks poco relevantes se usan igualmente como
-        contexto y el LLM acaba fabricando una respuesta en vez de admitir que
-        no tiene información — justo el bug que este método corrige.
+        Why is this needed?
+        ChromaDB always returns exactly top_k results (the closest ones
+        available), even if none of them are actually relevant to the
+        question. Without this filter, those low-relevance chunks would
+        still be used as context and the LLM would end up fabricating an
+        answer instead of admitting it has no information — exactly the
+        bug this method fixes.
 
         Args:
-            source_documents: Chunks recuperados de ChromaDB (ya rankeados)
+            source_documents: Chunks retrieved from ChromaDB (already ranked)
 
         Returns:
-            list[SourceDocument]: Solo los chunks con relevance_score >= umbral
+            list[SourceDocument]: Only the chunks with relevance_score >= threshold
         """
         filtered = [
             doc for doc in source_documents
@@ -493,48 +499,48 @@ class RAGService:
 
     def _build_context(self, source_documents: list[SourceDocument]) -> str:
         """
-        Construye el texto de contexto a partir de los chunks recuperados.
+        Builds the context text from the retrieved chunks.
 
-        MÉTODO PRIVADO (el guión bajo _ indica que es solo para uso interno).
-        No se llama desde fuera de la clase.
+        PRIVATE METHOD (the leading underscore _ marks it as internal use only).
+        Not called from outside the class.
 
-        ¿Qué hace?
-        Toma los chunks relevantes de ChromaDB y los formatea en un texto
-        que el LLM puede entender como contexto para basar su respuesta.
+        What does it do?
+        Takes the relevant chunks from ChromaDB and formats them into
+        text the LLM can understand as context to ground its answer.
 
-        Ejemplo de salida:
-            [Fuente 1]
-            Docker es una plataforma de contenedores que permite...
+        Example output:
+            [Source 1]
+            Docker is a container platform that lets you...
 
             ---
 
-            [Fuente 2]
-            Los contenedores se diferecian de las VMs porque...
+            [Source 2]
+            Containers differ from VMs in that...
 
-        ¿Por qué numerar las fuentes?
-        - Permite al LLM referenciar fuentes específicas
-        - El frontend puede mostrar "según la fuente 1..."
-        - Facilita la trazabilidad de la respuesta
+        Why number the sources?
+        - Lets the LLM reference specific sources
+        - The frontend can show "according to source 1..."
+        - Makes the answer traceable back to its sources
 
         Args:
-            source_documents: Lista de chunks relevantes recuperados
+            source_documents: List of retrieved relevant chunks
 
         Returns:
-            str: Texto formateado con todas las fuentes
+            str: Formatted text with all the sources
         """
         context_parts = []
 
-        # enumerate(lista, 1) itera con índice empezando desde 1
-        # Equivalente JS: source_documents.forEach((doc, i) => ...)
-        # pero i empieza en 1 en lugar de 0
+        # enumerate(list, 1) iterates with an index starting at 1
+        # JS equivalent: source_documents.forEach((doc, i) => ...)
+        # but i starts at 1 instead of 0
         for i, doc in enumerate(source_documents, 1):
-            # Formato: [Fuente N] + contenido del chunk
-            context_part = f"[Fuente {i}]\n{doc.chunk_content}"
+            # Format: [Source N] + chunk content
+            context_part = f"[Source {i}]\n{doc.chunk_content}"
             context_parts.append(context_part)
 
-        # join() une todos los parts con un separador visual
-        # "\n\n---\n\n" = línea en blanco + guiones + línea en blanco
-        # Equivalente JS: context_parts.join("\n\n---\n\n")
+        # join() combines all the parts with a visual separator
+        # "\n\n---\n\n" = blank line + dashes + blank line
+        # JS equivalent: context_parts.join("\n\n---\n\n")
         context = "\n\n---\n\n".join(context_parts)
 
         logger.debug(f"Built context with {len(source_documents)} sources")
@@ -545,21 +551,21 @@ class RAGService:
         collection_name: Optional[str] = None
     ) -> dict:
         """
-        Obtiene información sobre la colección de la base de datos vectorial.
+        Gets information about the vector database's collection.
 
-        Método auxiliar para endpoints de info/estado de la API.
-        Devuelve estadísticas de ChromaDB + info del modelo LLM.
+        Helper method for the API's info/status endpoints.
+        Returns ChromaDB stats + info about the active LLM model.
 
         Args:
-            collection_name: Colección a consultar (opcional)
+            collection_name: Collection to query (optional)
 
         Returns:
-            dict con:
-                - collection: nombre de la colección
-                - stats: estadísticas (total chunks, documentos, etc.)
-                - model_info: info del modelo LLM activo
+            dict with:
+                - collection: collection name
+                - stats: statistics (total chunks, documents, etc.)
+                - model_info: info about the active LLM model
 
-        Ejemplo de retorno:
+        Example return value:
             {
                 "collection": "tech_docs",
                 "stats": {"total_chunks": 1500, "unique_documents": 12},
@@ -569,18 +575,18 @@ class RAGService:
         collection = collection_name or settings.chromadb_collection_name
 
         try:
-            # Obtiene estadísticas de ChromaDB
+            # Gets stats from ChromaDB
             stats = await self.vector_db.get_collection_stats(collection)
             return {
                 "collection": collection,
                 "stats": stats,
-                # get_model_info() no es async, retorna info cacheada
+                # get_model_info() isn't async, returns cached info
                 "model_info": self.llm.get_model_info()
             }
 
         except Exception as e:
-            # En caso de error, devolvemos estructura válida con el error
-            # Así el frontend no falla al parsear la respuesta
+            # On error, return a valid structure with the error included
+            # This way the frontend doesn't fail to parse the response
             logger.error(f"Failed to get collection info: {e}")
             return {
                 "collection": collection,
@@ -593,20 +599,20 @@ class RAGService:
         collection_name: Optional[str] = None
     ) -> list[DocumentSummary]:
         """
-        Lista todos los documentos indexados en la base de conocimiento.
+        Lists all documents indexed in the knowledge base.
 
-        A diferencia de ask_question(), NO pasa por similarity_search ni
-        por el LLM — delega directamente en vector_db.list_documents(),
-        que agrupa por document_id sin ranking ni top_k. Es la forma
-        correcta de responder "¿qué tienes indexado?" (ver GET /documents
-        en main.py y RAGService._build_meta_answer, que reutiliza este
-        mismo método para responder preguntas agregadas dentro del chat).
+        Unlike ask_question(), does NOT go through similarity_search or
+        the LLM — delegates directly to vector_db.list_documents(),
+        which groups by document_id with no ranking or top_k. It's the
+        right way to answer "what do you have indexed?" (see GET
+        /documents in main.py and RAGService._build_meta_answer, which
+        reuses this same method to answer aggregate questions within the chat).
 
         Args:
-            collection_name: Colección a consultar (opcional)
+            collection_name: Collection to query (optional)
 
         Returns:
-            list[DocumentSummary]: uno por documento, orden alfabético por título
+            list[DocumentSummary]: one per document, alphabetically sorted by title
         """
         collection = collection_name or settings.chromadb_collection_name
         return await self.vector_db.list_documents(collection)
