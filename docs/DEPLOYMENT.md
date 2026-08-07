@@ -21,7 +21,7 @@ The repo includes [`render.yaml`](../render.yaml) at the root. In Render's dashb
 
 1. **New → Blueprint**
 2. Connect this GitHub repository
-3. Render detects `render.yaml` and proposes creating **two services**: `bibliotecario-ia-api` (Docker, `plan: free`, built from `api/Dockerfile`) and `bibliotecario-ia-frontend` (Static Site, built from `frontend/`)
+3. Render detects `render.yaml` and proposes creating **two services**: `aibrarian-api` (Docker, `plan: free`, built from `api/Dockerfile`) and `aibrarian-frontend` (Static Site, built from `frontend/`)
 4. Confirm creation
 
 ### 2. Create the first user (before filling in the next step's variables)
@@ -39,7 +39,7 @@ Doing this before the first deploy avoids the API starting up with no user to lo
 
 `render.yaml` defines which variables each service needs, but the secret ones (`sync: false`) **aren't checked into version control** — Render asks for them when you confirm the blueprint, or you fill them in afterward under each service → **Environment**:
 
-**`bibliotecario-ia-api` service:**
+**`aibrarian-api` service:**
 
 | Variable | Value |
 |---|---|
@@ -50,17 +50,17 @@ Doing this before the first deploy avoids the API starting up with no user to lo
 | `NOTION_API_KEY` | Only if you're going to sync Notion |
 | `DATABASE_URL` | Neon connection string (the same one from step 2) |
 | `JWT_SECRET_KEY` | Generate one: `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `FRONTEND_URL` | The public URL Render assigned to `bibliotecario-ia-frontend` (visible in its dashboard once created) — needed for CORS |
+| `FRONTEND_URL` | The public URL Render assigned to `aibrarian-frontend` (visible in its dashboard once created) — needed for CORS |
 
 Chroma Cloud's `tenant`/`database` can be left empty: `chromadb.CloudClient` resolves them automatically from the API key if it's bound to a single database.
 
 The rest of the API service's variables (`LLM_PROVIDER=groq`, `VECTOR_DB_PROVIDER=chroma_cloud`, `GROQ_MODEL`, `EMBEDDING_MODEL_NAME`, `JWT_EXPIRATION_MINUTES`) are already set in `render.yaml` — no need to touch them unless you want a different Groq model or session duration.
 
-**`bibliotecario-ia-frontend` service:**
+**`aibrarian-frontend` service:**
 
 | Variable | Value |
 |---|---|
-| `VITE_API_URL` | The public URL Render assigned to `bibliotecario-ia-api` |
+| `VITE_API_URL` | The public URL Render assigned to `aibrarian-api` |
 
 This variable is baked in at build time (Vite substitutes it during the build, not at startup) — if you change it later, the frontend needs a manual redeploy for it to take effect.
 
@@ -87,7 +87,7 @@ curl -X POST "https://<your-api>.onrender.com/sync/notion" \
   -d '{"page_id": "..."}'
 ```
 
-Or more simply: open `bibliotecario-ia-frontend`'s URL in a browser, log in, and use the sync panel.
+Or more simply: open `aibrarian-frontend`'s URL in a browser, log in, and use the sync panel.
 
 ### 5. Verify
 

@@ -7,8 +7,8 @@
 #
 # Usage:
 #   1. Connect this repo in Render → "New Blueprint Instance"
-#   2. Render detects this file and creates the "bibliotecario-ia-api"
-#      and "bibliotecario-ia-frontend" services
+#   2. Render detects this file and creates the "aibrarian-api"
+#      and "aibrarian-frontend" services
 #   3. Variables marked "sync: false" aren't checked into version control:
 #      Render asks you to fill them in the dashboard (Environment) after the
 #      first deploy
@@ -20,14 +20,14 @@
 # (that property only exposes the internal PRIVATE network hostname, useless
 # here since it's the user's browser that calls the API, not another Render
 # service). That's why it's "sync: false", just like the API keys: you fill
-# it in by hand in the dashboard (bibliotecario-ia-frontend →
+# it in by hand in the dashboard (aibrarian-frontend →
 # Environment) with the public URL Render assigned to the API — that way it
 # never ends up hardcoded in the repo, and this file doesn't need touching if
 # the API is renamed or gets its own domain.
 
 services:
   - type: web
-    name: bibliotecario-ia-api
+    name: aibrarian-api
     runtime: docker
     plan: free
     dockerfilePath: ./api/Dockerfile
@@ -82,7 +82,7 @@ services:
         sync: false
       - key: JWT_EXPIRATION_MINUTES
         value: "1440"
-      # bibliotecario-ia-frontend's public URL (same reason as VITE_API_URL
+      # aibrarian-frontend's public URL (same reason as VITE_API_URL
       # below: Render doesn't allow referencing another service's public
       # URL, so it's filled in by hand in the dashboard). Used for CORS
       # (allow_origins).
@@ -97,12 +97,12 @@ services:
   # or RAM limit since it runs no process at all, just serves the
   # `npm run build` static files via CDN) ---
   - type: web
-    name: bibliotecario-ia-frontend
+    name: aibrarian-frontend
     runtime: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
     envVars:
-      # Fill in the dashboard (Environment) with bibliotecario-ia-api's
+      # Fill in the dashboard (Environment) with aibrarian-api's
       # public URL, see the note above. VITE_API_URL gets baked into the
       # build (Vite substitutes it at build time, not at startup), so
       # changing this value needs a manual frontend redeploy to take

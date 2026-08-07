@@ -314,7 +314,7 @@ Contains **3 services**:
 
 ### `render.yaml`
 
-Render deployment blueprint (optional, doesn't replace local development): creates `bibliotecario-ia-api` (Docker) and `bibliotecario-ia-frontend` (Static Site). The API uses Groq + Chroma Cloud instead of Ollama + local ChromaDB — see [ADR-007](adr/007-cloud-deployment-groq-chroma.md) and [docs/DEPLOYMENT.md](DEPLOYMENT.md).
+Render deployment blueprint (optional, doesn't replace local development): creates `aibrarian-api` (Docker) and `aibrarian-frontend` (Static Site). The API uses Groq + Chroma Cloud instead of Ollama + local ChromaDB — see [ADR-007](adr/007-cloud-deployment-groq-chroma.md) and [docs/DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 
