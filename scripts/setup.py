@@ -1,31 +1,32 @@
 #!/usr/bin/env python3
 # /scripts/setup.py
 """
-Script de Instalación Automática - TFM Bibliotecario-IA
+Automated Installation Script - Bibliotecario-IA
 
-Este script automatiza la instalación completa del entorno de desarrollo.
-Detecta qué está instalado y qué falta, luego instala sólo lo necesario.
+This script automates the full development environment setup.
+It detects what's already installed and what's missing, then only
+installs what's needed.
 
-Configuración:
-- Ollama: Nativo en macOS (acceso a GPU Metal, ~10x más rápido)
-- ChromaDB + Postgres: Docker (persistencia con volúmenes)
-- API: Docker (hot-reload con volume mount)
+Configuration:
+- Ollama: Native on macOS (Metal GPU access, ~10x faster)
+- ChromaDB + Postgres: Docker (persistence via volumes)
+- API: Docker (hot-reload via volume mount)
 - Frontend: React + Vite (npm run dev)
 
-¿Qué hace? (el número coincide con el encabezado que verás en pantalla)
-1. Verifica el sistema operativo (macOS)
-2. Verifica conexión a internet
-3. Verifica/instala Homebrew
-4. Instala Ollama y descarga modelos
-5. Verifica Docker (instalación + daemon activo)
-6. Configura entorno Python (venv + dependencias para scripts CLI)
-7. Crea archivo .env (con un JWT_SECRET_KEY generado, no el placeholder)
-8. Levanta servicios Docker (ChromaDB + Postgres + API)
-9. Configura Frontend (Node.js 18+ + npm install)
-10. Ejecuta verify_setup.py para confirmar
-11. Crea tu usuario (no hay registro en el frontend, ver create_user.py)
+What does it do? (the number matches the header you'll see on screen)
+1. Checks the operating system (macOS)
+2. Checks internet connectivity
+3. Checks/installs Homebrew
+4. Installs Ollama and downloads models
+5. Checks Docker (installation + daemon running)
+6. Sets up the Python environment (venv + dependencies for the CLI scripts)
+7. Creates the .env file (with a generated JWT_SECRET_KEY, not the placeholder)
+8. Starts the Docker services (ChromaDB + Postgres + API)
+9. Sets up the Frontend (Node.js 18+ + npm install)
+10. Runs verify_setup.py to confirm everything
+11. Creates your user (no signup in the frontend, see create_user.py)
 
-Uso:
+Usage:
     python3 scripts/setup.py
 """
 
@@ -36,7 +37,7 @@ import shutil
 from pathlib import Path
 
 # ============================================================================
-# COLORES PARA TERMINAL
+# TERMINAL COLORS
 # ============================================================================
 class Colors:
     GREEN = '\033[92m'
@@ -51,7 +52,7 @@ class Colors:
 def print_banner():
     print(f"\n{Colors.BOLD}{Colors.BLUE}")
     print("╔═══════════════════════════════════════════════════════════╗")
-    print("║     🚀 INSTALACIÓN - BIBLIOTECARIO-IA 🚀                ║")
+    print("║     🚀 SETUP - BIBLIOTECARIO-IA 🚀                       ║")
     print("╚═══════════════════════════════════════════════════════════╝")
     print(Colors.ENDC)
 
@@ -89,184 +90,184 @@ def is_installed(program):
 
 
 def ask_yes_no(question, default=True):
-    choices = " [S/n]: " if default else " [s/N]: "
+    choices = " [Y/n]: " if default else " [y/N]: "
     choice = input(f"{Colors.CYAN}{question}{choices}{Colors.ENDC}").lower().strip()
     if choice == '':
         return default
-    return choice in ['s', 'si', 'sí', 'y', 'yes']
+    return choice in ['y', 'yes', 's', 'si', 'sí']
 
 
 # ============================================================================
-# CHECKS DE SISTEMA
+# SYSTEM CHECKS
 # ============================================================================
 def check_os():
-    print_header("1. Verificando Sistema Operativo")
+    print_header("1. Checking Operating System")
     os_name = platform.system()
-    print_info(f"Sistema detectado: {os_name}")
+    print_info(f"Detected system: {os_name}")
 
     if os_name != "Darwin":
-        print_error(f"Sistema {os_name} no soportado. Este script es para macOS.")
-        print_info("Para otros sistemas, consulta README.md")
+        print_error(f"System {os_name} is not supported. This script is for macOS.")
+        print_info("For other systems, check README.md")
         return False
 
-    print_success("macOS detectado")
+    print_success("macOS detected")
     return True
 
 
 def check_internet():
-    print_header("2. Verificando Conexión a Internet")
+    print_header("2. Checking Internet Connection")
     try:
         result = run_command(["ping", "-c", "1", "-W", "2000", "8.8.8.8"], check=False)
         if result.returncode == 0:
-            print_success("Conexión a internet disponible")
+            print_success("Internet connection available")
             return True
-        print_error("Sin conexión a internet")
+        print_error("No internet connection")
         return False
     except Exception as e:
-        print_warning(f"No se pudo verificar: {e}")
-        return ask_yes_no("¿Continuar de todos modos?", default=False)
+        print_warning(f"Could not check: {e}")
+        return ask_yes_no("Continue anyway?", default=False)
 
 
 # ============================================================================
-# INSTALACIÓN DE PREREQUISITOS
+# PREREQUISITE INSTALLATION
 # ============================================================================
 def install_homebrew():
-    print_header("3. Verificando Homebrew")
+    print_header("3. Checking Homebrew")
 
     if is_installed("brew"):
-        print_success("Homebrew ya está instalado")
+        print_success("Homebrew is already installed")
         return True
 
-    print_warning("Homebrew no está instalado")
-    if not ask_yes_no("¿Instalar Homebrew?"):
-        print_error("Homebrew es necesario para instalar Ollama")
+    print_warning("Homebrew is not installed")
+    if not ask_yes_no("Install Homebrew?"):
+        print_error("Homebrew is required to install Ollama")
         return False
 
-    print_info("Instalando Homebrew...")
+    print_info("Installing Homebrew...")
     try:
         subprocess.run(
             '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
             shell=True, check=True
         )
-        print_success("Homebrew instalado")
+        print_success("Homebrew installed")
         return True
     except subprocess.CalledProcessError:
-        print_error("Falló la instalación de Homebrew")
+        print_error("Homebrew installation failed")
         return False
 
 
 def install_ollama():
-    print_header("4. Configurando Ollama (Nativo)")
-    print_info("Ollama corre nativo en macOS para aprovechar GPU Metal (~10x más rápido)")
+    print_header("4. Setting up Ollama (Native)")
+    print_info("Ollama runs natively on macOS to take advantage of the Metal GPU (~10x faster)")
 
     if is_installed("ollama"):
-        print_success("Ollama ya está instalado")
+        print_success("Ollama is already installed")
     else:
-        print_warning("Ollama no está instalado")
-        if not ask_yes_no("¿Instalar Ollama con Homebrew?"):
-            print_error("Ollama es necesario para el LLM")
+        print_warning("Ollama is not installed")
+        if not ask_yes_no("Install Ollama with Homebrew?"):
+            print_error("Ollama is required for the LLM")
             return False
 
-        print_info("Instalando Ollama...")
+        print_info("Installing Ollama...")
         try:
             run_command("brew install ollama")
-            print_success("Ollama instalado")
+            print_success("Ollama installed")
         except subprocess.CalledProcessError:
-            print_error("Falló la instalación de Ollama")
+            print_error("Ollama installation failed")
             return False
 
-    # Iniciar servicio
-    print_info("Iniciando servicio Ollama...")
+    # Start the service
+    print_info("Starting the Ollama service...")
     run_command("brew services start ollama", check=False)
 
-    # Verificar y descargar modelos
-    print_info("Verificando modelos...")
+    # Check and download models
+    print_info("Checking models...")
     try:
         result = run_command("ollama list")
         models_output = result.stdout
 
         for model in ["llama3.2", "nomic-embed-text"]:
             if model in models_output:
-                print_success(f"Modelo {model} disponible")
+                print_success(f"Model {model} available")
             else:
-                print_warning(f"Descargando {model}...")
+                print_warning(f"Downloading {model}...")
                 subprocess.run(["ollama", "pull", model], check=True)
-                print_success(f"Modelo {model} descargado")
+                print_success(f"Model {model} downloaded")
 
         return True
     except subprocess.CalledProcessError:
-        print_error("Error verificando modelos de Ollama")
+        print_error("Error checking Ollama models")
         return False
 
 
 def install_docker():
-    print_header("5. Verificando Docker")
+    print_header("5. Checking Docker")
 
     if not is_installed("docker"):
-        print_error("Docker no está instalado")
-        print_info("Instala Docker Desktop: https://www.docker.com/products/docker-desktop")
+        print_error("Docker is not installed")
+        print_info("Install Docker Desktop: https://www.docker.com/products/docker-desktop")
         return False
 
-    print_success("Docker está instalado")
+    print_success("Docker is installed")
 
-    # Verificar daemon
+    # Check the daemon
     try:
         run_command("docker ps", check=True, capture_output=True)
-        print_success("Docker daemon está corriendo")
+        print_success("Docker daemon is running")
         return True
     except:
-        print_error("Docker no está corriendo. Inicia Docker Desktop.")
+        print_error("Docker is not running. Start Docker Desktop.")
         return False
 
 
 def setup_docker_services():
-    print_header("8. Iniciando Servicios Docker (ChromaDB + Postgres + API)")
+    print_header("8. Starting Docker Services (ChromaDB + Postgres + API)")
 
     try:
-        # Build y start de todos los servicios
+        # Build and start all services
         subprocess.run(
             ["docker-compose", "up", "-d", "--build"],
             check=True,
             cwd=Path(__file__).parent.parent
         )
-        print_success("ChromaDB iniciado en puerto 8001")
-        print_success("Postgres iniciado en puerto 5432")
-        print_success("API iniciada en puerto 8000")
+        print_success("ChromaDB started on port 8001")
+        print_success("Postgres started on port 5432")
+        print_success("API started on port 8000")
         return True
     except subprocess.CalledProcessError:
-        print_error("Falló al iniciar servicios Docker")
+        print_error("Failed to start Docker services")
         return False
 
 
 # ============================================================================
-# CONFIGURACIÓN DE PYTHON
+# PYTHON SETUP
 # ============================================================================
 def setup_python():
-    print_header("6. Configurando Entorno Python")
+    print_header("6. Setting up the Python Environment")
 
     python_version = sys.version_info
     print_info(f"Python {python_version.major}.{python_version.minor}.{python_version.micro}")
 
     if python_version < (3, 11):
-        print_error("Se requiere Python 3.11+")
+        print_error("Python 3.11+ is required")
         return False
 
-    print_success("Versión de Python compatible")
+    print_success("Python version is compatible")
 
     project_root = Path(__file__).parent.parent
     api_dir = project_root / "api"
     venv_dir = api_dir / "venv"
 
-    # Crear venv
+    # Create the venv
     if venv_dir.exists():
-        print_success("Virtual environment existe")
+        print_success("Virtual environment already exists")
     else:
-        print_info("Creando virtual environment...")
+        print_info("Creating the virtual environment...")
         subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-        print_success("Virtual environment creado")
+        print_success("Virtual environment created")
 
-    # Instalar dependencias
-    print_info("Instalando dependencias Python...")
+    # Install dependencies
+    print_info("Installing Python dependencies...")
     pip_executable = venv_dir / "bin" / "pip"
     requirements_file = api_dir / "requirements.txt"
 
@@ -275,36 +276,36 @@ def setup_python():
             [str(pip_executable), "install", "-r", str(requirements_file)],
             check=True, capture_output=True
         )
-        print_success("Dependencias instaladas")
+        print_success("Dependencies installed")
         return True
     except subprocess.CalledProcessError as e:
-        print_error(f"Falló la instalación: {e.stderr}")
+        print_error(f"Installation failed: {e.stderr}")
         return False
 
 
 def setup_env_file():
-    print_header("7. Configurando Variables de Entorno")
+    print_header("7. Setting up Environment Variables")
 
     api_dir = Path(__file__).parent.parent / "api"
     env_file = api_dir / ".env"
     env_example = api_dir / ".env.example"
 
     if env_file.exists():
-        print_warning("Ya existe .env")
-        if not ask_yes_no("¿Sobrescribirlo?", default=False):
-            print_info("Conservando .env existente")
+        print_warning(".env already exists")
+        if not ask_yes_no("Overwrite it?", default=False):
+            print_info("Keeping the existing .env")
             return True
 
     try:
         shutil.copy(env_example, env_file)
-        print_success("Archivo .env creado desde .env.example")
-        print_info("Configuración: Ollama en localhost:11434, ChromaDB en localhost:8001")
+        print_success(".env file created from .env.example")
+        print_info("Config: Ollama at localhost:11434, ChromaDB at localhost:8001")
 
-        # .env.example trae JWT_SECRET_KEY=change-me-generate-a-random-secret
-        # como placeholder documentado (ver comentario en el propio archivo).
-        # Generamos uno real aquí para que nadie se quede corriendo con ese
-        # valor de ejemplo — es solo para dev local, pero no cuesta nada
-        # hacerlo bien desde el principio.
+        # .env.example ships JWT_SECRET_KEY=change-me-generate-a-random-secret
+        # as a documented placeholder (see the comment in that file itself).
+        # We generate a real one here so nobody ends up running with that
+        # example value — it's local dev only, but it costs nothing to get
+        # it right from the start.
         import secrets
         jwt_secret = secrets.token_hex(32)
         with open(env_file, 'r') as f:
@@ -315,10 +316,10 @@ def setup_env_file():
         )
         with open(env_file, 'w') as f:
             f.write(content)
-        print_success("JWT_SECRET_KEY generado automáticamente")
+        print_success("JWT_SECRET_KEY generated automatically")
 
-        # Preguntar por Notion (opcional)
-        if ask_yes_no("¿Configurar credenciales de Notion? (opcional)", default=False):
+        # Ask about Notion (optional)
+        if ask_yes_no("Configure Notion credentials? (optional)", default=False):
             notion_key = input(f"{Colors.CYAN}NOTION_API_KEY: {Colors.ENDC}").strip()
 
             with open(env_file, 'r') as f:
@@ -327,133 +328,133 @@ def setup_env_file():
             with open(env_file, 'w') as f:
                 f.write(content)
 
-            print_success("Notion configurado")
+            print_success("Notion configured")
 
         return True
     except Exception as e:
-        print_error(f"Falló la creación del .env: {e}")
+        print_error(f"Failed to create .env: {e}")
         return False
 
 
 # ============================================================================
-# CONFIGURACIÓN DEL FRONTEND
+# FRONTEND SETUP
 # ============================================================================
 def setup_frontend():
-    print_header("9. Configurando Frontend")
+    print_header("9. Setting up the Frontend")
 
     project_root = Path(__file__).parent.parent
     frontend_dir = project_root / "frontend"
 
     if not frontend_dir.exists():
-        print_error("Directorio frontend/ no encontrado")
+        print_error("frontend/ directory not found")
         return False
 
-    # Verificar Node.js
+    # Check Node.js
     if not is_installed("node"):
-        print_warning("Node.js no está instalado")
-        print_info("El frontend requiere Node.js 18+")
-        if ask_yes_no("¿Instalar Node.js con Homebrew?"):
+        print_warning("Node.js is not installed")
+        print_info("The frontend requires Node.js 18+")
+        if ask_yes_no("Install Node.js with Homebrew?"):
             run_command("brew install node")
-            print_success("Node.js instalado")
+            print_success("Node.js installed")
         else:
-            print_info("Instala Node.js manualmente: https://nodejs.org/")
+            print_info("Install Node.js manually: https://nodejs.org/")
             return True
 
-    # Verificar versión de Node.js (requiere 18+)
+    # Check the Node.js version (18+ required)
     try:
         result = run_command("node --version")
         version_str = result.stdout.strip().lstrip('v')
         major_version = int(version_str.split('.')[0])
-        print_info(f"Node.js v{version_str} detectado")
+        print_info(f"Node.js v{version_str} detected")
 
         if major_version < 18:
-            print_warning(f"Node.js {major_version} es antiguo. Se requiere 18+")
-            print_info("Actualiza con: brew upgrade node")
+            print_warning(f"Node.js {major_version} is old. 18+ is required")
+            print_info("Update with: brew upgrade node")
             return False
 
-        print_success("Node.js 18+ disponible")
+        print_success("Node.js 18+ available")
     except Exception as e:
-        print_warning(f"No se pudo verificar versión de Node.js: {e}")
+        print_warning(f"Could not check the Node.js version: {e}")
 
-    # Instalar dependencias
+    # Install dependencies
     node_modules = frontend_dir / "node_modules"
     if node_modules.exists() and any(node_modules.iterdir()):
-        print_success("Dependencias del frontend ya instaladas")
+        print_success("Frontend dependencies already installed")
         return True
 
-    print_info("Instalando dependencias del frontend...")
+    print_info("Installing frontend dependencies...")
     try:
         subprocess.run(["npm", "install"], cwd=frontend_dir, check=True)
-        print_success("Dependencias del frontend instaladas")
+        print_success("Frontend dependencies installed")
         return True
     except subprocess.CalledProcessError:
-        print_error("Falló npm install")
+        print_error("npm install failed")
         return False
 
 
 # ============================================================================
-# VERIFICACIÓN FINAL
+# FINAL VERIFICATION
 # ============================================================================
 def run_verification():
-    print_header("10. Verificación Final")
+    print_header("10. Final Verification")
 
     project_root = Path(__file__).parent.parent
     verify_script = Path(__file__).parent / "verify_setup.py"
     venv_python = project_root / "api" / "venv" / "bin" / "python"
 
     if not verify_script.exists():
-        print_warning("Script de verificación no encontrado")
+        print_warning("Verification script not found")
         return True
 
-    print_info("Ejecutando verify_setup.py...\n")
+    print_info("Running verify_setup.py...\n")
     result = subprocess.run([str(venv_python), str(verify_script)], cwd=project_root, check=False)
 
     if result.returncode == 0:
-        print_success("\n✨ Todas las verificaciones pasaron ✨")
+        print_success("\n✨ All checks passed ✨")
     else:
-        print_warning("\nRevisa las advertencias arriba")
+        print_warning("\nCheck the warnings above")
 
     return True
 
 
 # ============================================================================
-# CREACIÓN DEL PRIMER USUARIO
+# FIRST USER CREATION
 # ============================================================================
 def create_first_user():
     """
-    Da de alta el primer usuario en Postgres vía scripts/create_user.py.
+    Creates the first user in Postgres via scripts/create_user.py.
 
-    No hay pantalla de registro en el frontend (es una app de un solo
-    usuario/familiar, no multi-tenant público): sin este paso, el
-    entorno queda perfectamente instalado pero nadie puede hacer login.
-    Por eso no es opcional en el flujo feliz, aunque si el usuario
-    prefiere hacerlo luego a mano puede saltárselo aquí.
+    There's no signup screen in the frontend (it's a single-user/family
+    app, not a public multi-tenant one): without this step, the
+    environment ends up perfectly installed but nobody can log in.
+    That's why it isn't optional in the happy path, though the user
+    can skip it here and do it later by hand if they prefer.
     """
-    print_header("11. Creando tu Usuario")
-    print_info("No hay registro en el frontend: los usuarios se dan de alta")
-    print_info("exclusivamente con scripts/create_user.py.\n")
+    print_header("11. Creating your User")
+    print_info("There's no signup in the frontend: users are created")
+    print_info("exclusively with scripts/create_user.py.\n")
 
-    if not ask_yes_no("¿Crear tu usuario ahora?"):
-        print_info("Puedes crearlo más tarde con:")
-        print_info("  python scripts/create_user.py --email tu@email.com")
+    if not ask_yes_no("Create your user now?"):
+        print_info("You can create it later with:")
+        print_info("  python scripts/create_user.py --email you@email.com")
         return True
 
     email = input(f"{Colors.CYAN}Email: {Colors.ENDC}").strip()
     if not email:
-        print_warning("Email vacío, saltando creación de usuario")
-        print_info("Puedes crearlo más tarde con:")
-        print_info("  python scripts/create_user.py --email tu@email.com")
+        print_warning("Empty email, skipping user creation")
+        print_info("You can create it later with:")
+        print_info("  python scripts/create_user.py --email you@email.com")
         return True
 
     project_root = Path(__file__).parent.parent
     venv_python = project_root / "api" / "venv" / "bin" / "python"
     create_user_script = Path(__file__).parent / "create_user.py"
 
-    # check=False y sin capturar stdout/stderr: create_user.py pide la
-    # contraseña de forma interactiva (getpass) y necesita heredar la
-    # terminal. Si falla (p.ej. Postgres no arrancó a tiempo, o el email
-    # ya existe de una ejecución anterior de setup.py), no abortamos todo
-    # el setup por esto — ya se puede reintentar a mano después.
+    # check=False and no stdout/stderr capture: create_user.py prompts for
+    # the password interactively (getpass) and needs to inherit the
+    # terminal. If it fails (e.g. Postgres wasn't up in time yet, or the
+    # email already exists from a previous setup.py run), don't abort the
+    # whole setup because of it — it can be retried by hand afterward.
     subprocess.run(
         [str(venv_python), str(create_user_script), "--email", email],
         cwd=project_root, check=False
@@ -462,22 +463,22 @@ def create_first_user():
 
 
 # ============================================================================
-# FUNCIÓN PRINCIPAL
+# MAIN FUNCTION
 # ============================================================================
 def main():
     try:
         print_banner()
 
-        print_info("Este script configura el entorno de desarrollo:")
-        print_info("  - Ollama nativo (GPU Metal)")
-        print_info("  - ChromaDB + Postgres + API en Docker")
-        print_info("  - Frontend con npm\n")
+        print_info("This script sets up the development environment:")
+        print_info("  - Native Ollama (Metal GPU)")
+        print_info("  - ChromaDB + Postgres + API in Docker")
+        print_info("  - Frontend with npm\n")
 
-        if not ask_yes_no("¿Continuar con la instalación?"):
-            print_info("Instalación cancelada")
+        if not ask_yes_no("Continue with the installation?"):
+            print_info("Installation cancelled")
             return
 
-        # Ejecutar pasos
+        # Run the steps
         if not check_os(): return
         if not check_internet(): return
         if not install_homebrew(): return
@@ -490,12 +491,12 @@ def main():
         run_verification()
         create_first_user()
 
-        # Resumen final
-        print_header("✨ Instalación Completada ✨")
+        # Final summary
+        print_header("✨ Installation Complete ✨")
 
-        print_success("El entorno está listo")
-        print_info("\n📝 Para iniciar el sistema:\n")
-        print_info("  # Terminal 1: Ollama (mantener abierto)")
+        print_success("The environment is ready")
+        print_info("\n📝 To start the system:\n")
+        print_info("  # Terminal 1: Ollama (keep it open)")
         print_info("  ollama serve")
         print_info("")
         print_info("  # Terminal 2: Docker (ChromaDB + Postgres + API)")
@@ -507,19 +508,19 @@ def main():
         print_info("  🌐 Frontend: http://localhost:5173")
         print_info("  📚 API Docs: http://localhost:8000/docs")
         print_info("  💾 ChromaDB: http://localhost:8001")
-        print_info("  🔑 ¿Sin usuario todavía? python scripts/create_user.py --email tu@email.com")
+        print_info("  🔑 No user yet? python scripts/create_user.py --email you@email.com")
         print_info("")
-        print_info("📚 Documentación:")
-        print_info("  - README.md: Guía general")
-        print_info("  - docs/USAGE.md: Endpoints de la API")
-        print_info("  - .ai/context.md: Contexto del proyecto")
+        print_info("📚 Documentation:")
+        print_info("  - README.md: General guide")
+        print_info("  - docs/USAGE.md: API endpoints")
+        print_info("  - .ai/context.md: Project context")
 
     except KeyboardInterrupt:
         print("\n")
-        print_warning("Instalación interrumpida")
+        print_warning("Installation interrupted")
         sys.exit(130)
     except Exception as e:
-        print_error(f"Error inesperado: {e}")
+        print_error(f"Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

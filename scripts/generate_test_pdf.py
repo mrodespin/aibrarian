@@ -1,130 +1,136 @@
 #!/usr/bin/env python3
 # /scripts/generate_test_pdf.py
 """
-Script de Generación de PDF de Prueba - TFM Bibliotecario-IA
+Test PDF Generator Script - Bibliotecario-IA
 
-Genera el archivo test_document.pdf usado para verificar que el pipeline
-de ingesta (load → split → embed → store) funciona correctamente.
+Generates the test_document.pdf file used to verify that the ingestion
+pipeline (load → split → embed → store) works correctly.
 
-¿Por qué existe este script?
-El sistema necesita un PDF conocido para testing. Este script genera
-uno con contenido predefinido sobre el proyecto, así se puede verificar
-que las respuestas del RAG son coherentes con el contenido del PDF.
+Why does this script exist?
+The system needs a known PDF for testing. This script generates one
+with predefined content about the project, so it's possible to verify
+that the RAG's answers are coherent with the PDF's content.
 
-Librería usada: reportlab
-    reportlab es una librería de generación de PDFs en Python.
-    Funciona con "flowables": objetos que se apilan verticalmente
-    en la página (similar al modelo de contenido de CSS).
-    - SimpleDocTemplate: plantilla que maneja márgenes y paginación
-    - Paragraph: bloque de texto con estilo aplicado
-    - Spacer: espacio en blanco vertical entre elementos
+Library used: reportlab
+    reportlab is a PDF-generation library for Python.
+    It works with "flowables": objects that stack vertically on the
+    page (similar to CSS's content model).
+    - SimpleDocTemplate: template that handles margins and pagination
+    - Paragraph: block of text with a style applied
+    - Spacer: vertical whitespace between elements
 
-Uso:
+Usage:
     python scripts/generate_test_pdf.py
-    # o desde scripts/
+    # or from scripts/
     cd scripts && python generate_test_pdf.py
 
-Genera:
+Generates:
     data/test_document.pdf
+
+Note: tests/test_rag_eval.py's RAGAS questions are derived directly
+from this exact content ("Questions derived directly from the content
+of data/test_document.pdf") — if you change the text below, update
+that dataset too, or the eval questions and the document they're
+grounded in will drift apart.
 """
 
 # ============================================================================
 # IMPORTS
 # ============================================================================
-# Todas las importaciones son de reportlab. Este script es completamente
-# independiente del resto del proyecto (no importa de app/).
-from reportlab.lib.pagesizes import letter                              # Tamaño de página Letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle   # Estilos predefinidos
+# All imports are from reportlab. This script is completely independent
+# from the rest of the project (it doesn't import from app/).
+from reportlab.lib.pagesizes import letter                              # Letter page size
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle   # Predefined styles
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer    # Flowables
-from reportlab.lib.units import inch                                   # Unidad de medida: pulgadas
-from pathlib import Path                                               # Para construir rutas
+from reportlab.lib.units import inch                                   # Unit of measurement: inches
+from pathlib import Path                                               # For building paths
 
 # ============================================================================
-# CONFIGURACIÓN DEL PDF
+# PDF SETUP
 # ============================================================================
-# SimpleDocTemplate es la plantilla de alto nivel de reportlab.
-# Maneja automáticamente márgenes, paginación y layout.
-# El PDF se genera en ../data/ (desde scripts/ → root/data/)
+# SimpleDocTemplate is reportlab's high-level template.
+# It automatically handles margins, pagination and layout.
+# The PDF is generated in ../data/ (from scripts/ -> root/data/)
 pdf_path = Path(__file__).parent.parent / "data" / "test_document.pdf"
 doc = SimpleDocTemplate(str(pdf_path), pagesize=letter)
 
-# Lista de flowables: estos objetos se apilan verticalmente en el PDF.
-# El orden en esta lista = el orden en la página.
+# List of flowables: these objects stack vertically in the PDF.
+# The order in this list = the order on the page.
 elements = []
 
 # ============================================================================
-# ESTILOS DE TEXTO
+# TEXT STYLES
 # ============================================================================
-# getSampleStyleSheet() devuelve un conjunto de estilos predefinidos
-# de reportlab (Heading1, Heading2, Normal, etc.).
-# Es equivalente a usar clases CSS predefinidas.
+# getSampleStyleSheet() returns a set of reportlab's predefined styles
+# (Heading1, Heading2, Normal, etc.).
+# Equivalent to using predefined CSS classes.
 styles = getSampleStyleSheet()
-title_style = styles['Heading1']     # Título principal
-heading_style = styles['Heading2']   # Subtítulo de sección
-normal_style = styles['Normal']      # Texto corriente
+title_style = styles['Heading1']     # Main title
+heading_style = styles['Heading2']   # Section subtitle
+normal_style = styles['Normal']      # Body text
 
 # ============================================================================
-# CONTENIDO DEL PDF
+# PDF CONTENT
 # ============================================================================
-# El contenido es sobre el proyecto Bibliotecario-IA.
-# Esto permite verificar que el RAG puede responder preguntas como
-# "¿Qué es RAG?" o "¿Qué componentes tiene el sistema?" basándose
-# en este documento.
+# The content is about the Bibliotecario-IA project itself.
+# This makes it possible to verify that the RAG can answer questions
+# like "What is RAG?" or "What components does the system have?"
+# grounded in this document.
 
-# Título
-elements.append(Paragraph("Sistema Bibliotecario-IA - Documento de Prueba", title_style))
+# Title
+elements.append(Paragraph("Bibliotecario-IA System - Test Document", title_style))
 elements.append(Spacer(1, 0.2*inch))
 
-elements.append(Paragraph("Este es un documento de prueba para verificar el sistema RAG (Retrieval-Augmented Generation).", normal_style))
+elements.append(Paragraph("This is a test document used to verify the RAG (Retrieval-Augmented Generation) system.", normal_style))
 elements.append(Spacer(1, 0.2*inch))
 
-# Sección: ¿Qué es RAG?
-elements.append(Paragraph("¿Qué es RAG?", heading_style))
-elements.append(Paragraph("RAG significa Retrieval-Augmented Generation. Es una técnica que combina la búsqueda de información con la generación de texto mediante modelos de lenguaje.", normal_style))
+# Section: What is RAG?
+elements.append(Paragraph("What is RAG?", heading_style))
+elements.append(Paragraph("RAG stands for Retrieval-Augmented Generation. It's a technique that combines information retrieval with text generation via language models.", normal_style))
 elements.append(Spacer(1, 0.2*inch))
 
-# Sección: Componentes
-elements.append(Paragraph("Componentes del Sistema:", heading_style))
+# Section: Components
+elements.append(Paragraph("System Components:", heading_style))
 components = [
-    "1. Ollama - Modelo de lenguaje local (llama3.2)",
-    "2. ChromaDB - Base de datos vectorial",
-    "3. FastAPI - API REST",
-    "4. LangChain - Framework para aplicaciones LLM"
+    "1. Ollama - Local language model (llama3.2)",
+    "2. ChromaDB - Vector database",
+    "3. FastAPI - REST API",
+    "4. LangChain - Framework for LLM applications"
 ]
 for comp in components:
     elements.append(Paragraph(comp, normal_style))
 elements.append(Spacer(1, 0.2*inch))
 
-# Sección: Arquitectura
-elements.append(Paragraph("Arquitectura Hexagonal:", heading_style))
-elements.append(Paragraph("Este proyecto utiliza arquitectura hexagonal (puertos y adaptadores) para mantener la lógica de negocio independiente de la infraestructura.", normal_style))
+# Section: Architecture
+elements.append(Paragraph("Hexagonal Architecture:", heading_style))
+elements.append(Paragraph("This project uses hexagonal architecture (ports and adapters) to keep business logic independent from infrastructure.", normal_style))
 elements.append(Spacer(1, 0.2*inch))
 
-# Sección: Ventajas
-elements.append(Paragraph("Ventajas:", heading_style))
+# Section: Advantages
+elements.append(Paragraph("Advantages:", heading_style))
 advantages = [
-    "• Privacidad total (todo es local)",
-    "• Sin costos de API externa",
-    "• Escalable y mantenible",
-    "• Fácil de testear"
+    "• Full privacy (everything runs locally)",
+    "• No external API costs",
+    "• Scalable and maintainable",
+    "• Easy to test"
 ]
 for adv in advantages:
     elements.append(Paragraph(adv, normal_style))
 elements.append(Spacer(1, 0.2*inch))
 
-# Sección: Tecnologías
-elements.append(Paragraph("Tecnologías:", heading_style))
+# Section: Technologies
+elements.append(Paragraph("Technologies:", heading_style))
 elements.append(Paragraph("Python 3.12, FastAPI, LangChain, Ollama, ChromaDB, Docker", normal_style))
 elements.append(Spacer(1, 0.3*inch))
 
-# Metadatos del documento
-elements.append(Paragraph("Autor: TFM Bibliotecario-IA", normal_style))
-elements.append(Paragraph("Fecha: 2026-01-30", normal_style))
+# Document metadata
+elements.append(Paragraph("Author: Bibliotecario-IA", normal_style))
+elements.append(Paragraph("Date: 2026-01-30", normal_style))
 
 # ============================================================================
-# GENERACIÓN DEL PDF
+# PDF GENERATION
 # ============================================================================
-# doc.build() toma la lista de flowables y renderiza el PDF.
-# Es el paso final: todos los elementos se componen y se escriben al fichero.
+# doc.build() takes the list of flowables and renders the PDF.
+# This is the final step: all elements are composed and written to the file.
 doc.build(elements)
 print(f"✅ PDF created successfully: {pdf_path}")

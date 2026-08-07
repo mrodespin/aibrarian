@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 # /scripts/create_user.py
 """
-Script CLI de Alta de Usuarios - TFM Bibliotecario-IA
+User Creation CLI - Bibliotecario-IA
 
-No hay UI de registro en el frontend: los usuarios que pueden iniciar
-sesión se dan de alta EXCLUSIVAMENTE con este script, que los guarda en
-Postgres (Neon en producción, el contenedor local en desarrollo).
+There is no signup UI in the frontend: users who can log in are created
+EXCLUSIVELY with this script, which stores them in Postgres (Neon in
+production, the local container in development).
 
-Requisito previo:
-    DATABASE_URL configurada en .env o como variable de entorno.
+Prerequisite:
+    DATABASE_URL configured in .env or as an environment variable.
 
-Uso:
+Usage:
     python scripts/create_user.py --email ana@example.com
-    # Pide la contraseña de forma interactiva (getpass), dos veces para
-    # confirmar. NO se pasa por argumento: quedaría en el historial de
-    # la shell.
+    # Prompts for the password interactively (getpass), twice to
+    # confirm. It is NOT passed as an argument: it would end up in the
+    # shell history.
 
-Para dar de alta el primer usuario contra producción (Neon), antes de
-desplegar el backend:
-    DATABASE_URL=<connection string de Neon> python scripts/create_user.py --email tu@email.com
+To create the first user against production (Neon), before deploying
+the backend:
+    DATABASE_URL=<Neon connection string> python scripts/create_user.py --email you@email.com
 """
 
 # ============================================================================
@@ -32,10 +32,10 @@ import sys
 from pathlib import Path
 
 # ============================================================================
-# CONFIGURACIÓN DE PATH
+# PATH SETUP
 # ============================================================================
-# Mismo patrón que ingest_notion.py: añade api/ al path para que Python
-# encuentre el paquete "app" al ejecutar el script directamente.
+# Same pattern as ingest_notion.py: adds api/ to the path so Python finds
+# the "app" package when the script is run directly.
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
 
 import bcrypt
@@ -46,7 +46,7 @@ from app.core.ports.user_repository_port import UserAlreadyExistsError
 
 
 # ============================================================================
-# CONFIGURACIÓN DE LOGGING
+# LOGGING SETUP
 # ============================================================================
 logging.basicConfig(
     level=logging.INFO,
@@ -59,17 +59,17 @@ MIN_PASSWORD_LENGTH = 8
 
 
 # ============================================================================
-# PUNTO DE ENTRADA PRINCIPAL
+# MAIN ENTRY POINT
 # ============================================================================
 async def main():
     parser = argparse.ArgumentParser(
-        description="Create a new user for Bibliotecario-IA (no hay UI de registro, solo este script)"
+        description="Create a new user for Bibliotecario-IA (no signup UI, this script is the only way)"
     )
     parser.add_argument(
         "--email",
         "-e",
         required=True,
-        help="Email del usuario (se usa como login)"
+        help="User's email (used as login)"
     )
     args = parser.parse_args()
 
@@ -79,12 +79,12 @@ async def main():
 
     if not settings.database_url:
         logger.error("❌ DATABASE_URL not configured!")
-        logger.error("   Set it in api/.env (desarrollo local) o como variable")
-        logger.error("   de entorno (p.ej. para crear el primer usuario en Neon)")
+        logger.error("   Set it in api/.env (local development) or as an")
+        logger.error("   environment variable (e.g. to create the first user in Neon)")
         sys.exit(1)
 
-    # getpass en vez de un flag de argparse: una contraseña pasada como
-    # argumento quedaría en el historial de la shell (~/.bash_history, etc.)
+    # getpass instead of an argparse flag: a password passed as an
+    # argument would end up in the shell history (~/.bash_history, etc.)
     password = getpass.getpass("Password: ")
     password_confirm = getpass.getpass("Confirm password: ")
 
@@ -100,8 +100,8 @@ async def main():
 
     adapter = PostgresUserAdapter()
     try:
-        # connect() crea el pool Y la tabla `users` si no existe (idempotente),
-        # así que no hace falta un paso de "init schema" aparte.
+        # connect() creates the pool AND the `users` table if it doesn't
+        # exist yet (idempotent), so no separate "init schema" step is needed.
         await adapter.connect()
         user = await adapter.create_user(args.email, password_hash)
         print(f"\n✅ User created: {user.email} (id={user.id})\n")
@@ -113,7 +113,7 @@ async def main():
 
 
 # ============================================================================
-# BLOQUE DE ENTRADA
+# ENTRY POINT
 # ============================================================================
 if __name__ == "__main__":
     try:

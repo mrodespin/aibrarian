@@ -1,57 +1,57 @@
 #!/usr/bin/env python3
 # /scripts/ingest_pdfs.py
 """
-Script CLI de Ingesta de PDFs - TFM Bibliotecario-IA
+PDF Ingestion CLI - Bibliotecario-IA
 
-Este script es una ALTERNATIVA a la API para ingestar PDFs desde el terminal.
-En lugar de hacer una petición HTTP a POST /sync, lo ejecutas directamente
-desde la línea de comandos.
+This script is an ALTERNATIVE to the API for ingesting PDFs from the
+terminal. Instead of making an HTTP request to POST /sync, you run it
+directly from the command line.
 
-¿Cuándo usar este script vs la API?
-- Este script: desarrollo, ingesta manual en batch, no necesitas la API activa
-- La API (POST /sync): cuando otra aplicación o el frontend necesita ingestar
+When to use this script vs. the API?
+- This script: development, manual batch ingestion, the API doesn't need to be running
+- The API (POST /sync): when another application or the frontend needs to ingest
 
-¿Qué hace internamente?
-Exactamente lo mismo que los endpoints /sync y /sync/directory de main.py:
-crea las mismas dependencias, usa el mismo SyncService, y ejecuta el mismo
-pipeline (load → split → embed → store). La diferencia es solo la interfaz
-de entrada (CLI vs HTTP).
+What does it do internally?
+Exactly the same as main.py's /sync and /sync/directory endpoints:
+it creates the same dependencies, uses the same SyncService, and runs
+the same pipeline (load → split → embed → store). The only difference
+is the entry point (CLI vs. HTTP).
 
-Flujo de ejecución:
-    1. check_services()     → Verifica que Ollama y ChromaDB están activos
-    2. Inicializa adaptadores y SyncService (misma wiring que main.py)
-    3. ingest_file() o ingest_directory() según los argumentos CLI
-    4. Imprime resumen de resultados
+Execution flow:
+    1. check_services()     → Checks that the LLM and vector DB are up
+    2. Initializes adapters and SyncService (same wiring as main.py)
+    3. ingest_file() or ingest_directory() depending on the CLI arguments
+    4. Prints a results summary
 
-Uso:
-    python ingest_pdfs.py                     # Todos los PDFs en ./data
-    python ingest_pdfs.py /ruta/a/pdfs        # PDFs de un directorio específico
-    python ingest_pdfs.py manual.pdf          # Un solo PDF (detecta que es fichero)
-    python ingest_pdfs.py --file manual.pdf   # Mismo resultado, explícito
+Usage:
+    python ingest_pdfs.py                     # All PDFs in ./data
+    python ingest_pdfs.py /path/to/pdfs       # PDFs from a specific directory
+    python ingest_pdfs.py manual.pdf          # A single PDF (detects it's a file)
+    python ingest_pdfs.py --file manual.pdf   # Same result, explicit
 """
 
 # ============================================================================
 # IMPORTS
 # ============================================================================
-import asyncio   # Para ejecutar código async desde un script síncrono
+import asyncio   # To run async code from a synchronous script
 import logging
 import sys
 from pathlib import Path
 from typing import Optional
-import argparse   # Librería estándar de Python para parsear argumentos CLI
-                  # Equivalente a libraries como 'commander' o 'yargs' en Node.js
+import argparse   # Python's standard library for parsing CLI arguments
+                  # Equivalent to libraries like 'commander' or 'yargs' in Node.js
 
 # ============================================================================
-# CONFIGURACIÓN DE PATH
+# PATH SETUP
 # ============================================================================
-# sys.path.insert(0, ...): añade el directorio api/ al path de búsqueda de módulos.
+# sys.path.insert(0, ...): adds the api/ directory to the module search path.
 #
-# ¿Por qué es necesario?
-# Este script ahora está en scripts/, pero necesita importar desde api/app/*.
-# Sin esta línea, Python no encontraría el paquete "app".
+# Why is this needed?
+# This script lives in scripts/, but needs to import from api/app/*.
+# Without this line, Python wouldn't find the "app" package.
 #
 # Path(__file__).parent = scripts/
-# Path(__file__).parent.parent = root del proyecto
+# Path(__file__).parent.parent = project root
 # Path(__file__).parent.parent / "api" = api/
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
 
@@ -63,7 +63,7 @@ from app.adapters.outbound.pdf_processor_adapter import PDFProcessorAdapter
 
 
 # ============================================================================
-# CONFIGURACIÓN DE LOGGING
+# LOGGING SETUP
 # ============================================================================
 logging.basicConfig(
     level=logging.INFO,
@@ -73,16 +73,16 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# SELECCIÓN DE ADAPTADORES (misma lógica que api/app/main.py, ver ADR-007)
+# ADAPTER SELECTION (same logic as api/app/main.py, see ADR-007)
 # ============================================================================
-# Este script es una vía alternativa a la API, no un sistema aparte: debe
-# respetar LLM_PROVIDER/VECTOR_DB_PROVIDER igual que main.py, o si alguien
-# configura .env para usar Groq/Chroma Cloud (p.ej. para no tener que
-# levantar Ollama/ChromaDB en local), la ingesta por CLI ignoraría esa
-# configuración en silencio y se iría contra Ollama/ChromaDB de todas
-# formas. GroqAdapter/ChromaCloudAdapter se importan de forma perezosa,
-# dentro de la función, para no cargar sus dependencias pesadas (groq,
-# sentence-transformers → torch) cuando no se usan.
+# This script is an alternative entry point to the API, not a separate
+# system: it must respect LLM_PROVIDER/VECTOR_DB_PROVIDER just like
+# main.py does, or if someone configures .env to use Groq/Chroma Cloud
+# (e.g. to avoid running Ollama/ChromaDB locally), the CLI ingestion
+# would silently ignore that config and hit Ollama/ChromaDB anyway.
+# GroqAdapter/ChromaCloudAdapter are imported lazily, inside the
+# function, so their heavy dependencies (groq, sentence-transformers →
+# torch) aren't loaded unless they're actually used.
 def _build_llm_adapter():
     if settings.llm_provider == "groq":
         from app.adapters.outbound.groq_adapter import GroqAdapter
@@ -98,26 +98,26 @@ def _build_vector_db_adapter():
 
 
 # ============================================================================
-# VERIFICACIÓN DE SERVICIOS
+# SERVICE AVAILABILITY CHECK
 # ============================================================================
 async def check_services():
     """
-    Verifica que el LLM y el vector DB configurados están activos antes de
-    proceder (según settings.llm_provider / settings.vector_db_provider).
+    Checks that the configured LLM and vector DB are up before
+    proceeding (per settings.llm_provider / settings.vector_db_provider).
 
-    Se ejecuta al inicio del script para fallar rápido con mensajes
-    claros si algún servicio no está disponible, en lugar de fallar
-    en medio del procesamiento con errores confusos.
+    Runs at the start of the script to fail fast with clear messages if
+    a service isn't available, instead of failing mid-processing with
+    confusing errors.
 
-    Crea instancias temporales de los adaptadores solo para el check.
-    Las instancias definitivas se crean después en main().
+    Creates temporary adapter instances just for the check. The actual
+    instances are created afterward in main().
 
     Returns:
-        bool: True si todos los servicios están disponibles
+        bool: True if all services are available
     """
     logger.info("Checking service availability...")
 
-    # Verificar el LLM (necesario para embeddings y generación de texto)
+    # Check the LLM (needed for embeddings and text generation)
     llm_adapter = _build_llm_adapter()
     llm_ok = await llm_adapter.is_available()
 
@@ -132,9 +132,9 @@ async def check_services():
 
     logger.info(f"✅ LLM is available (provider={settings.llm_provider})")
 
-    # Verificar el vector DB (necesario para almacenar los embeddings)
-    # collection_exists("test") es una llamada ligera que comprueba
-    # la conectividad sin crear ni modificar datos reales.
+    # Check the vector DB (needed to store the embeddings)
+    # collection_exists("test") is a lightweight call that checks
+    # connectivity without creating or modifying real data.
     vector_db_adapter = _build_vector_db_adapter()
     try:
         exists = await vector_db_adapter.collection_exists("test")
@@ -149,28 +149,28 @@ async def check_services():
 
 
 # ============================================================================
-# FUNCIONES DE INGESTA
+# INGESTION FUNCTIONS
 # ============================================================================
 async def ingest_file(file_path: Path, sync_service: SyncService):
     """
-    Ingesta un solo archivo PDF.
+    Ingests a single PDF file.
 
-    Es un wrapper delgado alrededor de SyncService.sync_document_from_file()
-    que añade formato visual al output del terminal (separadores, iconos).
+    A thin wrapper around SyncService.sync_document_from_file() that adds
+    visual formatting to the terminal output (separators, icons).
 
     Args:
-        file_path: Ruta al archivo PDF a procesar
-        sync_service: Instancia del servicio de sincronización
+        file_path: Path to the PDF file to process
+        sync_service: Sync service instance
 
     Returns:
-        SyncResult si el procesamiento se intentó, None si hubo excepción
+        SyncResult if processing was attempted, None if an exception occurred
     """
     logger.info(f"\n{'='*60}")
     logger.info(f"Processing: {file_path.name}")
     logger.info(f"{'='*60}")
 
     try:
-        # Delegar todo el trabajo al servicio (mismo pipeline que la API)
+        # Delegate all the work to the service (same pipeline as the API)
         result = await sync_service.sync_document_from_file(file_path)
 
         if result.success:
@@ -191,25 +191,25 @@ async def ingest_file(file_path: Path, sync_service: SyncService):
 
 async def ingest_directory(directory_path: Path, sync_service: SyncService):
     """
-    Ingesta todos los archivos PDF de un directorio.
+    Ingests all PDF files in a directory.
 
-    Itera secuencialmente sobre los PDFs encontrados llamando a
-    ingest_file() para cada uno. Si un PDF falla, el script continúa
-    con los siguientes (no falla todo por un archivo).
+    Iterates sequentially over the PDFs found, calling ingest_file() for
+    each one. If a PDF fails, the script continues with the rest (a
+    single file failing doesn't fail the whole run).
 
     Args:
-        directory_path: Ruta al directorio a escanear
-        sync_service: Instancia del servicio de sincronización
+        directory_path: Path to the directory to scan
+        sync_service: Sync service instance
 
     Returns:
-        list[SyncResult]: Resultados de cada PDF procesado exitosamente
+        list[SyncResult]: Results for each successfully processed PDF
     """
     logger.info(f"\n{'='*60}")
     logger.info(f"Scanning directory: {directory_path}")
     logger.info(f"{'='*60}")
 
-    # glob("*.pdf") busca todos los archivos .pdf en el directorio
-    # list() materializa el generador en una lista
+    # glob("*.pdf") finds all .pdf files in the directory
+    # list() materializes the generator into a list
     pdf_files = list(directory_path.glob("*.pdf"))
 
     if not pdf_files:
@@ -228,39 +228,39 @@ async def ingest_directory(directory_path: Path, sync_service: SyncService):
 
 
 # ============================================================================
-# PUNTO DE ENTRADA PRINCIPAL
+# MAIN ENTRY POINT
 # ============================================================================
 async def main():
     """
-    Función principal del script: parsea argumentos, inicializa servicios
-    y orqestra la ingesta.
+    Script's main function: parses arguments, initializes services and
+    orchestrates the ingestion.
 
-    Flujo:
-        1. Parsear argumentos CLI con argparse
-        2. Verificar servicios (check_services)
-        3. Inicializar adaptadores y SyncService (misma wiring que main.py)
-        4. Detectar modo: fichero individual vs directorio
-        5. Ejecutar ingesta
-        6. Imprimir resumen
+    Flow:
+        1. Parse CLI arguments with argparse
+        2. Check services (check_services)
+        3. Initialize adapters and SyncService (same wiring as main.py)
+        4. Detect mode: single file vs. directory
+        5. Run the ingestion
+        6. Print a summary
     """
     # ================================================================
-    # PARSEO DE ARGUMENTOS CLI (argparse)
+    # CLI ARGUMENT PARSING (argparse)
     # ================================================================
-    # argparse construye automáticamente --help y valida los argumentos.
-    # Equivalente JS: const program = new Command(); program.argument(...)
+    # argparse automatically builds --help and validates arguments.
+    # JS equivalent: const program = new Command(); program.argument(...)
     parser = argparse.ArgumentParser(
         description="Ingest PDF documents into Bibliotecario-IA vector database"
     )
     parser.add_argument(
         "path",
-        nargs="?",          # "?" = el argumento es opcional (posicional)
-        default=None,       # Si no se proporciona, vale None
+        nargs="?",          # "?" = the argument is optional (positional)
+        default=None,       # If not provided, it's None
         help="Path to PDF file or directory (defaults to ./data)"
     )
     parser.add_argument(
         "--file",
-        "-f",               # "-f" es el alias corto de "--file"
-        action="store_true", # No recibe valor: si está presente es True, si no False
+        "-f",               # "-f" is the short alias for "--file"
+        action="store_true", # Takes no value: True if present, False otherwise
         help="Treat path as a single file, not a directory"
     )
     parser.add_argument(
@@ -270,29 +270,29 @@ async def main():
         help="Collection name (defaults to config setting)"
     )
 
-    # parse_args() lee sys.argv y devuelve un objeto con los valores.
-    # args.path, args.file, args.collection están disponibles después.
+    # parse_args() reads sys.argv and returns an object with the values.
+    # args.path, args.file, args.collection are available afterward.
     args = parser.parse_args()
 
-    # Banner visual del script
+    # Script's visual banner
     print("\n" + "="*60)
     print("📚 Bibliotecario-IA - PDF Ingestion Script")
     print("="*60 + "\n")
 
     # ================================================================
-    # VERIFICACIÓN DE SERVICIOS
+    # SERVICE CHECK
     # ================================================================
-    # Fallar rápido si algo no está disponible.
-    # sys.exit(1) termina el script con código de error (no 0 = fallo).
+    # Fail fast if something isn't available.
+    # sys.exit(1) ends the script with an error code (not 0 = failure).
     if not await check_services():
         logger.error("\n❌ Service checks failed. Please fix the issues above and try again.")
         sys.exit(1)
 
     # ================================================================
-    # INICIALIZACIÓN DE DEPENDENCIAS
+    # DEPENDENCY INITIALIZATION
     # ================================================================
-    # Misma wiring que en main.py: adaptadores → servicio.
-    # Se repite aquí porque este script es independiente de la API.
+    # Same wiring as main.py: adapters → service.
+    # Repeated here because this script is independent from the API.
     logger.info("\nInitializing services...")
     vector_db_adapter = _build_vector_db_adapter()
     llm_adapter = _build_llm_adapter()
@@ -305,9 +305,9 @@ async def main():
     )
 
     # ================================================================
-    # DETERMINAR LA RUTA A PROCESAR
+    # DETERMINE THE PATH TO PROCESS
     # ================================================================
-    # Si el usuario no pasa path, usar el directorio por defecto (./data)
+    # If the user doesn't pass a path, use the default directory (./data)
     if args.path:
         path = Path(args.path)
     else:
@@ -319,14 +319,14 @@ async def main():
         sys.exit(1)
 
     # ================================================================
-    # MODO: FICHERO INDIVIDUAL vs DIRECTORIO
+    # MODE: SINGLE FILE vs. DIRECTORY
     # ================================================================
-    # Detecta automáticamente si es un fichero o directorio.
-    # El flag --file fuerza modo fichero (útil si el nombre es ambiguo).
+    # Automatically detects whether it's a file or a directory.
+    # The --file flag forces file mode (useful if the name is ambiguous).
     results = []
 
     if args.file or path.is_file():
-        # --- Modo fichero individual ---
+        # --- Single file mode ---
         if not path.suffix.lower() == ".pdf":
             logger.error("❌ File must be a PDF")
             sys.exit(1)
@@ -336,7 +336,7 @@ async def main():
             results.append(result)
 
     else:
-        # --- Modo directorio ---
+        # --- Directory mode ---
         if not path.is_dir():
             logger.error(f"❌ Not a directory: {path}")
             sys.exit(1)
@@ -344,7 +344,7 @@ async def main():
         results = await ingest_directory(path, sync_service)
 
     # ================================================================
-    # RESUMEN DE RESULTADOS
+    # RESULTS SUMMARY
     # ================================================================
     print("\n" + "="*60)
     print("📊 Ingestion Summary")
@@ -372,18 +372,18 @@ async def main():
 
 
 # ============================================================================
-# BLOQUE DE ENTRADA
+# ENTRY POINT
 # ============================================================================
-# asyncio.run(main()): puente entre el mundo síncrono (if __name__)
-# y el mundo asíncrono (todas las funciones son async).
+# asyncio.run(main()): bridges the synchronous world (if __name__) with
+# the asynchronous one (all functions are async).
 #
-# asyncio.run() crea un event loop, ejecuta la coroutine main(),
-# y lo cierra cuando termina. Es el equivalente a:
+# asyncio.run() creates an event loop, runs the main() coroutine, and
+# closes it when done. It's the equivalent of:
 #   const main = async () => { ... };
 #   main().catch(console.error);
 #
-# KeyboardInterrupt: se captura cuando el usuario hace Ctrl+C.
-# sys.exit(0) = salida limpia (código 0 = éxito).
+# KeyboardInterrupt: caught when the user presses Ctrl+C.
+# sys.exit(0) = clean exit (code 0 = success).
 if __name__ == "__main__":
     try:
         asyncio.run(main())

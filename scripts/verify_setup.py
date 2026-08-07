@@ -1,36 +1,36 @@
 #!/usr/bin/env python3
 # /scripts/verify_setup.py
 """
-Script de Verificación del Entorno - TFM Bibliotecario-IA
+Environment Verification Script - Bibliotecario-IA
 
-Este script comprueba que todos los servicios y dependencias necesarios
-para ejecutar Bibliotecario-IA estén correctamente instalados y configurados.
+This script checks that all the services and dependencies needed to run
+Bibliotecario-IA are correctly installed and configured.
 
-¿Cuándo usar este script?
-- Después de clonar el repositorio en un nuevo ordenador
-- Cuando algo no funciona y quieres verificar que el entorno está correcto
-- Antes de ejecutar la API por primera vez
+When should you use this script?
+- After cloning the repository on a new machine
+- When something isn't working and you want to check the environment is correct
+- Before running the API for the first time
 
-Checks que realiza (11 en total):
-    1. Versión de Python (se requiere 3.11+)
-    2. Dependencias Python instaladas
-    3. Ollama: instalación, servicio y modelos
-    4. Docker: instalación y daemon activo
-    5. ChromaDB: disponibilidad del servicio
-    6. Postgres: disponibilidad + DATABASE_URL/JWT_SECRET_KEY en api/.env
-    7. Estructura del proyecto: directorios necesarios
-    8. Directorio de datos: presencia de PDFs
-    9. API: health check (opcional, no falla si no está corriendo)
-    10. Node.js: versión 18+ (para el frontend)
-    11. Frontend: dependencias instaladas (node_modules)
+Checks it performs (11 total):
+    1. Python version (3.11+ required)
+    2. Python dependencies installed
+    3. Ollama: installation, service and models
+    4. Docker: installation and daemon running
+    5. ChromaDB: service availability
+    6. Postgres: availability + DATABASE_URL/JWT_SECRET_KEY in api/.env
+    7. Project structure: required directories
+    8. Data directory: presence of PDFs
+    9. API: health check (optional, doesn't fail if not running)
+    10. Node.js: version 18+ (for the frontend)
+    11. Frontend: dependencies installed (node_modules)
 
-Nota sobre rutas relativas:
-    Este script se ejecuta desde el directorio scripts/ y usa rutas
-    relativas al directorio raíz del proyecto.
+Note about relative paths:
+    This script runs from the scripts/ directory and uses paths relative
+    to the project root.
 
-Uso:
+Usage:
     python scripts/verify_setup.py
-    # o desde scripts/
+    # or from scripts/
     cd scripts && python verify_setup.py
 """
 
@@ -45,74 +45,74 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 # ============================================================================
-# COLORES PARA TERMINAL
+# TERMINAL COLORS
 # ============================================================================
-# Códigos ANSI para colorear el output en la terminal.
-# Estos códigos son secuencias de escape que los emuladores de terminal
-# interpretan para cambiar el color del texto.
-# Formato: \033[<código>m  donde \033 es el carácter ESC (escape).
+# ANSI codes to color the terminal output.
+# These codes are escape sequences that terminal emulators interpret to
+# change the text color.
+# Format: \033[<code>m  where \033 is the ESC (escape) character.
 #
-# Equivalente en JS/Node.js: chalk.green(), chalk.red(), etc.
+# JS/Node.js equivalent: chalk.green(), chalk.red(), etc.
 class Colors:
-    GREEN = '\033[92m'    # Verde (éxito)
-    RED = '\033[91m'      # Rojo (error)
-    YELLOW = '\033[93m'   # Amarillo (advertencia)
-    BLUE = '\033[94m'     # Azul (información)
-    ENDC = '\033[0m'      # Reset: vuelve al color por defecto
-    BOLD = '\033[1m'      # Negrita
+    GREEN = '\033[92m'    # Green (success)
+    RED = '\033[91m'      # Red (error)
+    YELLOW = '\033[93m'   # Yellow (warning)
+    BLUE = '\033[94m'     # Blue (info)
+    ENDC = '\033[0m'      # Reset: back to the default color
+    BOLD = '\033[1m'      # Bold
 
 
 # ============================================================================
-# FUNCIONES DE FORMATO DE OUTPUT
+# OUTPUT FORMATTING FUNCTIONS
 # ============================================================================
-# Cada función envuelve el texto con los códigos de color apropiados.
-# El patrón es siempre: color + emoji + texto + ENDC (reset).
+# Each function wraps the text with the appropriate color codes.
+# The pattern is always: color + emoji + text + ENDC (reset).
 def print_header(text):
-    """Imprime un encabezado visualmente destacado."""
+    """Prints a visually distinct header."""
     print(f"\n{Colors.BOLD}{Colors.BLUE}{'='*60}{Colors.ENDC}")
     print(f"{Colors.BOLD}{Colors.BLUE}{text}{Colors.ENDC}")
     print(f"{Colors.BOLD}{Colors.BLUE}{'='*60}{Colors.ENDC}\n")
 
 def print_success(text):
-    """Imprime un mensaje de éxito en verde."""
+    """Prints a success message in green."""
     print(f"{Colors.GREEN}✅ {text}{Colors.ENDC}")
 
 def print_error(text):
-    """Imprime un mensaje de error en rojo."""
+    """Prints an error message in red."""
     print(f"{Colors.RED}❌ {text}{Colors.ENDC}")
 
 def print_warning(text):
-    """Imprime un mensaje de advertencia en amarillo."""
+    """Prints a warning message in yellow."""
     print(f"{Colors.YELLOW}⚠️  {text}{Colors.ENDC}")
 
 def print_info(text):
-    """Imprime un mensaje informativo en azul."""
+    """Prints an informational message in blue."""
     print(f"{Colors.BLUE}ℹ️  {text}{Colors.ENDC}")
 
 
 # ============================================================================
-# CHECKS DE VERIFICACIÓN
+# VERIFICATION CHECKS
 # ============================================================================
-# Cada función verifica un aspecto del entorno y devuelve True/False.
-# Todas siguen el mismo patrón:
-#   1. Imprimir encabezado numerado
-#   2. Realizar la verificación
-#   3. Imprimir resultado (éxito/error) con indicaciones si falla
-#   4. Devolver booleano para el resumen final
+# Each function checks one aspect of the environment and returns True/False.
+# They all follow the same pattern:
+#   1. Print a numbered header
+#   2. Perform the check
+#   3. Print the result (success/error) with guidance if it fails
+#   4. Return a boolean for the final summary
 
 def check_python_version():
     """
-    Verifica que la versión de Python sea 3.11 o superior.
+    Checks that the Python version is 3.11 or higher.
 
-    ¿Por qué 3.11+?
-    El proyecto usa funcionalidades modernas de Python como
-    ExceptionGroup (3.11) y mejoras de performance significativas.
-    FastAPI y LangChain también recomiendan versiones recientes.
+    Why 3.11+?
+    The project uses modern Python features like ExceptionGroup (3.11)
+    and significant performance improvements. FastAPI and LangChain also
+    recommend recent versions.
 
     Returns:
-        bool: True si la versión es compatible
+        bool: True if the version is compatible
     """
-    print_header("1. Verificando Python")
+    print_header("1. Checking Python")
 
     version = sys.version_info
     version_str = f"{version.major}.{version.minor}.{version.micro}"
@@ -120,33 +120,33 @@ def check_python_version():
     print_info(f"Python version: {version_str}")
 
     if version.major >= 3 and version.minor >= 11:
-        print_success(f"Python {version_str} es compatible")
+        print_success(f"Python {version_str} is compatible")
         return True
     else:
-        print_error(f"Python {version_str} es demasiado antiguo. Se requiere 3.11+")
+        print_error(f"Python {version_str} is too old. 3.11+ is required")
         return False
 
 
 def check_dependencies():
     """
-    Verifica que las dependencias Python principales estén instaladas.
+    Checks that the main Python dependencies are installed.
 
-    Estrategia:
-    1. Detecta si el script se ejecuta desde un virtual environment
-    2. Si NO: verifica el venv en api/venv/ mirando site-packages
-    3. Si SÍ: verifica importando los paquetes normalmente
+    Strategy:
+    1. Detect whether the script is running from a virtual environment
+    2. If NOT: check the venv at api/venv/ by looking at site-packages
+    3. If YES: check by importing the packages normally
 
-    Esto permite ejecutar el script sin activar el venv y aún así
-    verificar que las dependencias estén instaladas.
+    This lets the script run without activating the venv and still
+    verify that the dependencies are installed.
 
     Returns:
-        bool: True si todos los paquetes están instalados
+        bool: True if all packages are installed
     """
-    print_header("2. Verificando Dependencias Python")
+    print_header("2. Checking Python Dependencies")
 
-    # Detectar si estamos en un virtual environment
-    # sys.real_prefix existe en virtualenv antiguo
-    # sys.base_prefix != sys.prefix en venv moderno (Python 3.3+)
+    # Detect whether we're inside a virtual environment
+    # sys.real_prefix exists in old-style virtualenv
+    # sys.base_prefix != sys.prefix in modern venv (Python 3.3+)
     in_venv = hasattr(sys, 'real_prefix') or (
         hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix
     )
@@ -156,40 +156,41 @@ def check_dependencies():
 
     required_packages = [
         'fastapi', 'uvicorn', 'langchain', 'chromadb', 'pydantic', 'httpx',
-        # Añadidos junto con observabilidad y auth (ver api/requirements.txt);
-        # antes de esto, el check pasaba en verde aunque estos 5 faltaran.
+        # Added alongside observability and auth (see api/requirements.txt);
+        # before this, the check passed green even if these 5 were missing.
         'structlog', 'prometheus_client', 'asyncpg', 'bcrypt', 'jwt',
     ]
 
-    # El import ('jwt') no coincide con el nombre de distribución en PyPI
-    # ('PyJWT') ni con el prefijo de su .dist-info ('pyjwt'). Todos los
-    # demás paquetes de la lista sí coinciden (salvo guion/guion bajo, que
-    # ya normaliza el código de abajo), así que solo hace falta este caso.
+    # The import name ('jwt') doesn't match either the PyPI distribution
+    # name ('PyJWT') or its .dist-info prefix ('pyjwt'). Every other
+    # package in the list does match (aside from hyphen/underscore, which
+    # the code below already normalizes), so this is the only case that
+    # needs an override.
     DIST_NAME_OVERRIDES = {'jwt': 'PyJWT'}
 
     if not in_venv:
-        # No estamos en venv, verificar si existe api/venv
+        # Not in a venv, check whether api/venv exists
         if not venv_path.exists():
-            print_error("Virtual environment NO encontrado en api/venv/")
-            print_info("Ejecuta: python3 scripts/setup.py")
+            print_error("Virtual environment NOT found at api/venv/")
+            print_info("Run: python3 scripts/setup.py")
             return False
 
         print_info(f"Virtual environment: {venv_path.relative_to(project_root)}")
-        print_warning("No estás en el venv (pero está OK, verificando paquetes...)")
+        print_warning("Not inside the venv (that's OK, checking packages anyway...)")
 
-        # Buscar site-packages del venv
+        # Look for the venv's site-packages
         site_packages_candidates = list((venv_path / "lib").glob("python*/site-packages"))
 
         if not site_packages_candidates:
-            print_error("No se encontró site-packages en el venv")
+            print_error("site-packages not found in the venv")
             return False
 
         site_packages = site_packages_candidates[0]
         all_ok = True
 
         for package in required_packages:
-            # Buscar el paquete en site-packages
-            # Puede ser un directorio o un .dist-info
+            # Look for the package in site-packages
+            # It can be a directory or a .dist-info
             display_name = DIST_NAME_OVERRIDES.get(package, package)
             package_normalized = package.replace('-', '_')
             dist_prefix = DIST_NAME_OVERRIDES.get(package, package_normalized).replace('-', '_').lower()
@@ -197,134 +198,134 @@ def check_dependencies():
             dist_info = list(site_packages.glob(f"{dist_prefix}*.dist-info"))
 
             if package_dir.exists() or dist_info:
-                print_success(f"{display_name} instalado")
+                print_success(f"{display_name} installed")
             else:
-                print_error(f"{display_name} NO instalado")
+                print_error(f"{display_name} NOT installed")
                 all_ok = False
 
         if not all_ok:
-            print_warning("Instala dependencias:")
+            print_warning("Install dependencies:")
             print_info("  cd api && source venv/bin/activate")
             print_info("  pip install -r requirements.txt")
 
         return all_ok
 
-    # Estamos en venv, verificar importando directamente
-    print_success("Ejecutando desde virtual environment ✓")
+    # We're inside the venv, check by importing directly
+    print_success("Running from virtual environment ✓")
 
     all_ok = True
     for package in required_packages:
         display_name = DIST_NAME_OVERRIDES.get(package, package)
         try:
             __import__(package.replace('-', '_'))
-            print_success(f"{display_name} instalado")
+            print_success(f"{display_name} installed")
         except ImportError:
-            print_error(f"{display_name} NO instalado")
+            print_error(f"{display_name} NOT installed")
             all_ok = False
 
     if not all_ok:
-        print_warning("Ejecuta: pip install -r requirements.txt")
+        print_warning("Run: pip install -r requirements.txt")
 
     return all_ok
 
 
 def check_ollama():
     """
-    Verifica Ollama en tres niveles: instalación, servicio y modelos.
+    Checks Ollama at three levels: installation, service and models.
 
-    Es la verificación más compleja porque Ollama tiene dos partes:
-    1. La herramienta CLI (ollama --version)
-    2. El servidor en background (ollama serve → puerto 11434)
+    This is the most complex check because Ollama has two parts:
+    1. The CLI tool (ollama --version)
+    2. The background server (ollama serve → port 11434)
 
-    Además, verifica que los modelos necesarios estén descargados:
-    - llama3.2: modelo LLM para generar respuestas
-    - nomic-embed-text: modelo de embeddings para búsqueda semántica
+    It also checks that the required models are downloaded:
+    - llama3.2: LLM model for generating responses
+    - nomic-embed-text: embedding model for semantic search
 
-    ¿Por qué subprocess para la instalación pero httpx para el servicio?
-    - subprocess: comprobar si el binario 'ollama' existe en PATH
-    - httpx: comprobar si el servidor HTTP está corriendo y responde
+    Why subprocess for the installation but httpx for the service?
+    - subprocess: check whether the 'ollama' binary exists on PATH
+    - httpx: check whether the HTTP server is running and responds
 
     Returns:
-        bool: True si Ollama está instalado y el servicio está corriendo.
-              Los modelos no descargados generan advertencia, no error.
+        bool: True if Ollama is installed and the service is running.
+              Missing models produce a warning, not an error.
     """
-    print_header("3. Verificando Ollama")
+    print_header("3. Checking Ollama")
 
-    # --- Nivel 1: Instalación del binario ---
+    # --- Level 1: Binary installed ---
     try:
         result = subprocess.run(
             ['ollama', '--version'],
-            capture_output=True,   # Captura stdout y stderr
-            text=True,             # Devuelve strings, no bytes
-            timeout=5              # Si no responde en 5s, TimeoutExpired
+            capture_output=True,   # Capture stdout and stderr
+            text=True,             # Return strings, not bytes
+            timeout=5              # TimeoutExpired if it doesn't respond in 5s
         )
         if result.returncode == 0:
             version = result.stdout.strip()
-            print_success(f"Ollama instalado: {version}")
+            print_success(f"Ollama installed: {version}")
         else:
-            print_error("Ollama instalado pero no responde correctamente")
+            print_error("Ollama installed but not responding correctly")
             return False
     except FileNotFoundError:
-        # FileNotFoundError: el comando 'ollama' no existe en PATH
-        print_error("Ollama NO está instalado")
-        print_info("Instala desde: https://ollama.ai")
+        # FileNotFoundError: the 'ollama' command doesn't exist on PATH
+        print_error("Ollama is NOT installed")
+        print_info("Install it from: https://ollama.ai")
         return False
     except subprocess.TimeoutExpired:
-        print_error("Ollama no responde (timeout)")
+        print_error("Ollama isn't responding (timeout)")
         return False
 
-    # --- Nivel 2: Servicio corriendo ---
-    # Si llegamos aquí, Ollama está instalado. Ahora verificamos
-    # que el servidor (ollama serve) esté activo.
+    # --- Level 2: Service running ---
+    # If we got here, Ollama is installed. Now check that the server
+    # (ollama serve) is active.
     try:
         import httpx
-        # GET /api/tags devuelve la lista de modelos descargados.
-        # Si el servicio no está corriendo, la conexión falla.
+        # GET /api/tags returns the list of downloaded models.
+        # If the service isn't running, the connection fails.
         response = httpx.get("http://localhost:11434/api/tags", timeout=5.0)
         if response.status_code == 200:
-            print_success("Servicio Ollama está corriendo")
+            print_success("Ollama service is running")
 
-            # --- Nivel 3: Modelos descargados ---
+            # --- Level 3: Downloaded models ---
             models = response.json().get('models', [])
             model_names = [m['name'] for m in models]
 
-            # Los nombres en Ollama pueden incluir tags (ej: 'llama3.2:latest')
-            # por eso usamos 'in' en lugar de comparación exacta
+            # Ollama model names can include tags (e.g. 'llama3.2:latest'),
+            # hence 'in' instead of an exact comparison
             required_models = ['llama3.2', 'nomic-embed-text']
             for model in required_models:
                 if any(model in name for name in model_names):
-                    print_success(f"Modelo {model} descargado")
+                    print_success(f"Model {model} downloaded")
                 else:
-                    # Advertencia, no error: el servicio funciona
-                    # pero faltarán los modelos al usar el sistema
-                    print_warning(f"Modelo {model} NO descargado")
-                    print_info(f"   Ejecuta: ollama pull {model}")
+                    # Warning, not error: the service works but the
+                    # models will be missing when using the system
+                    print_warning(f"Model {model} NOT downloaded")
+                    print_info(f"   Run: ollama pull {model}")
 
             return True
         else:
-            print_error(f"Ollama responde con código: {response.status_code}")
+            print_error(f"Ollama responds with code: {response.status_code}")
             return False
     except Exception as e:
-        print_error("Servicio Ollama NO está corriendo")
-        print_info("Ejecuta en otro terminal: ollama serve")
+        print_error("Ollama service is NOT running")
+        print_info("Run in another terminal: ollama serve")
         return False
 
 
 def check_docker():
     """
-    Verifica Docker en dos niveles: instalación y daemon activo.
+    Checks Docker at two levels: installation and daemon running.
 
-    ¿Por qué verificar el daemon por separado?
-    En macOS/Windows, Docker Desktop puede estar instalado pero no iniciado.
-    'docker --version' funciona sin el daemon, pero 'docker ps' requiere
-    que el daemon esté corriendo.
+    Why check the daemon separately?
+    On macOS/Windows, Docker Desktop can be installed but not started.
+    'docker --version' works without the daemon, but 'docker ps' requires
+    the daemon to be running.
 
     Returns:
-        bool: True si Docker está instalado y corriendo
+        bool: True if Docker is installed and running
     """
-    print_header("4. Verificando Docker")
+    print_header("4. Checking Docker")
 
-    # --- Nivel 1: Instalación ---
+    # --- Level 1: Installation ---
     try:
         result = subprocess.run(
             ['docker', '--version'],
@@ -334,17 +335,17 @@ def check_docker():
         )
         if result.returncode == 0:
             version = result.stdout.strip()
-            print_success(f"Docker instalado: {version}")
+            print_success(f"Docker installed: {version}")
         else:
-            print_error("Docker instalado pero no responde")
+            print_error("Docker installed but not responding")
             return False
     except FileNotFoundError:
-        print_error("Docker NO está instalado")
-        print_info("Instala Docker Desktop desde: https://www.docker.com/products/docker-desktop")
+        print_error("Docker is NOT installed")
+        print_info("Install Docker Desktop from: https://www.docker.com/products/docker-desktop")
         return False
 
-    # --- Nivel 2: Daemon activo ---
-    # 'docker ps' lista contenedores. Falla si el daemon no está corriendo.
+    # --- Level 2: Daemon running ---
+    # 'docker ps' lists containers. Fails if the daemon isn't running.
     try:
         result = subprocess.run(
             ['docker', 'ps'],
@@ -353,81 +354,81 @@ def check_docker():
             timeout=5
         )
         if result.returncode == 0:
-            print_success("Docker está corriendo")
+            print_success("Docker is running")
             return True
         else:
-            print_error("Docker no está corriendo")
-            print_info("Inicia Docker Desktop")
+            print_error("Docker is not running")
+            print_info("Start Docker Desktop")
             return False
     except subprocess.TimeoutExpired:
-        print_error("Docker no responde (timeout)")
+        print_error("Docker isn't responding (timeout)")
         return False
 
 
 def check_chromadb():
     """
-    Verifica que ChromaDB esté corriendo y responda al heartbeat.
+    Checks that ChromaDB is running and responds to the heartbeat.
 
-    ChromaDB expone un endpoint /api/v2/heartbeat que devuelve 200
-    si el servicio está activo. Es el equivalente a un health check.
-    (v1 de este endpoint fue retirada — da 410 Gone desde ChromaDB 1.x)
+    ChromaDB exposes an /api/v2/heartbeat endpoint that returns 200 if
+    the service is active. It's the equivalent of a health check.
+    (v1 of this endpoint was retired — it returns 410 Gone since ChromaDB 1.x)
 
-    Nota: ChromaDB corre en el puerto 8001 (no el por defecto 8000)
-    para no conflictar con la API de FastAPI.
+    Note: ChromaDB runs on port 8001 (not the default 8000) to avoid
+    conflicting with the FastAPI API.
 
     Returns:
-        bool: True si ChromaDB responde al heartbeat
+        bool: True if ChromaDB responds to the heartbeat
     """
-    print_header("5. Verificando ChromaDB")
+    print_header("5. Checking ChromaDB")
 
     try:
         import httpx
         response = httpx.get("http://localhost:8001/api/v2/heartbeat", timeout=5.0)
         if response.status_code == 200:
-            print_success("ChromaDB está corriendo y responde")
+            print_success("ChromaDB is running and responding")
             return True
         else:
-            print_error(f"ChromaDB responde con código: {response.status_code}")
+            print_error(f"ChromaDB responds with code: {response.status_code}")
             return False
     except Exception as e:
-        print_error("ChromaDB NO está corriendo")
-        print_info("Ejecuta: docker-compose up -d chromadb")
+        print_error("ChromaDB is NOT running")
+        print_info("Run: docker-compose up -d chromadb")
         return False
 
 
 def check_postgres():
     """
-    Verifica Postgres (usuarios/autenticación) y que api/.env tenga
-    DATABASE_URL/JWT_SECRET_KEY configuradas.
+    Checks Postgres (users/authentication) and that api/.env has
+    DATABASE_URL/JWT_SECRET_KEY configured.
 
-    No hay registro en el frontend: el login exige que exista al menos un
-    usuario dado de alta con scripts/create_user.py, y eso a su vez exige
-    Postgres arriba y DATABASE_URL configurada. Sin esto la app entera
-    queda inutilizable aunque el resto del entorno esté perfecto — por eso
-    es un check obligatorio, no opcional como el de la API.
+    There's no signup UI in the frontend: logging in requires at least
+    one user created with scripts/create_user.py, which in turn requires
+    Postgres to be up and DATABASE_URL configured. Without this, the
+    whole app is unusable even if the rest of the environment is
+    perfect — that's why this is a required check, not optional like
+    the API one.
 
-    A diferencia de check_chromadb() (heartbeat HTTP real), aquí solo
-    comprobamos que el puerto acepta conexiones TCP: Postgres no habla
-    HTTP, y añadir asyncpg (el driver del proyecto) sólo para este check
-    acoplaría un script de infraestructura genérico a una dependencia
-    específica de la app.
+    Unlike check_chromadb() (a real HTTP heartbeat), here we only check
+    that the port accepts TCP connections: Postgres doesn't speak HTTP,
+    and adding asyncpg (the project's driver) just for this check would
+    couple a generic infrastructure script to an app-specific dependency.
 
     Returns:
-        bool: True si api/.env tiene DATABASE_URL/JWT_SECRET_KEY y Postgres
-              responde en el host:puerto configurado.
+        bool: True if api/.env has DATABASE_URL/JWT_SECRET_KEY and
+              Postgres responds on the configured host:port.
     """
-    print_header("6. Verificando Postgres (usuarios/autenticación)")
+    print_header("6. Checking Postgres (users/authentication)")
 
     project_root = Path(__file__).parent.parent
     env_file = project_root / 'api' / '.env'
 
     if not env_file.exists():
-        print_error("api/.env NO existe")
-        print_info("Ejecuta: python3 scripts/setup.py")
+        print_error("api/.env does NOT exist")
+        print_info("Run: python3 scripts/setup.py")
         return False
 
-    # Parseo simple KEY=VALUE, igual que hace setup.py al generar el
-    # archivo — no hace falta python-dotenv para esto.
+    # Simple KEY=VALUE parsing, same as setup.py does when generating
+    # the file — no need for python-dotenv here.
     env_vars = {}
     for line in env_file.read_text().splitlines():
         line = line.strip()
@@ -438,52 +439,52 @@ def check_postgres():
 
     database_url = env_vars.get('DATABASE_URL')
     if not database_url:
-        print_error("DATABASE_URL no está configurada en api/.env")
+        print_error("DATABASE_URL is not configured in api/.env")
         return False
-    print_success("DATABASE_URL configurada")
+    print_success("DATABASE_URL configured")
 
     jwt_secret = env_vars.get('JWT_SECRET_KEY')
     if not jwt_secret:
-        print_error("JWT_SECRET_KEY no está configurada en api/.env")
+        print_error("JWT_SECRET_KEY is not configured in api/.env")
         return False
     if jwt_secret == 'change-me-generate-a-random-secret':
-        print_warning("JWT_SECRET_KEY sigue siendo el placeholder de .env.example")
-        print_info('Genera uno propio: python3 -c "import secrets; print(secrets.token_hex(32))"')
+        print_warning("JWT_SECRET_KEY is still the placeholder from .env.example")
+        print_info('Generate your own: python3 -c "import secrets; print(secrets.token_hex(32))"')
     else:
-        print_success("JWT_SECRET_KEY configurada")
+        print_success("JWT_SECRET_KEY configured")
 
-    # Conexión TCP cruda al host:puerto de DATABASE_URL. No valida
-    # credenciales ni que la tabla `users` exista (eso lo hace
-    # create_user.py al conectar), solo que Postgres esté escuchando.
+    # Raw TCP connection to DATABASE_URL's host:port. Doesn't validate
+    # credentials or that the `users` table exists (create_user.py does
+    # that when it connects) — only that Postgres is listening.
     try:
         parsed = urlparse(database_url)
         host = parsed.hostname or 'localhost'
         port = parsed.port or 5432
         with socket.create_connection((host, port), timeout=3):
-            print_success(f"Postgres responde en {host}:{port}")
+            print_success(f"Postgres responds at {host}:{port}")
             return True
     except Exception as e:
-        print_error(f"Postgres NO responde: {e}")
-        print_info("Ejecuta: docker-compose up -d postgres")
+        print_error(f"Postgres is NOT responding: {e}")
+        print_info("Run: docker-compose up -d postgres")
         return False
 
 
 def check_project_structure():
     """
-    Verifica que los directorios principales del proyecto existan.
+    Checks that the project's main directories exist.
 
-    Comprueba los directorios necesarios para que el sistema funcione:
-    - api/app/core: lógica de negocio
-    - api/app/adapters: implementaciones concretas
-    - api/app/config: configuración
-    - data: directorio de PDFs
+    Checks the directories the system needs to work:
+    - api/app/core: business logic
+    - api/app/adapters: concrete implementations
+    - api/app/config: configuration
+    - data: PDF directory
 
     Returns:
-        bool: True si todos los directorios existen
+        bool: True if all directories exist
     """
-    print_header("7. Verificando Estructura del Proyecto")
+    print_header("7. Checking Project Structure")
 
-    # Calcular rutas desde la ubicación del script
+    # Compute paths from the script's location
     project_root = Path(__file__).parent.parent
 
     required_dirs = [
@@ -495,12 +496,12 @@ def check_project_structure():
 
     all_ok = True
     for path in required_dirs:
-        # Mostrar path relativo para mejor legibilidad
+        # Show the relative path for readability
         rel_path = path.relative_to(project_root)
         if path.exists():
-            print_success(f"Directorio {rel_path} existe")
+            print_success(f"Directory {rel_path} exists")
         else:
-            print_error(f"Directorio {rel_path} NO existe")
+            print_error(f"Directory {rel_path} does NOT exist")
             all_ok = False
 
     return all_ok
@@ -508,106 +509,109 @@ def check_project_structure():
 
 def check_data_directory():
     """
-    Verifica el contenido del directorio de datos.
+    Checks the contents of the data directory.
 
-    Diferente a los otros checks: este NO falla si no hay PDFs.
-    Un directorio de datos vacío es un entorno válido (simplemente
-    no hay documentos ingestados aún). Solo falla si el directorio
-    en sí no existe.
+    Unlike the other checks: this does NOT fail if there are no PDFs.
+    An empty data directory is a valid environment (simply no documents
+    have been ingested yet). It only fails if the directory itself
+    doesn't exist.
 
     Returns:
-        bool: True si el directorio existe (independientemente de su contenido)
+        bool: True if the directory exists (regardless of its contents)
     """
-    print_header("8. Verificando Directorio de Datos")
+    print_header("8. Checking Data Directory")
 
-    # Calcular ruta desde la ubicación del script
+    # Compute the path from the script's location
     project_root = Path(__file__).parent.parent
     data_dir = project_root / 'data'
 
     if not data_dir.exists():
-        print_error("Directorio /data NO existe")
+        print_error("Directory /data does NOT exist")
         return False
 
     pdf_files = list(data_dir.glob('*.pdf'))
 
     if pdf_files:
-        print_success(f"Encontrados {len(pdf_files)} archivos PDF")
-        # Mostrar solo los primeros 5 para no saturar la terminal
+        print_success(f"Found {len(pdf_files)} PDF files")
+        # Show only the first 5 to avoid flooding the terminal
         for pdf in pdf_files[:5]:
             print_info(f"   - {pdf.name}")
         if len(pdf_files) > 5:
-            print_info(f"   ... y {len(pdf_files) - 5} más")
+            print_info(f"   ... and {len(pdf_files) - 5} more")
     else:
-        # Advertencia, no error: el directorio existe pero está vacío
-        print_warning("No hay archivos PDF en /data")
-        print_info("Copia algunos PDFs para probar el sistema")
+        # Warning, not error: the directory exists but is empty
+        print_warning("No PDF files in /data")
+        print_info("Copy some PDFs to test the system")
 
     return True
 
 
 async def check_api_health():
     """
-    Verifica el health check de la API FastAPI (check opcional).
+    Checks the FastAPI API's health check (optional check).
 
-    Esta es la única función async del script porque usa httpx.AsyncClient.
-    Todas las otras verificaciones son síncronas (subprocess o httpx síncrono).
+    This is the script's only async function because it uses
+    httpx.AsyncClient. All other checks are synchronous (subprocess or
+    sync httpx).
 
-    ¿Por qué es opcional?
-    La API no tiene que estar corriendo para que el entorno esté configurado.
-    Es un check informativo: si la API está activa, verifica que sus
-    conexiones internas (Ollama, ChromaDB) funcionan desde su perspectiva.
+    Why is it optional?
+    The API doesn't have to be running for the environment to be
+    considered configured. It's an informational check: if the API is
+    active, it verifies its internal connections (Ollama, ChromaDB)
+    work from its own perspective.
 
     Returns:
-        bool: True si la API está corriendo y responde. False en cualquier
-              otro caso, pero NO se considera error crítico.
+        bool: True if the API is running and responds. False in any
+              other case, but that is NOT treated as a critical error.
     """
-    print_header("9. Verificando API (opcional)")
+    print_header("9. Checking API (optional)")
 
     try:
         import httpx
-        # AsyncClient: versión asíncrona de httpx para usar con await
+        # AsyncClient: async version of httpx, for use with await
         async with httpx.AsyncClient() as client:
             response = await client.get("http://localhost:8000/health", timeout=5.0)
             if response.status_code == 200:
                 data = response.json()
-                print_success("API está corriendo")
+                print_success("API is running")
 
-                # El endpoint /health devuelve el estado de los servicios
-                # que la API puede ver (Ollama y ChromaDB)
+                # The /health endpoint returns the status of the
+                # services the API can see (Ollama and ChromaDB)
                 services = data.get('services', {})
                 if services.get('ollama'):
-                    print_success("  API puede conectar con Ollama")
+                    print_success("  API can connect to Ollama")
                 else:
-                    print_warning("  API NO puede conectar con Ollama")
+                    print_warning("  API can NOT connect to Ollama")
 
                 if services.get('chromadb'):
-                    print_success("  API puede conectar con ChromaDB")
+                    print_success("  API can connect to ChromaDB")
                 else:
-                    print_warning("  API NO puede conectar con ChromaDB")
+                    print_warning("  API can NOT connect to ChromaDB")
 
                 return True
             else:
-                print_warning(f"API responde con código: {response.status_code}")
+                print_warning(f"API responds with code: {response.status_code}")
                 return False
     except Exception as e:
-        # No es un error: la API simplemente no está corriendo
-        print_warning("API NO está corriendo (esto es normal si no la has iniciado)")
-        print_info("Para iniciar: docker-compose up -d")
+        # Not an error: the API simply isn't running
+        print_warning("API is NOT running (this is normal if you haven't started it)")
+        print_info("To start it: docker-compose up -d")
         return False
 
 
 def check_nodejs():
     """
-    Verifica que Node.js esté instalado y sea versión 18+.
+    Checks that Node.js is installed and is version 18+.
 
-    ¿Por qué Node.js 18+?
-    El frontend usa Vite 7 y React 19, que requieren Node.js 18 o superior.
-    Node.js 18+ garantiza compatibilidad con ESModules y APIs modernas.
+    Why Node.js 18+?
+    The frontend uses Vite 7 and React 19, which require Node.js 18 or
+    higher. Node.js 18+ guarantees compatibility with ESModules and
+    modern APIs.
 
     Returns:
-        bool: True si Node.js 18+ está instalado
+        bool: True if Node.js 18+ is installed
     """
-    print_header("10. Verificando Node.js")
+    print_header("10. Checking Node.js")
 
     try:
         result = subprocess.run(
@@ -620,14 +624,14 @@ def check_nodejs():
             version_str = result.stdout.strip()  # e.g., "v20.11.0"
             print_info(f"Node.js version: {version_str}")
 
-            # Parsear versión (quitar 'v' inicial)
+            # Parse the version (strip the leading 'v')
             version_parts = version_str.lstrip('v').split('.')
             major_version = int(version_parts[0])
 
             if major_version >= 18:
-                print_success(f"Node.js {version_str} es compatible")
+                print_success(f"Node.js {version_str} is compatible")
 
-                # También verificar npm
+                # Also check npm
                 try:
                     npm_result = subprocess.run(
                         ['npm', '--version'],
@@ -636,167 +640,167 @@ def check_nodejs():
                         timeout=5
                     )
                     if npm_result.returncode == 0:
-                        print_success(f"npm {npm_result.stdout.strip()} instalado")
+                        print_success(f"npm {npm_result.stdout.strip()} installed")
                 except:
-                    print_warning("npm no encontrado (debería venir con Node.js)")
+                    print_warning("npm not found (should ship with Node.js)")
 
                 return True
             else:
-                print_error(f"Node.js {version_str} es muy antiguo. Se requiere 18+")
-                print_info("Actualiza Node.js: https://nodejs.org/")
-                print_info("O usa nvm/fnm: nvm install 20")
+                print_error(f"Node.js {version_str} is too old. 18+ is required")
+                print_info("Update Node.js: https://nodejs.org/")
+                print_info("Or use nvm/fnm: nvm install 20")
                 return False
         else:
-            print_error("Node.js no responde correctamente")
+            print_error("Node.js isn't responding correctly")
             return False
     except FileNotFoundError:
-        print_error("Node.js NO está instalado")
-        print_info("Instala desde: https://nodejs.org/")
-        print_info("O usa nvm: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash")
+        print_error("Node.js is NOT installed")
+        print_info("Install it from: https://nodejs.org/")
+        print_info("Or use nvm: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash")
         return False
     except subprocess.TimeoutExpired:
-        print_error("Node.js no responde (timeout)")
+        print_error("Node.js isn't responding (timeout)")
         return False
 
 
 def check_frontend():
     """
-    Verifica que el frontend esté configurado correctamente.
+    Checks that the frontend is correctly configured.
 
-    Comprueba:
-    1. Que el directorio frontend/ exista
-    2. Que package.json exista
-    3. Que node_modules esté instalado (npm install ejecutado)
+    Checks:
+    1. That the frontend/ directory exists
+    2. That package.json exists
+    3. That node_modules is installed (npm install has run)
 
     Returns:
-        bool: True si el frontend está listo para usar
+        bool: True if the frontend is ready to use
     """
-    print_header("11. Verificando Frontend")
+    print_header("11. Checking Frontend")
 
     project_root = Path(__file__).parent.parent
     frontend_dir = project_root / 'frontend'
 
-    # Check 1: Directorio frontend existe
+    # Check 1: frontend directory exists
     if not frontend_dir.exists():
-        print_error("Directorio frontend/ NO existe")
-        print_info("Clona el repositorio completo o ejecuta setup.py")
+        print_error("Directory frontend/ does NOT exist")
+        print_info("Clone the full repository or run setup.py")
         return False
 
-    print_success("Directorio frontend/ existe")
+    print_success("Directory frontend/ exists")
 
-    # Check 2: package.json existe
+    # Check 2: package.json exists
     package_json = frontend_dir / 'package.json'
     if not package_json.exists():
-        print_error("package.json NO encontrado en frontend/")
+        print_error("package.json NOT found in frontend/")
         return False
 
-    print_success("package.json encontrado")
+    print_success("package.json found")
 
-    # Check 3: node_modules existe (dependencias instaladas)
+    # Check 3: node_modules exists (dependencies installed)
     node_modules = frontend_dir / 'node_modules'
     if not node_modules.exists():
-        print_warning("node_modules NO encontrado")
-        print_info("Las dependencias no están instaladas")
-        print_info("Ejecuta: cd frontend && npm install")
+        print_warning("node_modules NOT found")
+        print_info("Dependencies aren't installed")
+        print_info("Run: cd frontend && npm install")
         return False
 
-    # Verificar que tiene contenido (no está vacío)
+    # Check that it has content (isn't empty)
     if not any(node_modules.iterdir()):
-        print_warning("node_modules está vacío")
-        print_info("Ejecuta: cd frontend && npm install")
+        print_warning("node_modules is empty")
+        print_info("Run: cd frontend && npm install")
         return False
 
-    print_success("Dependencias del frontend instaladas (node_modules)")
+    print_success("Frontend dependencies installed (node_modules)")
 
-    # Check 4 (opcional): Verificar que react está instalado
+    # Check 4 (optional): check that react is installed
     react_dir = node_modules / 'react'
     if react_dir.exists():
-        print_success("React instalado correctamente")
+        print_success("React installed correctly")
     else:
-        print_warning("React no encontrado en node_modules")
+        print_warning("React not found in node_modules")
 
     return True
 
 
 # ============================================================================
-# RESUMEN DE RESULTADOS
+# RESULTS SUMMARY
 # ============================================================================
 def print_summary(results, optional_results):
     """
-    Imprime un resumen de todos los checks y las siguientes acciones.
+    Prints a summary of all checks and the next steps.
 
     Args:
-        results: Diccionario {nombre_check: bool} con los resultados requeridos
-        optional_results: Diccionario {nombre_check: bool} con los resultados opcionales
+        results: Dict {check_name: bool} with the required results
+        optional_results: Dict {check_name: bool} with the optional results
     """
-    print_header("Resumen de Verificación")
+    print_header("Verification Summary")
 
-    # Solo contar checks requeridos para pass/fail
+    # Only count required checks for pass/fail
     total = len(results)
     passed = sum(1 for r in results.values() if r)
     failed = total - passed
 
-    print(f"Checks requeridos: {total}")
-    print_success(f"Pasados: {passed}")
+    print(f"Required checks: {total}")
+    print_success(f"Passed: {passed}")
     if failed > 0:
-        print_error(f"Fallidos: {failed}")
+        print_error(f"Failed: {failed}")
 
-    # Mostrar checks opcionales por separado
+    # Show optional checks separately
     if optional_results:
         optional_passed = sum(1 for r in optional_results.values() if r)
-        print_info(f"Checks opcionales: {len(optional_results)} ({optional_passed} activos)")
+        print_info(f"Optional checks: {len(optional_results)} ({optional_passed} active)")
 
     print("\n" + "="*60)
 
     if failed == 0:
-        # Todo correcto: mostrar los próximos pasos para usar el sistema
-        print_success("🎉 ¡TODO ESTÁ CONFIGURADO CORRECTAMENTE!")
-        print_info("\nPróximos pasos:")
-        print_info("1. Iniciar Ollama: ollama serve")
-        print_info("2. Iniciar Docker: docker-compose up -d")
-        print_info("3. Crear tu usuario (no hay registro en el frontend):")
-        print_info("   python scripts/create_user.py --email tu@email.com")
-        print_info("4. Iniciar Frontend: cd frontend && npm run dev")
-        print_info("5. Abrir en navegador: http://localhost:5173")
-        print_info("6. Ingestar PDFs desde la interfaz o con: python scripts/ingest_pdfs.py")
+        # Everything is fine: show the next steps to use the system
+        print_success("🎉 EVERYTHING IS CORRECTLY CONFIGURED!")
+        print_info("\nNext steps:")
+        print_info("1. Start Ollama: ollama serve")
+        print_info("2. Start Docker: docker-compose up -d")
+        print_info("3. Create your user (no signup in the frontend):")
+        print_info("   python scripts/create_user.py --email you@email.com")
+        print_info("4. Start the Frontend: cd frontend && npm run dev")
+        print_info("5. Open in your browser: http://localhost:5173")
+        print_info("6. Ingest PDFs from the UI or with: python scripts/ingest_pdfs.py")
     else:
-        print_warning("⚠️  Hay algunos problemas que debes solucionar")
-        print_info("\nRevisa los errores marcados con ❌ arriba")
+        print_warning("⚠️  There are some issues you need to fix")
+        print_info("\nCheck the errors marked with ❌ above")
 
     print("="*60 + "\n")
 
 
 # ============================================================================
-# PUNTO DE ENTRADA PRINCIPAL
+# MAIN ENTRY POINT
 # ============================================================================
 async def main():
     """
-    Función principal: ejecuta los 11 checks en secuencia y muestra el resumen.
+    Main function: runs all 11 checks in sequence and shows the summary.
 
-    Los checks se ejecutan en orden de dependencia lógica:
-    1. Python y dependencias primero (sin estas nada funciona)
-    2. Servicios externos (Ollama, Docker, ChromaDB, Postgres)
-    3. Estructura local del proyecto
-    4. API (último de backend)
-    5. Node.js y frontend (para la interfaz web)
+    Checks run in order of logical dependency:
+    1. Python and dependencies first (nothing works without these)
+    2. External services (Ollama, Docker, ChromaDB, Postgres)
+    3. Local project structure
+    4. API (last of the backend checks)
+    5. Node.js and frontend (for the web UI)
 
-    Nota: los checks se ejecutan secuencialmente (no en paralelo) porque
-    el output debe ser legible y ordenado en la terminal.
+    Note: checks run sequentially (not in parallel) so the terminal
+    output stays readable and ordered.
     """
     print(f"\n{Colors.BOLD}{Colors.BLUE}")
     print("╔═══════════════════════════════════════════════════════════╗")
     print("║                                                           ║")
-    print("║     🧪 VERIFICACIÓN DE SETUP - BIBLIOTECARIO-IA 🧪      ║")
+    print("║     🧪 SETUP VERIFICATION - BIBLIOTECARIO-IA 🧪          ║")
     print("║                                                           ║")
     print("╚═══════════════════════════════════════════════════════════╝")
     print(f"{Colors.ENDC}\n")
 
-    # Diccionarios para almacenar resultados: nombre → True/False
-    results = {}           # Checks requeridos
-    optional_results = {}  # Checks opcionales (no afectan el exit code)
+    # Dicts to store results: name -> True/False
+    results = {}           # Required checks
+    optional_results = {}  # Optional checks (don't affect the exit code)
 
-    # Ejecutar checks en secuencia
-    # Backend checks (requeridos)
+    # Run checks in sequence
+    # Backend checks (required)
     results['python'] = check_python_version()
     results['dependencies'] = check_dependencies()
     results['ollama'] = check_ollama()
@@ -806,18 +810,18 @@ async def main():
     results['structure'] = check_project_structure()
     results['data'] = check_data_directory()
 
-    # Check opcional: API (solo informativo)
+    # Optional check: API (informational only)
     optional_results['api'] = await check_api_health()
 
-    # Frontend checks (requeridos)
+    # Frontend checks (required)
     results['nodejs'] = check_nodejs()
     results['frontend'] = check_frontend()
 
-    # Resumen final con conteo de pasados/fallidos
+    # Final summary with passed/failed count
     print_summary(results, optional_results)
 
-    # Exit code: 0 = todo OK, 1 = hay errores en checks REQUERIDOS
-    # Los checks opcionales no afectan el exit code
+    # Exit code: 0 = everything OK, 1 = there are errors in REQUIRED checks
+    # Optional checks don't affect the exit code
     if all(results.values()):
         sys.exit(0)
     else:
@@ -825,18 +829,18 @@ async def main():
 
 
 # ============================================================================
-# BLOQUE DE ENTRADA
+# ENTRY POINT
 # ============================================================================
-# Mismo patrón que en los otros scripts CLI del proyecto.
-# asyncio.run() es necesario porque check_api_health() es async.
-# El exit code 130 para KeyboardInterrupt es la convención Unix
-# (128 + número de señal SIGINT = 2).
+# Same pattern as the project's other CLI scripts.
+# asyncio.run() is needed because check_api_health() is async.
+# Exit code 130 for KeyboardInterrupt is the Unix convention
+# (128 + signal number SIGINT = 2).
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print(f"\n{Colors.YELLOW}⚠️  Verificación interrumpida por el usuario{Colors.ENDC}")
-        sys.exit(130)     # Convención Unix: 128 + SIGINT(2)
+        print(f"\n{Colors.YELLOW}⚠️  Verification interrupted by user{Colors.ENDC}")
+        sys.exit(130)     # Unix convention: 128 + SIGINT(2)
     except Exception as e:
-        print(f"\n{Colors.RED}❌ Error inesperado: {e}{Colors.ENDC}")
+        print(f"\n{Colors.RED}❌ Unexpected error: {e}{Colors.ENDC}")
         sys.exit(1)
