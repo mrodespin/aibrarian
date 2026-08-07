@@ -1,21 +1,21 @@
 # /api/tests/__init__.py
 """
-Test Suite para Bibliotecario-IA API
+Test Suite for the Bibliotecario-IA API
 
-Estructura de tests:
-- test_rag_service.py: Tests del servicio RAG (queries)
-- test_sync_service.py: Tests del pipeline de ingesta
-- test_api.py: Tests de endpoints FastAPI
-- test_integration.py: Tests E2E del flujo completo
-- conftest.py: Fixtures compartidas
+Test structure:
+- test_rag_service.py: RAG service tests (queries)
+- test_sync_service.py: Ingestion pipeline tests
+- test_api.py: FastAPI endpoint tests
+- test_integration.py: E2E tests of the full flow
+- conftest.py: Shared fixtures
 
-Ejecución:
+Running:
     cd api
     source venv/bin/activate
-    pytest                          # Todos los tests
-    pytest tests/test_rag_service.py    # Tests específicos
-    pytest -m unit                  # Solo tests unitarios
-    pytest -m integration           # Solo tests de integración
-    pytest -v                       # Modo verbose
-    pytest -k "test_query"          # Tests que contengan "query"
+    pytest                          # All tests
+    pytest tests/test_rag_service.py    # Specific tests
+    pytest -m unit                  # Unit tests only
+    pytest -m integration           # Integration tests only
+    pytest -v                       # Verbose mode
+    pytest -k "test_query"          # Tests matching "query"
 """

@@ -1,14 +1,14 @@
 # /api/tests/test_sync_service.py
 """
-Tests del SyncService - Pipeline de ingesta de documentos.
+SyncService tests - Document ingestion pipeline.
 
-El SyncService es responsable de:
-1. Procesar documentos (PDFs, Notion)
-2. Dividir en chunks
-3. Generar embeddings
-4. Almacenar en ChromaDB
+SyncService is responsible for:
+1. Processing documents (PDFs, Notion)
+2. Splitting them into chunks
+3. Generating embeddings
+4. Storing them in ChromaDB
 
-Estos tests verifican el flujo de ingesta y manejo de errores.
+These tests verify the ingestion flow and error handling.
 """
 
 import pytest
@@ -20,20 +20,20 @@ from app.core.domain.models import Document, Chunk
 
 
 # ============================================================================
-# TESTS UNITARIOS DEL FLUJO DE INGESTA
+# INGESTION FLOW UNIT TESTS
 # ============================================================================
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_sync_document_from_file_success(sync_service_with_mocks, mock_pdf_processor, mock_ollama, mock_chromadb):
     """
-    Test básico: ingesta exitosa de un documento.
+    Basic test: a document is ingested successfully.
 
-    Verifica el flujo completo:
-    1. Procesa documento → Document
-    2. Divide en chunks → List[Chunk]
-    3. Genera embeddings → Chunk con embedding
-    4. Almacena en ChromaDB
+    Verifies the full flow:
+    1. Processes the document → Document
+    2. Splits into chunks → List[Chunk]
+    3. Generates embeddings → Chunk with embedding
+    4. Stores it in ChromaDB
     """
     # Arrange
     test_file_path = "/test/document.pdf"
@@ -42,18 +42,18 @@ async def test_sync_document_from_file_success(sync_service_with_mocks, mock_pdf
     result = await sync_service_with_mocks.sync_document_from_file(test_file_path)
 
     # Assert
-    # Verificar que llamó al processor (con source como keyword arg)
+    # Verify the processor was called (with source as a keyword arg)
     mock_pdf_processor.process_document.assert_called_once()
     call_args = mock_pdf_processor.process_document.call_args
     assert call_args.kwargs['source'] == test_file_path or call_args.args[0] == test_file_path
 
-    # Verificar que generó embeddings (usa generate_embeddings_batch, no generate_embedding)
+    # Verify embeddings were generated (uses generate_embeddings_batch, not generate_embedding)
     assert mock_ollama.generate_embeddings_batch.called
 
-    # Verificar que almacenó en ChromaDB
+    # Verify it was stored in ChromaDB
     mock_chromadb.store_chunks.assert_called_once()
 
-    # Result debe indicar éxito
+    # The result must indicate success
     assert result is not None
     assert result.success == True
 
@@ -62,9 +62,9 @@ async def test_sync_document_from_file_success(sync_service_with_mocks, mock_pdf
 @pytest.mark.asyncio
 async def test_ingest_creates_chunks(sync_service_with_mocks):
     """
-    Test: verificar que el documento se divide en chunks.
+    Test: verify the document is split into chunks.
 
-    Un documento largo debe dividirse en fragmentos manejables.
+    A long document must be split into manageable fragments.
     """
     # Arrange
     test_file_path = "/test/long_document.pdf"
@@ -73,19 +73,19 @@ async def test_ingest_creates_chunks(sync_service_with_mocks):
     await sync_service_with_mocks.sync_document_from_file(test_file_path)
 
     # Assert
-    # Verificar que se llamó a store_chunks con una lista de chunks
-    # (el mock retorna un Document que luego se divide)
-    # El servicio debe haber procesado y creado chunks
-    assert True  # Placeholder - verificar según implementación específica
+    # Verify store_chunks was called with a list of chunks
+    # (the mock returns a Document that then gets split)
+    # The service must have processed and created chunks
+    assert True  # Placeholder - verify per the specific implementation
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_ingest_generates_embeddings_for_each_chunk(sync_service_with_mocks, mock_ollama):
     """
-    Test: verificar que se generan embeddings para cada chunk.
+    Test: verify embeddings are generated for each chunk.
 
-    El servicio usa generate_embeddings_batch para vectorizar todos los chunks de una vez.
+    The service uses generate_embeddings_batch to vectorize all chunks at once.
     """
     # Arrange
     test_file_path = "/test/document.pdf"
@@ -94,7 +94,7 @@ async def test_ingest_generates_embeddings_for_each_chunk(sync_service_with_mock
     await sync_service_with_mocks.sync_document_from_file(test_file_path)
 
     # Assert
-    # Verificar que generate_embeddings_batch fue llamado
+    # Verify generate_embeddings_batch was called
     assert mock_ollama.generate_embeddings_batch.called
 
 
@@ -102,9 +102,9 @@ async def test_ingest_generates_embeddings_for_each_chunk(sync_service_with_mock
 @pytest.mark.asyncio
 async def test_ingest_stores_metadata(sync_service_with_mocks, mock_chromadb):
     """
-    Test: verificar que se preserva metadata del documento.
+    Test: verify the document's metadata is preserved.
 
-    Los chunks deben incluir metadata (source, page, etc.) para trazabilidad.
+    Chunks must include metadata (source, page, etc.) for traceability.
     """
     # Arrange
     test_file_path = "/test/document.pdf"
@@ -113,12 +113,12 @@ async def test_ingest_stores_metadata(sync_service_with_mocks, mock_chromadb):
     await sync_service_with_mocks.sync_document_from_file(test_file_path)
 
     # Assert
-    # Verificar que store_chunks fue llamado
+    # Verify store_chunks was called
     mock_chromadb.store_chunks.assert_called_once()
 
-    # Los chunks deben tener metadata
+    # The chunks must have metadata
     call_args = mock_chromadb.store_chunks.call_args
-    # Los chunks pueden estar en args o kwargs
+    # The chunks may be in args or kwargs
     if call_args.args:
         chunks = call_args.args[0]
     else:
@@ -130,25 +130,25 @@ async def test_ingest_stores_metadata(sync_service_with_mocks, mock_chromadb):
 
 
 # ============================================================================
-# TESTS DE VALIDACIÓN DE INPUTS
+# INPUT VALIDATION TESTS
 # ============================================================================
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_ingest_with_empty_path_raises_error(sync_service_with_mocks):
     """
-    Test: path vacío debe retornar error o fallar en el procesamiento.
+    Test: an empty path must return an error or fail during processing.
 
-    El servicio captura excepciones y retorna SyncResult con success=False.
+    The service catches exceptions and returns a SyncResult with success=False.
     """
     # Act
     result = await sync_service_with_mocks.sync_document_from_file("")
 
     # Assert
-    # Puede fallar o retornar un resultado con success=False
+    # It may fail or return a result with success=False
     assert result is not None
     if result.success:
-        # Si por alguna razón no falla, al menos verificar que procesó algo
+        # If it doesn't fail for some reason, at least verify it processed something
         assert result.chunks_created >= 0
 
 
@@ -156,11 +156,11 @@ async def test_ingest_with_empty_path_raises_error(sync_service_with_mocks):
 @pytest.mark.asyncio
 async def test_ingest_with_none_path_raises_error(sync_service_with_mocks, mock_pdf_processor):
     """
-    Test: path None debe retornar error.
+    Test: a None path must return an error.
 
-    El procesador debe fallar con None path.
+    The processor must fail with a None path.
     """
-    # Arrange: configurar mock para simular error con None
+    # Arrange: configure the mock to simulate an error with None
     mock_pdf_processor.process_document = AsyncMock(
         side_effect=TypeError("source cannot be None")
     )
@@ -177,11 +177,11 @@ async def test_ingest_with_none_path_raises_error(sync_service_with_mocks, mock_
 @pytest.mark.asyncio
 async def test_ingest_with_nonexistent_file(sync_service_with_mocks, mock_pdf_processor):
     """
-    Test: archivo inexistente debe manejarse apropiadamente.
+    Test: a nonexistent file must be handled properly.
 
-    El processor puede lanzar excepción o retornar error.
+    The processor may raise an exception or return an error.
     """
-    # Arrange: configurar mock para simular archivo no encontrado
+    # Arrange: configure the mock to simulate a file not found
     mock_pdf_processor.process_document = AsyncMock(
         side_effect=FileNotFoundError("File not found")
     )
@@ -189,23 +189,23 @@ async def test_ingest_with_nonexistent_file(sync_service_with_mocks, mock_pdf_pr
     # Act
     result = await sync_service_with_mocks.sync_document_from_file("/nonexistent/file.pdf")
 
-    # Assert: El servicio captura la excepción y retorna SyncResult con success=False
+    # Assert: the service catches the exception and returns a SyncResult with success=False
     assert result is not None
     assert result.success == False
     assert "failed" in result.message.lower() or "not found" in result.message.lower()
 
 
 # ============================================================================
-# TESTS DE MANEJO DE ERRORES
+# ERROR HANDLING TESTS
 # ============================================================================
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_ingest_handles_processor_error(sync_service_with_mocks, mock_pdf_processor):
     """
-    Test: error del processor debe manejarse.
+    Test: a processor error must be handled.
 
-    Si falla la extracción de texto, el servicio retorna SyncResult con success=False.
+    If text extraction fails, the service returns a SyncResult with success=False.
     """
     # Arrange
     mock_pdf_processor.process_document = AsyncMock(
@@ -225,11 +225,11 @@ async def test_ingest_handles_processor_error(sync_service_with_mocks, mock_pdf_
 @pytest.mark.asyncio
 async def test_ingest_handles_embedding_error(sync_service_with_mocks, mock_ollama):
     """
-    Test: error al generar embeddings debe manejarse.
+    Test: an embedding-generation error must be handled.
 
-    Si Ollama falla al vectorizar, el servicio retorna SyncResult con success=False.
+    If Ollama fails to vectorize, the service returns a SyncResult with success=False.
     """
-    # Arrange: El sync service usa generate_embeddings_batch
+    # Arrange: the sync service uses generate_embeddings_batch
     mock_ollama.generate_embeddings_batch = AsyncMock(
         side_effect=Exception("Ollama service unavailable")
     )
@@ -247,9 +247,9 @@ async def test_ingest_handles_embedding_error(sync_service_with_mocks, mock_olla
 @pytest.mark.asyncio
 async def test_ingest_handles_chromadb_error(sync_service_with_mocks, mock_chromadb):
     """
-    Test: error al almacenar en ChromaDB debe manejarse.
+    Test: a ChromaDB storage error must be handled.
 
-    Si falla el almacenamiento, debe fallar la ingesta.
+    If storage fails, the ingestion must fail.
     """
     # Arrange
     mock_chromadb.store_chunks = AsyncMock(
@@ -266,19 +266,19 @@ async def test_ingest_handles_chromadb_error(sync_service_with_mocks, mock_chrom
 
 
 # ============================================================================
-# TESTS DE EDGE CASES
+# EDGE CASE TESTS
 # ============================================================================
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_ingest_empty_document(sync_service_with_mocks, mock_pdf_processor):
     """
-    Test: documento vacío debe manejarse apropiadamente.
+    Test: an empty document must be handled properly.
 
-    Un PDF sin contenido de texto debe procesarse sin fallar
-    (puede generar advertencia o simplemente no crear chunks).
+    A PDF with no text content must be processed without failing (it
+    may produce a warning or simply create no chunks).
     """
-    # Arrange: documento con contenido vacío
+    # Arrange: document with empty content
     from app.core.domain.models import DocumentSource
     empty_doc = Document(
         id="empty_001",
@@ -287,14 +287,14 @@ async def test_ingest_empty_document(sync_service_with_mocks, mock_pdf_processor
         metadata={"source": "empty.pdf"}
     )
     mock_pdf_processor.process_document = AsyncMock(
-        return_value=(empty_doc, [])  # Documento vacío sin chunks
+        return_value=(empty_doc, [])  # Empty document, no chunks
     )
 
     # Act
     result = await sync_service_with_mocks.sync_document_from_file("/test/empty.pdf")
 
     # Assert
-    # Debe completar sin error (aunque no genere chunks útiles)
+    # Must complete without error (even if it produces no useful chunks)
     assert result is not None
 
 
@@ -302,20 +302,20 @@ async def test_ingest_empty_document(sync_service_with_mocks, mock_pdf_processor
 @pytest.mark.asyncio
 async def test_ingest_very_large_document(sync_service_with_mocks, mock_pdf_processor, mock_ollama):
     """
-    Test: documento muy largo debe dividirse en múltiples chunks.
+    Test: a very long document must be split into multiple chunks.
 
-    Un documento de muchas páginas debe chunkearse apropiadamente.
+    A document with many pages must be chunked properly.
     """
-    # Arrange: documento muy largo (100KB de texto)
+    # Arrange: a very long document (100KB of text)
     from app.core.domain.models import DocumentSource
-    long_content = "Este es un documento muy largo. " * 3000  # ~100KB
+    long_content = "This is a very long document. " * 3000  # ~100KB
     large_doc = Document(
         id="large_001",
         source=DocumentSource.PDF,
         content=long_content,
         metadata={"source": "large.pdf", "pages": 100}
     )
-    # Simular muchos chunks
+    # Simulate many chunks
     large_chunks = [
         Chunk(
             id=f"chunk_{i}",
@@ -323,7 +323,7 @@ async def test_ingest_very_large_document(sync_service_with_mocks, mock_pdf_proc
             content=f"Chunk {i}: " + long_content[i*1000:(i+1)*1000],
             metadata={"page": i // 10 + 1, "position": i}
         )
-        for i in range(min(100, len(long_content) // 1000))  # Máximo 100 chunks para el test
+        for i in range(min(100, len(long_content) // 1000))  # Max 100 chunks for the test
     ]
     mock_pdf_processor.process_document = AsyncMock(
         return_value=(large_doc, large_chunks)
@@ -333,25 +333,25 @@ async def test_ingest_very_large_document(sync_service_with_mocks, mock_pdf_proc
     result = await sync_service_with_mocks.sync_document_from_file("/test/large.pdf")
 
     # Assert
-    # Debe haber llamado a generate_embeddings_batch con muchos chunks
+    # generate_embeddings_batch must have been called with many chunks
     assert mock_ollama.generate_embeddings_batch.called
-    # Verificar que procesó muchos chunks
+    # Verify it processed many chunks
     call_args = mock_ollama.generate_embeddings_batch.call_args[0]
     texts_batch = call_args[0]
-    assert len(texts_batch) > 1  # Debe haber múltiples chunks
+    assert len(texts_batch) > 1  # There must be multiple chunks
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_sync_document_from_file_with_special_characters(sync_service_with_mocks, mock_pdf_processor):
     """
-    Test: documento con caracteres especiales debe procesarse correctamente.
+    Test: a document with special characters must be processed correctly.
 
-    Acentos, emojis, símbolos matemáticos, etc. deben manejarse.
+    Accents, emoji, mathematical symbols, etc. must be handled.
     """
-    # Arrange: contenido con caracteres especiales
+    # Arrange: content with special characters
     from app.core.domain.models import DocumentSource
-    special_content = "RAG 🤖 utiliza embeddings ∑ para búsqueda semántica ñ á é"
+    special_content = "RAG 🤖 uses embeddings ∑ for semantic search ñ á é"
     special_doc = Document(
         id="special_001",
         source=DocumentSource.PDF,
@@ -378,19 +378,19 @@ async def test_sync_document_from_file_with_special_characters(sync_service_with
 
 
 # ============================================================================
-# TESTS DE CHUNKING
+# CHUNKING TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_chunk_size_configuration():
     """
-    Test: verificar que el tamaño de chunks es configurable.
+    Test: verify the chunk size is configurable.
 
-    El sistema debe permitir configurar CHUNK_SIZE y CHUNK_OVERLAP
-    desde settings o parámetros.
+    The system must let you configure CHUNK_SIZE and CHUNK_OVERLAP
+    from settings or parameters.
     """
     from app.config.settings import settings
 
-    # Assert: verificar que existen las configuraciones
+    # Assert: verify the settings exist
     assert hasattr(settings, 'CHUNK_SIZE') or hasattr(settings, 'chunk_size')
     assert hasattr(settings, 'CHUNK_OVERLAP') or hasattr(settings, 'chunk_overlap')

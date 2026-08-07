@@ -1,12 +1,12 @@
 # /api/tests/test_auth_service.py
 """
-Tests de AuthService - login, emisión y validación de JWT de sesión.
+AuthService tests - login, session JWT issuance and validation.
 
-A diferencia de RAGService/SyncService, AuthService lanza excepciones en
-vez de devolver un resultado con el error embebido (ver docstring de
-auth_service.py) — estos tests verifican explícitamente ese contrato,
-incluida la propagación de errores del repositorio (no deben
-convertirse silenciosamente en "credenciales inválidas").
+Unlike RAGService/SyncService, AuthService raises exceptions instead of
+returning a result with the error embedded (see auth_service.py's
+docstring) — these tests explicitly verify that contract, including
+propagating repository errors (they must not silently turn into
+"invalid credentials").
 """
 
 from datetime import datetime, timedelta, timezone
@@ -26,7 +26,7 @@ from tests.conftest import TEST_USER_PASSWORD
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_authenticate_success(auth_service_with_mocks):
-    """Login con email y contraseña correctos devuelve el User."""
+    """Logging in with the correct email and password returns the User."""
     user = await auth_service_with_mocks.authenticate("test@example.com", TEST_USER_PASSWORD)
 
     assert user.email == "test@example.com"
@@ -36,7 +36,7 @@ async def test_authenticate_success(auth_service_with_mocks):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_authenticate_wrong_password(auth_service_with_mocks):
-    """Contraseña incorrecta lanza InvalidCredentialsError."""
+    """A wrong password raises InvalidCredentialsError."""
     with pytest.raises(InvalidCredentialsError):
         await auth_service_with_mocks.authenticate("test@example.com", "wrong-password")
 
@@ -44,19 +44,19 @@ async def test_authenticate_wrong_password(auth_service_with_mocks):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_authenticate_unknown_email(auth_service_with_mocks):
-    """Email inexistente lanza InvalidCredentialsError (no un 500 ni None)."""
+    """A nonexistent email raises InvalidCredentialsError (not a 500 or None)."""
     with pytest.raises(InvalidCredentialsError):
-        await auth_service_with_mocks.authenticate("nadie@example.com", "cualquier-cosa")
+        await auth_service_with_mocks.authenticate("nobody@example.com", "whatever")
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_authenticate_propagates_repository_errors(auth_service_with_mocks, mock_user_repository):
     """
-    Un fallo de conexión/DB en el repositorio debe propagarse tal cual,
-    NO convertirse en InvalidCredentialsError. Confundir ambos casos
-    reportaría un fallo de Neon como "credenciales inválidas", que es
-    un bug de seguridad (ver docstring de UserRepositoryPort).
+    A connection/DB failure in the repository must propagate as-is,
+    NOT turn into InvalidCredentialsError. Conflating the two would
+    report a Neon outage as "invalid credentials", which is a security
+    bug (see UserRepositoryPort's docstring).
     """
     async def broken_get_by_email(email: str):
         raise ConnectionError("Postgres unavailable")
@@ -74,7 +74,7 @@ async def test_authenticate_propagates_repository_errors(auth_service_with_mocks
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_token_roundtrip(auth_service_with_mocks):
-    """Un token emitido para un usuario se decodifica de vuelta al mismo user_id/email."""
+    """A token issued for a user decodes back to the same user_id/email."""
     user = await auth_service_with_mocks.authenticate("test@example.com", TEST_USER_PASSWORD)
 
     token = auth_service_with_mocks.create_access_token(user)
@@ -86,7 +86,7 @@ async def test_token_roundtrip(auth_service_with_mocks):
 
 @pytest.mark.unit
 def test_decode_expired_token(auth_service_with_mocks):
-    """Un token con exp en el pasado lanza InvalidTokenError."""
+    """A token whose exp is in the past raises InvalidTokenError."""
     now = datetime.now(timezone.utc)
     expired_payload = {
         "sub": "1",
@@ -102,7 +102,7 @@ def test_decode_expired_token(auth_service_with_mocks):
 
 @pytest.mark.unit
 def test_decode_token_wrong_secret(auth_service_with_mocks):
-    """Un token firmado con un secreto distinto lanza InvalidTokenError."""
+    """A token signed with a different secret raises InvalidTokenError."""
     now = datetime.now(timezone.utc)
     payload = {
         "sub": "1",
@@ -110,7 +110,7 @@ def test_decode_token_wrong_secret(auth_service_with_mocks):
         "iat": now,
         "exp": now + timedelta(minutes=30),
     }
-    token_wrong_secret = jwt.encode(payload, "otro-secreto-distinto", algorithm=settings.jwt_algorithm)
+    token_wrong_secret = jwt.encode(payload, "a-different-secret", algorithm=settings.jwt_algorithm)
 
     with pytest.raises(InvalidTokenError):
         auth_service_with_mocks.decode_access_token(token_wrong_secret)
