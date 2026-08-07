@@ -47,7 +47,7 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │
 ├── /scripts/                       # Scripts de Automatización
 │   ├── setup.py                    # Instalación automática e interactiva
-│   ├── verify_setup.py             # Verificación del entorno (8 checks)
+│   ├── verify_setup.py             # Verificación del entorno (11 checks)
 │   ├── ingest_pdfs.py              # Ingesta de PDFs (CLI alternativa a API)
 │   ├── ingest_notion.py            # Ingesta de Notion (CLI alternativa a API)
 │   ├── create_user.py              # Alta de usuarios de login (sin UI de registro)

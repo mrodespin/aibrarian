@@ -410,16 +410,16 @@ Además de la API, el proyecto incluye scripts de automatización en el director
 Instala y configura todo el entorno de desarrollo interactivamente.
 
 ```bash
-python3 setup.py
+python3 scripts/setup.py
 ```
 
-**Qué hace:** Verifica OS, instala Homebrew/Ollama/Docker, configura Python/venv, crea .env, ejecuta verify_setup.py.
+**Qué hace:** Verifica OS, instala Homebrew/Ollama/Docker, configura Python/venv, crea .env (con un `JWT_SECRET_KEY` generado), levanta ChromaDB + Postgres + API en Docker, ejecuta `verify_setup.py` y, al final, ofrece crear tu usuario (`create_user.py`) — no hay UI de registro, así que sin esto no puedes hacer login.
 
 ---
 
 ### 2. `verify_setup.py` - Verificación del Entorno
 
-Verifica que todos los servicios estén correctamente instalados (8 checks: Python, dependencias, Ollama, Docker, ChromaDB, estructura, data, API).
+Verifica que todos los servicios estén correctamente instalados (11 checks: Python, dependencias, Ollama, Docker, ChromaDB, Postgres/auth, estructura, data, API, Node.js, frontend).
 
 ```bash
 python scripts/verify_setup.py

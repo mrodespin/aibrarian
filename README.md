@@ -498,7 +498,8 @@ cd frontend && npm run dev
 - **CI de frontend**: el workflow actual (`.github/workflows/test.yml`) solo corre `pytest -m unit`; añadir `npm run build` y `npm run lint` para detectar roturas del frontend en cada PR
 - **Subir cobertura de tests del backend**: 67% global, pero concentrado en los *services* (mockeados); los adapters que hablan con servicios reales están poco cubiertos
 - **Tracing distribuido**: no hay OpenTelemetry/Jaeger implementado, solo logging estructurado y métricas (ver Observabilidad)
-- **Revisar/renovar los scripts de instalación** (`scripts/setup.py`, `scripts/verify_setup.py`): han quedado descolgados de cómo funciona el proyecto hoy — no contemplan Postgres (añadido junto con el historial de conversación) como dependencia igual de necesaria que ChromaDB, y no hay ninguna comprobación que avise si la API está corriendo a la vez en Docker (`docker-compose up -d`) y nativa (`uvicorn --reload`), algo que puede pasar fácilmente en desarrollo activo y que hace que cambios en `api/.env` parezcan no aplicarse (responde el contenedor viejo, no el proceso reiniciado). Decidir entre actualizarlos o rehacerlos desde cero.
+- **Detectar API corriendo dos veces a la vez** (Docker `docker-compose up -d` y nativa `uvicorn --reload`): puede pasar fácilmente en desarrollo activo y hace que cambios en `api/.env` parezcan no aplicarse (responde el contenedor viejo, no el proceso reiniciado). `scripts/verify_setup.py` no lo detecta hoy.
+- **Refactor de `ingest_notion.py`**: el modo `--database` reimplementa a mano el pipeline de embeddings/almacenamiento en vez de reutilizar `SyncService.sync_document_from_file()` (que sí usa el modo `--page`) — evita volver a pedir cada página a la API de Notion, pero duplica lógica que solo vive correctamente en un sitio.
 
 ---
 
