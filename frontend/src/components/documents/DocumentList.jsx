@@ -1,14 +1,15 @@
 /**
- * Document list panel — explora la base de conocimiento sin pasar por el
- * chat (consume GET /documents, que a su vez no pasa por similarity
- * search, ver RAGService.list_known_documents en el backend).
+ * Document list panel — browses the knowledge base without going
+ * through the chat (consumes GET /documents, which in turn doesn't go
+ * through similarity search, see RAGService.list_known_documents on
+ * the backend).
  *
- * Por qué existe esto además del chat: preguntas agregadas tipo "¿cuántos
- * libros conoces?" no se pueden responder de forma fiable con RAG
- * semántico top-k (ver ADR / discusión de sync de Notion) — la forma
- * robusta de "explorar" el catálogo es un listado real, no una respuesta
- * generada. Inspirado en el glosario con buscador del Tutor Dev IA del
- * máster (misma idea: descubribilidad sin depender del LLM).
+ * Why this exists in addition to the chat: aggregate questions like
+ * "how many books do you know?" can't be answered reliably with
+ * top-k semantic RAG (see the ADR / Notion sync discussion) — the
+ * robust way to "browse" the catalog is a real listing, not a
+ * generated answer. Same idea as any searchable glossary: discoverability
+ * that doesn't depend on the LLM.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -36,15 +37,15 @@ export function DocumentList() {
       const data = await documentsApi.list();
       setDocuments(data.documents || []);
     } catch (err) {
-      setError(err.message || 'No se pudo cargar la lista de documentos');
+      setError(err.message || 'Could not load the document list');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // Carga inicial + recarga automática cada vez que cambia el nº de
-  // documentos (SyncForm llama a refreshStats() al terminar un sync, así
-  // que un sync nuevo se refleja aquí sin plumbing adicional)
+  // Initial load + automatic reload whenever the document count changes
+  // (SyncForm calls refreshStats() when a sync finishes, so a new sync
+  // shows up here with no extra plumbing needed)
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments, stats.documentCount]);
@@ -56,7 +57,7 @@ export function DocumentList() {
       setDocuments((prev) => prev.filter((d) => d.document_id !== documentId));
       refreshStats();
     } catch (err) {
-      setError(err.message || 'No se pudo eliminar el documento');
+      setError(err.message || 'Could not delete the document');
     } finally {
       setDeletingId(null);
     }
@@ -69,10 +70,10 @@ export function DocumentList() {
   }, [documents, search]);
 
   return (
-    <Card title={`Documentos indexados (${documents.length})`}>
+    <Card title={`Indexed documents (${documents.length})`}>
       <div className="space-y-3">
         <Input
-          placeholder="Buscar documento..."
+          placeholder="Search documents..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           disabled={isLoading || documents.length === 0}
@@ -83,15 +84,15 @@ export function DocumentList() {
         {isLoading ? (
           <div className="flex items-center justify-center py-8 text-text-300">
             <Spinner size="md" className="mr-2" />
-            Cargando documentos...
+            Loading documents...
           </div>
         ) : documents.length === 0 ? (
           <p className="text-sm text-text-300 py-4 text-center">
-            Todavía no hay documentos indexados.
+            No documents indexed yet.
           </p>
         ) : filtered.length === 0 ? (
           <p className="text-sm text-text-300 py-4 text-center">
-            Ningún documento coincide con "{search}".
+            No documents match "{search}".
           </p>
         ) : (
           <ul className="space-y-2 max-h-96 overflow-y-auto">
@@ -112,7 +113,7 @@ export function DocumentList() {
                     size="sm"
                     disabled={deletingId === doc.document_id}
                     onClick={() => handleDelete(doc.document_id)}
-                    aria-label={`Eliminar ${doc.title}`}
+                    aria-label={`Delete ${doc.title}`}
                   >
                     {deletingId === doc.document_id ? <Spinner size="sm" /> : '🗑️'}
                   </Button>

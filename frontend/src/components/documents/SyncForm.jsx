@@ -48,7 +48,7 @@ export function SyncForm() {
       switch (activeTab) {
         case 'pdf':
           if (!selectedFile) {
-            throw new Error('Selecciona un archivo PDF');
+            throw new Error('Select a PDF file');
           }
           response = await syncApi.uploadFile(selectedFile);
           break;
@@ -56,24 +56,24 @@ export function SyncForm() {
         case 'notion':
           if (notionType === 'page') {
             if (!notionId.trim()) {
-              throw new Error('Ingresa el ID de la página de Notion');
+              throw new Error('Enter the Notion page ID');
             }
             response = await syncApi.syncNotionPage(notionId.trim());
           } else {
-            // Database: ID opcional, usa el del .env si está vacío
+            // Database: ID is optional, uses the .env default if empty
             response = await syncApi.syncNotionDatabase(notionId.trim() || null);
           }
           break;
 
         default:
-          throw new Error('Tipo de sincronización no válido');
+          throw new Error('Invalid sync type');
       }
 
       // Format success message based on response type
       let successMessage;
       if (response.chunks_created !== undefined) {
         // Single document sync (PDF or Notion page)
-        successMessage = `Sincronizado: ${response.chunks_created} chunks creados`;
+        successMessage = `Synced: ${response.chunks_created} chunks created`;
         if (response.message) {
           successMessage += ` - ${response.message}`;
         }
@@ -81,19 +81,19 @@ export function SyncForm() {
         // Batch sync (Notion database)
         const successful = response.successful ?? 0;
         const total = response.total ?? 0;
-        successMessage = `Sincronizado: ${successful}/${total} documentos`;
+        successMessage = `Synced: ${successful}/${total} documents`;
         if (response.failed > 0) {
-          successMessage += ` (${response.failed} fallidos)`;
+          successMessage += ` (${response.failed} failed)`;
         }
         // Add details if available
         if (response.results && response.results.length > 0) {
           const totalChunks = response.results.reduce(
             (sum, r) => sum + (r.chunks_created || 0), 0
           );
-          successMessage += ` - ${totalChunks} chunks totales`;
+          successMessage += ` - ${totalChunks} chunks total`;
         }
       } else {
-        successMessage = response.message || 'Sincronización completada';
+        successMessage = response.message || 'Sync completed';
       }
 
       setResult({ success: true, message: successMessage });
@@ -109,7 +109,7 @@ export function SyncForm() {
     } catch (err) {
       setResult({
         success: false,
-        message: err.message || 'Error en la sincronización',
+        message: err.message || 'Sync failed',
       });
     } finally {
       setIsSyncing(false);
@@ -135,7 +135,7 @@ export function SyncForm() {
     const file = e.target.files[0];
     if (file) {
       if (!file.name.toLowerCase().endsWith('.pdf')) {
-        setResult({ success: false, message: 'Solo se permiten archivos PDF' });
+        setResult({ success: false, message: 'Only PDF files are allowed' });
         e.target.value = '';
         return;
       }
@@ -145,7 +145,7 @@ export function SyncForm() {
   };
 
   return (
-    <Card title="Sincronizar Documentos">
+    <Card title="Sync Documents">
       {/* Tabs */}
       <div className="flex border-b border-bg-700 mb-4 -mx-4 px-4">
         {TABS.map((tab) => (
@@ -174,7 +174,7 @@ export function SyncForm() {
         {activeTab === 'pdf' && (
           <div>
             <label className="block text-sm font-medium text-text-100 mb-1">
-              Seleccionar PDF
+              Select PDF
             </label>
             <input
               id="pdf-file-input"
@@ -193,7 +193,7 @@ export function SyncForm() {
             />
             {selectedFile && (
               <p className="text-sm text-success-400 mt-1">
-                Seleccionado: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
               </p>
             )}
           </div>
@@ -210,7 +210,7 @@ export function SyncForm() {
                     : 'bg-bg-800 text-text-200 border border-bg-700 hover:bg-bg-700 hover:text-text-100'
                 }`}
               >
-                Página
+                Page
               </button>
               <button
                 onClick={() => setNotionType('database')}
@@ -220,20 +220,20 @@ export function SyncForm() {
                     : 'bg-bg-800 text-text-200 border border-bg-700 hover:bg-bg-700 hover:text-text-100'
                 }`}
               >
-                Base de datos
+                Database
               </button>
             </div>
             <div>
               <Input
-                label={notionType === 'page' ? 'ID de página' : 'ID de base de datos (opcional)'}
-                placeholder={notionType === 'page' ? 'abc123... (requerido)' : 'Vacío = usar configuración .env'}
+                label={notionType === 'page' ? 'Page ID' : 'Database ID (optional)'}
+                placeholder={notionType === 'page' ? 'abc123... (required)' : 'Empty = use .env config'}
                 value={notionId}
                 onChange={(e) => setNotionId(e.target.value)}
                 disabled={isSyncing}
               />
               {notionType === 'database' && (
                 <p className="text-xs text-text-300 mt-1">
-                  Deja vacío para usar la base de datos configurada en el servidor
+                  Leave empty to use the database configured on the server
                 </p>
               )}
             </div>
@@ -249,10 +249,10 @@ export function SyncForm() {
           {isSyncing ? (
             <>
               <Spinner size="sm" className="mr-2" />
-              Sincronizando...
+              Syncing...
             </>
           ) : (
-            'Sincronizar'
+            'Sync'
           )}
         </Button>
 
@@ -265,7 +265,7 @@ export function SyncForm() {
 
         {/* Admin tip */}
         <p className="text-xs text-text-300 mt-4 pt-3 border-t border-gray-100">
-          💡 Para sincronización masiva, usa <code className="bg-bg-800 px-1 rounded">python scripts/sync_documents.py</code>
+          💡 For bulk sync, use <code className="bg-bg-800 px-1 rounded">python scripts/sync_documents.py</code>
         </p>
       </div>
     </Card>
