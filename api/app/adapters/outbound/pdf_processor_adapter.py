@@ -1,31 +1,32 @@
 # /api/app/adapters/outbound/pdf_processor_adapter.py
 """
-Adaptador de procesamiento de PDFs - TFM Bibliotecario-IA
+PDF Processing Adapter - Bibliotecario-IA
 
-Implementación concreta de DocumentProcessorPort para archivos PDF locales.
-Es el adaptador que convierte un archivo .pdf en chunks listos para vectorizar.
+Concrete implementation of DocumentProcessorPort for local PDF files.
+This is the adapter that turns a .pdf file into chunks ready to be
+vectorized.
 
-¿Qué hace este adaptador?
-1. Lee un archivo PDF desde el disco local
-2. Extrae todo el texto (página por página con PyPDFLoader)
-3. Divide el texto en chunks inteligentes con overlap
+What does this adapter do?
+1. Reads a PDF file from the local disk
+2. Extracts all the text (page by page, with PyPDFLoader)
+3. Splits the text into smart chunks with overlap
 
-Tecnologías usadas:
-- PyPDFLoader (LangChain): extrae texto de PDFs página a página
-- RecursiveCharacterTextSplitter (LangChain): divide texto respetando estructura
+Technologies used:
+- PyPDFLoader (LangChain): extracts text from PDFs page by page
+- RecursiveCharacterTextSplitter (LangChain): splits text while respecting structure
 
-¿Qué es RecursiveCharacterTextSplitter?
-Divide texto intentando respetar la estructura natural del documento.
-Intenta cortar primero por párrafos, luego por líneas, luego por palabras.
-Esto evita cortar palabras o ideas a la mitad.
+What is RecursiveCharacterTextSplitter?
+Splits text trying to respect the document's natural structure. It
+tries to cut on paragraphs first, then lines, then words. This avoids
+cutting words or ideas in half.
 
-Separadores por prioridad:
-    1. "\n\n" → párrafos (mejor opción, corte más natural)
-    2. "\n"   → líneas
-    3. " "    → palabras
-    4. ""     → caracteres (último recurso)
+Separators by priority:
+    1. "\n\n" → paragraphs (best option, most natural cut)
+    2. "\n"   → lines
+    3. " "    → words
+    4. ""     → characters (last resort)
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     class PDFProcessorAdapter implements DocumentProcessorPort {
         async loadDocument(source: string | Path): Promise<Document> { ... }
         async splitIntoChunks(doc: Document, size?, overlap?): Promise<Chunk[]> { ... }
@@ -40,14 +41,14 @@ Equivalente en TypeScript:
 from typing import List
 from pathlib import Path
 import logging
-import uuid  # Para generar IDs únicos (como crypto.randomUUID() en JS)
+import uuid  # For generating unique IDs (like crypto.randomUUID() in JS)
 
-# LangChain: PyPDFLoader extrae texto de PDFs página a página
+# LangChain: PyPDFLoader extracts text from PDFs page by page
 from langchain_community.document_loaders import PyPDFLoader
-# RecursiveCharacterTextSplitter: divide texto respetando la estructura natural
+# RecursiveCharacterTextSplitter: splits text while respecting the natural structure
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# Importamos el PUERTO (interfaz) que implementamos
+# Import the PORT (interface) we're implementing
 from app.core.ports.document_processor_port import DocumentProcessorPort
 from app.core.domain.models import Document, Chunk, DocumentSource
 from app.config.settings import settings
@@ -57,25 +58,27 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# ADAPTADOR PDF
+# PDF ADAPTER
 # ============================================================================
 class PDFProcessorAdapter(DocumentProcessorPort):
     """
-    Implementación concreta de DocumentProcessorPort para archivos PDF.
+    Concrete implementation of DocumentProcessorPort for PDF files.
 
-    Esta clase es el ÚNICO lugar del sistema que conoce cómo leer PDFs.
-    El resto del código solo habla con la interfaz DocumentProcessorPort.
+    This class is the ONLY place in the system that knows how to read
+    PDFs. Everywhere else in the code only talks to the
+    DocumentProcessorPort interface.
 
-    Si cambiaras la librería de lectura de PDFs (ej: de PyPDF a pdfplumber),
-    solo modificarías este archivo, sin tocar servicios ni otros adaptadores.
+    If you swapped the PDF-reading library (e.g. from PyPDF to
+    pdfplumber), you'd only need to modify this file, without touching
+    services or other adapters.
     """
 
     def __init__(self):
         """
-        Inicializa el procesador de PDFs.
+        Initializes the PDF processor.
 
-        _text_splitter no se crea aquí porque los parámetros chunk_size
-        y chunk_overlap pueden variar por cada llamada.
+        _text_splitter isn't created here because the chunk_size and
+        chunk_overlap parameters can vary on each call.
         """
         self._text_splitter = None
 
@@ -85,27 +88,27 @@ class PDFProcessorAdapter(DocumentProcessorPort):
         chunk_overlap: int = None
     ) -> RecursiveCharacterTextSplitter:
         """
-        Crea un RecursiveCharacterTextSplitter con los parámetros dados.
+        Creates a RecursiveCharacterTextSplitter with the given parameters.
 
-        ¿Por qué "Recursive"?
-        Intenta dividir el texto usando separadores en orden de prioridad:
-            1. "\n\n" (párrafos) → corte más natural
-            2. "\n"  (líneas)
-            3. " "   (palabras)
-            4. ""    (caracteres) → último recurso
+        Why "Recursive"?
+        It tries to split the text using separators in priority order:
+            1. "\n\n" (paragraphs) → most natural cut
+            2. "\n"  (lines)
+            3. " "   (words)
+            4. ""    (characters) → last resort
 
-        Si un párrafo cabe en chunk_size, lo mantiene íntegro.
-        Solo lo subdivide si es más grande que chunk_size.
+        If a paragraph fits within chunk_size, it's kept whole.
+        It's only split further if it's bigger than chunk_size.
 
-        length_function=len: usa len() para medir tamaño en caracteres.
-        Equivalente JS: (text) => text.length
+        length_function=len: uses len() to measure size in characters.
+        JS equivalent: (text) => text.length
 
         Args:
-            chunk_size: Tamaño objetivo por chunk (None = usa settings)
-            chunk_overlap: Overlap entre chunks (None = usa settings)
+            chunk_size: Target size per chunk (None = uses settings)
+            chunk_overlap: Overlap between chunks (None = uses settings)
 
         Returns:
-            RecursiveCharacterTextSplitter configurado
+            A configured RecursiveCharacterTextSplitter
         """
         actual_chunk_size = chunk_size or settings.chunk_size
         actual_overlap = chunk_overlap or settings.chunk_overlap
@@ -113,67 +116,67 @@ class PDFProcessorAdapter(DocumentProcessorPort):
         return RecursiveCharacterTextSplitter(
             chunk_size=actual_chunk_size,
             chunk_overlap=actual_overlap,
-            length_function=len,                     # Mide por caracteres
-            separators=["\n\n", "\n", " ", ""]       # Prioridad de corte
+            length_function=len,                     # Measures by characters
+            separators=["\n\n", "\n", " ", ""]       # Split priority
         )
 
     async def load_document(self, source: str | Path) -> Document:
         """
-        Carga un archivo PDF y extrae todo su texto.
+        Loads a PDF file and extracts all its text.
 
-        Proceso interno:
-        1. Verifica que el archivo existe y es PDF
-        2. PyPDFLoader lee el PDF página a página
-        3. Une todo el texto con separadores de párrafo (\n\n)
-        4. Crea un objeto Document con el contenido y metadatos
+        Internal process:
+        1. Checks the file exists and is a PDF
+        2. PyPDFLoader reads the PDF page by page
+        3. Joins all the text with paragraph separators (\n\n)
+        4. Creates a Document object with the content and metadata
 
         Args:
-            source: Ruta al archivo PDF
-                   Ejemplo: "/data/manual.pdf" o Path("/data/manual.pdf")
+            source: Path to the PDF file
+                   Example: "/data/manual.pdf" or Path("/data/manual.pdf")
 
         Returns:
-            Document: Objeto con todo el texto extraído y metadatos
-                     - id: identificador único (ej: "pdf_a3f2b1c9")
-                     - content: todo el texto del PDF
+            Document: Object with all the extracted text and metadata
+                     - id: unique identifier (e.g. "pdf_a3f2b1c9")
+                     - content: the PDF's full text
                      - metadata: filename, page_count, file_size, etc.
 
-        Ejemplo:
+        Example:
             doc = await pdf_processor.load_document("/data/manual.pdf")
-            print(doc.content[:100])  # "Capítulo 1: Introducción..."
+            print(doc.content[:100])  # "Chapter 1: Introduction..."
             print(doc.metadata)       # {"filename": "manual.pdf", "page_count": 50, ...}
         """
         try:
             file_path = Path(source)
 
-            # Validaciones antes de procesar
+            # Validations before processing
             if not file_path.exists():
                 raise FileNotFoundError(f"File not found: {file_path}")
 
             if not self.supports_format(file_path):
                 raise ValueError(f"Unsupported file format: {file_path.suffix}")
 
-            # PyPDFLoader: carga el PDF y extrae texto página a página
-            # Cada página se convierte en un objeto con .page_content
+            # PyPDFLoader: loads the PDF and extracts text page by page
+            # Each page becomes an object with .page_content
             loader = PyPDFLoader(str(file_path))
             pages = loader.load()
 
-            # Une todas las páginas en un solo texto
-            # "\n\n" entre páginas para mantener separación visual
-            # Equivalente JS: pages.map(p => p.pageContent).join("\n\n")
+            # Joins all pages into a single text
+            # "\n\n" between pages to keep visual separation
+            # JS equivalent: pages.map(p => p.pageContent).join("\n\n")
             full_content = "\n\n".join([page.page_content for page in pages])
 
-            # Crea el objeto Document con metadatos del archivo
+            # Creates the Document object with the file's metadata
             document = Document(
-                # uuid.uuid4().hex[:8] genera un ID corto y único
-                # Ejemplo: "pdf_a3f2b1c9"
+                # uuid.uuid4().hex[:8] generates a short, unique ID
+                # Example: "pdf_a3f2b1c9"
                 id=f"pdf_{uuid.uuid4().hex[:8]}",
                 source=DocumentSource.PDF,
                 content=full_content,
                 metadata={
                     "filename": file_path.name,                    # "manual.pdf"
-                    "filepath": str(file_path.absolute()),         # Ruta absoluta
-                    "page_count": len(pages),                      # Número de páginas
-                    "file_size": file_path.stat().st_size          # Tamaño en bytes
+                    "filepath": str(file_path.absolute()),         # Absolute path
+                    "page_count": len(pages),                      # Number of pages
+                    "file_size": file_path.stat().st_size          # Size in bytes
                 }
             )
 
@@ -191,47 +194,47 @@ class PDFProcessorAdapter(DocumentProcessorPort):
         chunk_overlap: int = 200
     ) -> List[Chunk]:
         """
-        Divide el contenido del documento en chunks pequeños.
+        Splits the document's content into small chunks.
 
-        Cada chunk hereda los metadatos del documento padre y añade
-        su propia posición (chunk_index) y total (chunk_total).
+        Each chunk inherits the parent document's metadata and adds its
+        own position (chunk_index) and total (chunk_total).
 
-        Los chunks salen SIN embedding. Los embeddings se generan
-        después en el SyncService usando el LLM.
+        Chunks come out WITHOUT an embedding. Embeddings are generated
+        afterward in SyncService using the LLM.
 
-        IDs de chunks:
-            Si el documento es "pdf_a3f2b1c9", los chunks serán:
+        Chunk IDs:
+            If the document is "pdf_a3f2b1c9", its chunks will be:
             - "pdf_a3f2b1c9_chunk_0"
             - "pdf_a3f2b1c9_chunk_1"
             - "pdf_a3f2b1c9_chunk_2"
-            Esto permite trazar de qué documento viene cada chunk.
+            This lets you trace which document each chunk came from.
 
         Args:
-            document: Documento ya cargado (con load_document)
-            chunk_size: Tamaño objetivo por chunk en caracteres
-            chunk_overlap: Caracteres de overlap entre chunks
+            document: An already-loaded document (via load_document)
+            chunk_size: Target size per chunk in characters
+            chunk_overlap: Overlap characters between chunks
 
         Returns:
-            List[Chunk]: Lista de chunks sin embeddings
+            List[Chunk]: List of chunks with no embeddings
         """
         try:
             text_splitter = self._get_text_splitter(chunk_size, chunk_overlap)
 
-            # split_text divide el contenido en lista de strings
+            # split_text splits the content into a list of strings
             text_chunks = text_splitter.split_text(document.content)
 
-            # Convierte cada string en un objeto Chunk con metadatos
+            # Converts each string into a Chunk object with metadata
             chunks = []
             for i, chunk_text in enumerate(text_chunks):
                 chunk = Chunk(
-                    id=f"{document.id}_chunk_{i}",     # ID trazable al documento
-                    document_id=document.id,            # Referencia al padre
-                    content=chunk_text,                 # Texto del fragmento
-                    embedding=None,                     # Se añade después con el LLM
+                    id=f"{document.id}_chunk_{i}",     # ID traceable back to the document
+                    document_id=document.id,            # Reference to the parent
+                    content=chunk_text,                 # The fragment's text
+                    embedding=None,                     # Added later with the LLM
                     metadata={
-                        **document.metadata,            # Hereda metadatos del PDF
-                        "chunk_index": i,               # Posición (0, 1, 2, ...)
-                        "chunk_total": len(text_chunks) # Total de chunks
+                        **document.metadata,            # Inherits the PDF's metadata
+                        "chunk_index": i,               # Position (0, 1, 2, ...)
+                        "chunk_total": len(text_chunks) # Total number of chunks
                     }
                 )
                 chunks.append(chunk)
@@ -250,24 +253,24 @@ class PDFProcessorAdapter(DocumentProcessorPort):
         chunk_overlap: int = 200
     ) -> tuple[Document, List[Chunk]]:
         """
-        Pipeline completo: carga el PDF y lo divide en chunks.
+        Full pipeline: loads the PDF and splits it into chunks.
 
-        Método de conveniencia que combina load_document() + split_into_chunks().
-        Es el que lo llama el SyncService en un solo paso.
+        A convenience method combining load_document() + split_into_chunks().
+        This is the one SyncService calls, in a single step.
 
         Args:
-            source: Ruta al archivo PDF
-            chunk_size: Tamaño de chunks
-            chunk_overlap: Overlap entre chunks
+            source: Path to the PDF file
+            chunk_size: Chunk size
+            chunk_overlap: Overlap between chunks
 
         Returns:
-            tuple[Document, List[Chunk]]: Documento y sus chunks
+            tuple[Document, List[Chunk]]: The document and its chunks
         """
         try:
-            # Paso 1: Cargar y extraer texto del PDF
+            # Step 1: Load and extract the PDF's text
             document = await self.load_document(source)
 
-            # Paso 2: Dividir en chunks
+            # Step 2: Split into chunks
             chunks = await self.split_into_chunks(document, chunk_size, chunk_overlap)
 
             logger.info(
@@ -283,17 +286,17 @@ class PDFProcessorAdapter(DocumentProcessorPort):
 
     def supports_format(self, file_path: str | Path) -> bool:
         """
-        Verifica si el archivo es un PDF.
+        Checks whether the file is a PDF.
 
-        path.suffix devuelve la extensión del archivo.
-        Equivalente JS: path.extname(filePath)
-        Ejemplo: Path("manual.pdf").suffix → ".pdf"
+        path.suffix returns the file's extension.
+        JS equivalent: path.extname(filePath)
+        Example: Path("manual.pdf").suffix → ".pdf"
 
         Args:
-            file_path: Ruta al archivo a verificar
+            file_path: Path to the file to check
 
         Returns:
-            bool: True solo si la extensión es .pdf
+            bool: True only if the extension is .pdf
         """
         path = Path(file_path)
         return path.suffix.lower() == ".pdf"
