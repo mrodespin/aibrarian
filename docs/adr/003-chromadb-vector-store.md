@@ -1,71 +1,71 @@
-# ADR-003: ChromaDB como base de datos vectorial
+# ADR-003: ChromaDB as the vector database
 
-**Estado:** Aceptada
-**Fecha:** Noviembre 2025
+**Status:** Accepted
+**Date:** November 2025
 
 ---
 
-## Contexto
+## Context
 
-El sistema RAG necesita almacenar embeddings (vectores) y hacer búsquedas por similaridad semántica. La base de datos vectorial es un componente crítico del pipeline: recibe los vectores generados por Ollama y retorna los chunks más relevantes para cada consulta.
+The RAG system needs to store embeddings (vectors) and run semantic similarity searches. The vector database is a critical pipeline component: it receives the vectors Ollama generates and returns the most relevant chunks for each query.
 
-## Alternativas evaluadas
+## Alternatives evaluated
 
 ### 1. FAISS (Facebook AI Similarity Search)
-- Librería de Meta, muy rápida para búsquedas
-- Solo en memoria o ficheros locales, no tiene servidor
-- Sin API REST, difícil de compartir entre servicios
-- Sin persistencia robusta ni gestión de metadatos
+- Meta's library, very fast for searches
+- In-memory or local files only, no server
+- No REST API, hard to share between services
+- No robust persistence or metadata management
 
 ### 2. Pinecone
-- Servicio cloud gestionado, alta disponibilidad
-- Requiere conexión a internet y API key
-- **Los datos salen de la máquina** (viola privacidad)
-- Costes recurrentes
+- Managed cloud service, high availability
+- Requires an internet connection and an API key
+- **Data leaves the machine** (violates privacy)
+- Recurring costs
 
 ### 3. Weaviate
-- Open-source con servidor propio
-- Más complejo de configurar que ChromaDB
-- Mayor consumo de recursos
-- Funcionalidades avanzadas innecesarias para el alcance del TFM
+- Open-source with its own server
+- More complex to configure than ChromaDB
+- Higher resource usage
+- Advanced features unnecessary for this project's scope
 
 ### 4. ChromaDB
-- Open-source, diseñado específicamente para RAG
-- API REST sencilla con imagen Docker oficial
-- Persistencia con volúmenes Docker
-- Búsqueda por similaridad + filtrado por metadatos
+- Open-source, purpose-built for RAG
+- Simple REST API with an official Docker image
+- Persistence via Docker volumes
+- Similarity search + metadata filtering
 
-## Decisión
+## Decision
 
-**ChromaDB** por:
+**ChromaDB**, because:
 
-1. **Simplicidad**: Una imagen Docker, un puerto, funciona
-2. **Diseñado para RAG**: API orientada a documentos con chunks, embeddings y metadatos
-3. **Persistencia local**: Los datos se quedan en la máquina via volúmenes Docker
-4. **Filtrado por metadatos**: Permite combinar búsqueda semántica con filtros (source, page, type) - esencial para Query Expansion
-5. **Ecosistema LangChain**: Integración nativa con LangChain, que es el framework RAG del proyecto
+1. **Simplicity**: one Docker image, one port, it just works
+2. **Built for RAG**: document-oriented API with chunks, embeddings and metadata
+3. **Local persistence**: data stays on the machine via Docker volumes
+4. **Metadata filtering**: lets you combine semantic search with filters (source, page, type) — essential for Query Expansion
+5. **LangChain ecosystem**: native integration with LangChain, the project's RAG framework
 
-### Configuración
+### Configuration
 
 ```yaml
 # docker-compose.yml
 chromadb:
   image: chromadb/chroma:0.5.20
   ports:
-    - "8001:8000"    # 8001 en host para no conflictar con la API
+    - "8001:8000"    # 8001 on the host to avoid clashing with the API
   volumes:
-    - chroma_data:/chroma/chroma  # Persistencia
+    - chroma_data:/chroma/chroma  # Persistence
 ```
 
-## Consecuencias
+## Consequences
 
-**Positivas:**
-- Setup en 1 comando (`docker-compose up -d chromadb`)
-- Datos persisten entre reinicios gracias al volumen Docker
-- API REST permite acceso desde la API en Docker y scripts CLI
-- Búsqueda híbrida (semántica + keywords) funciona out-of-the-box
+**Positive:**
+- Setup in 1 command (`docker-compose up -d chromadb`)
+- Data survives restarts thanks to the Docker volume
+- The REST API allows access from the Dockerized API and CLI scripts alike
+- Hybrid search (semantic + keywords) works out of the box
 
-**Negativas:**
-- No escala horizontalmente (suficiente para el TFM)
-- Sin replicación ni alta disponibilidad
-- Depende de Docker (requisito del proyecto de todas formas)
+**Negative:**
+- Doesn't scale horizontally (fine for this project)
+- No replication or high availability
+- Depends on Docker (already a project requirement anyway)

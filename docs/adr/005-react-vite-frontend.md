@@ -1,64 +1,64 @@
-# ADR-005: React + Vite + Tailwind para el frontend
+# ADR-005: React + Vite + Tailwind for the frontend
 
-**Estado:** Aceptada
-**Fecha:** Diciembre 2025
+**Status:** Accepted
+**Date:** December 2025
 
 ---
 
-## Contexto
+## Context
 
-El TFM necesita una interfaz de usuario para dos funcionalidades principales:
-- **Chat conversacional**: Interfaz para hacer preguntas al sistema RAG
-- **Panel de sincronización**: Gestión de ingesta de documentos (PDFs y Notion)
+The project needs a user interface for two main features:
+- **Conversational chat**: interface for asking the RAG system questions
+- **Sync panel**: managing document ingestion (PDFs and Notion)
 
-La interfaz debe ser moderna, responsive y demostrar competencia en desarrollo frontend.
+The interface should be modern and responsive.
 
-## Alternativas evaluadas
+## Alternatives evaluated
 
 ### 1. Server-Side Rendering (Next.js / Remix)
-- SEO optimizado, routing server-side
-- Mayor complejidad de deploy (necesita servidor Node.js)
-- Innecesario para una aplicación privada sin requisitos SEO
+- SEO-optimized, server-side routing
+- More complex to deploy (needs a Node.js server)
+- Unnecessary for a private application with no SEO requirements
 
 ### 2. Vue.js + Nuxt
-- Framework progresivo, curva de aprendizaje suave
-- Ecosistema más pequeño que React
-- Menos demandado en el mercado laboral
+- Progressive framework, gentle learning curve
+- Smaller ecosystem than React
+- Less in-demand in the job market
 
 ### 3. React SPA + Vite
-- Ecosistema más grande y maduro
-- Vite ofrece HMR instantáneo y builds rápidos
-- SPA es suficiente para una aplicación de uso interno
-- Conocimiento directamente aplicable al mercado laboral
+- Larger, more mature ecosystem
+- Vite offers instant HMR and fast builds
+- An SPA is enough for an internal-use application
+- Directly applicable knowledge for the job market
 
-## Decisión
+## Decision
 
-**React 19 + Vite 7 + Tailwind CSS v4** por:
+**React 19 + Vite 7 + Tailwind CSS v4**, because:
 
-1. **React 19**: Última versión estable con mejoras en rendering y hooks
-2. **Vite 7**: Build tool moderno, startup instantáneo vs webpack (Create React App ya deprecated)
-3. **Tailwind CSS v4**: Utilidad-first CSS con dark mode nativo, configuración via `@theme` en CSS (sin tailwind.config.js)
-4. **SPA**: No hay requisitos de SEO ni SSR. La app es privada y local
+1. **React 19**: latest stable version, with rendering and hooks improvements
+2. **Vite 7**: modern build tool, instant startup vs. webpack (Create React App is already deprecated)
+3. **Tailwind CSS v4**: utility-first CSS with native dark mode, configured via `@theme` in CSS (no tailwind.config.js)
+4. **SPA**: no SEO or SSR requirements. The app is private and local
 
-### Stack frontend completo
+### Full frontend stack
 
-| Librería | Versión | Propósito |
-|----------|---------|-----------|
+| Library | Version | Purpose |
+|---------|---------|---------|
 | React | 19.x | UI framework |
 | Vite | 7.x | Build tool + dev server |
-| Tailwind CSS | 4.x | Estilos utility-first |
-| React Router | 7.x | Routing SPA |
-| Axios | - | HTTP client para la API |
+| Tailwind CSS | 4.x | Utility-first styling |
+| React Router | 7.x | SPA routing |
+| Axios | - | HTTP client for the API |
 
-## Consecuencias
+## Consequences
 
-**Positivas:**
-- Hot Module Replacement instantáneo durante desarrollo
-- Dark mode implementado con Tailwind sin librerías adicionales
-- Bundle final optimizado (<500KB gzipped)
-- Despliegue simple: archivos estáticos servidos por `npm run dev`
+**Positive:**
+- Instant Hot Module Replacement during development
+- Dark mode implemented with Tailwind, no extra libraries
+- Optimized final bundle (<500KB gzipped)
+- Simple deployment: static files served by `npm run dev`
 
-**Negativas:**
-- Requiere Node.js 18+ en la máquina del evaluador
-- SPA tiene carga inicial mayor que SSR (irrelevante para uso local)
-- Tailwind v4 es relativamente nuevo, menos documentación legacy disponible
+**Negative:**
+- Requires Node.js 18+ on the machine running it
+- An SPA has a heavier initial load than SSR (irrelevant for local use)
+- Tailwind v4 is relatively new, less legacy documentation available

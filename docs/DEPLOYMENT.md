@@ -1,6 +1,6 @@
 # 🚀 Despliegue en Render (opcional)
 
-Guía para desplegar tu propia instancia en [Render](https://render.com) usando Groq como LLM y Chroma Cloud como base de datos vectorial, en vez de Ollama nativo + ChromaDB local. Ver [ADR-007](adr/007-despliegue-cloud-groq-chroma.md) para el razonamiento completo detrás de esta elección.
+Guía para desplegar tu propia instancia en [Render](https://render.com) usando Groq como LLM y Chroma Cloud como base de datos vectorial, en vez de Ollama nativo + ChromaDB local. Ver [ADR-007](adr/007-cloud-deployment-groq-chroma.md) para el razonamiento completo detrás de esta elección.
 
 **Esto NO reemplaza el desarrollo local.** `docker-compose up -d` con `LLM_PROVIDER=ollama` (el default) sigue funcionando exactamente igual que siempre — esta guía es solo para quien quiera tener una instancia propia accesible fuera de `localhost`, sin depender de hardware local (GPU Metal) ni de tener Ollama corriendo.
 

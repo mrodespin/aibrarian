@@ -87,13 +87,13 @@ Este proyecto está organizado como un **monorepo** que implementa una **Arquite
 │   ├── DEPLOYMENT.md               # Despliegue opcional en Render (Groq + Chroma Cloud)
 │   └── /adr/                       # Architecture Decision Records
 │       ├── INDEX.md                # Índice de decisiones
-│       ├── 001-arquitectura-hexagonal.md
-│       ├── 002-ollama-local.md
+│       ├── 001-hexagonal-architecture.md
+│       ├── 002-native-ollama-macos.md
 │       ├── 003-chromadb-vector-store.md
 │       ├── 004-query-expansion-rag.md
 │       ├── 005-react-vite-frontend.md
-│       ├── 006-docker-servicios-ollama-nativo.md
-│       └── 007-despliegue-cloud-groq-chroma.md
+│       ├── 006-docker-services-native-ollama.md
+│       └── 007-cloud-deployment-groq-chroma.md
 │
 ├── docker-compose.yml              # Orquestación de servicios (ChromaDB + Postgres + API)
 ├── render.yaml                     # Blueprint de despliegue en Render (API + frontend)
@@ -309,7 +309,7 @@ Contiene **3 servicios**:
 
 ### `render.yaml`
 
-Blueprint de despliegue en Render (opcional, no reemplaza el desarrollo local): crea `bibliotecario-ia-api` (Docker) y `bibliotecario-ia-frontend` (Static Site). La API usa Groq + Chroma Cloud en vez de Ollama + ChromaDB local — ver [ADR-007](adr/007-despliegue-cloud-groq-chroma.md) y [docs/DEPLOYMENT.md](DEPLOYMENT.md).
+Blueprint de despliegue en Render (opcional, no reemplaza el desarrollo local): crea `bibliotecario-ia-api` (Docker) y `bibliotecario-ia-frontend` (Static Site). La API usa Groq + Chroma Cloud en vez de Ollama + ChromaDB local — ver [ADR-007](adr/007-cloud-deployment-groq-chroma.md) y [docs/DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 

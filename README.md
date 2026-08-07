@@ -76,14 +76,14 @@ El acceso está protegido con **autenticación JWT multiusuario** (token enviado
 
 * **Framework Backend:** **Python** con **FastAPI**
 * **Carga y Chunking de Documentos:** **LangChain** (`PyPDFLoader`, `NotionDBLoader`, `RecursiveCharacterTextSplitter`) — la orquestación del pipeline RAG (Query Expansion, búsqueda híbrida, prompting) es implementación propia, no de LangChain
-* **Modelo de Lenguaje (LLM):** **Ollama** (`llama3.2`, local) o **Groq** (`openai/gpt-oss-120b`, cloud) — intercambiables por configuración, ver [ADR-007](docs/adr/007-despliegue-cloud-groq-chroma.md)
+* **Modelo de Lenguaje (LLM):** **Ollama** (`llama3.2`, local) o **Groq** (`openai/gpt-oss-120b`, cloud) — intercambiables por configuración, ver [ADR-007](docs/adr/007-cloud-deployment-groq-chroma.md)
 * **Base de Datos Vectorial:** **ChromaDB** (local vía Docker) o **Chroma Cloud** (gestionado)
 * **Fuentes de Datos:** **PDFs locales** y **Notion API**
 * **Frontend:** **React 19** + **Vite 7** + **Tailwind CSS v4** (Dark Mode)
 * **Autenticación:** **JWT** + **Postgres** (Neon en producción)
 * **Observabilidad:** **Structlog** + **Prometheus**
 * **Contenerización:** **Docker Compose** (ChromaDB + Postgres + API)
-* **Despliegue cloud (opcional):** **Render** + **Groq** + **Chroma Cloud** — ver [ADR-007](docs/adr/007-despliegue-cloud-groq-chroma.md) y [guía de despliegue](docs/DEPLOYMENT.md). El desarrollo local (Ollama + ChromaDB) sigue siendo el flujo por defecto de `docker-compose up`.
+* **Despliegue cloud (opcional):** **Render** + **Groq** + **Chroma Cloud** — ver [ADR-007](docs/adr/007-cloud-deployment-groq-chroma.md) y [guía de despliegue](docs/DEPLOYMENT.md). El desarrollo local (Ollama + ChromaDB) sigue siendo el flujo por defecto de `docker-compose up`.
 
 ---
 
@@ -186,7 +186,7 @@ graph TD
     class Ports mvp
 ```
 
-> Este diagrama refleja las fases originales del TFM (MVP → Fase 1 → Extensión Notion). La autenticación (JWT + Postgres) y el modo cloud (Groq + Chroma Cloud) se añadieron después como una capa transversal — ver la sección de Autenticación y Seguridad y [ADR-007](docs/adr/007-despliegue-cloud-groq-chroma.md).
+> Este diagrama refleja las fases originales del TFM (MVP → Fase 1 → Extensión Notion). La autenticación (JWT + Postgres) y el modo cloud (Groq + Chroma Cloud) se añadieron después como una capa transversal — ver la sección de Autenticación y Seguridad y [ADR-007](docs/adr/007-cloud-deployment-groq-chroma.md).
 
 ---
 

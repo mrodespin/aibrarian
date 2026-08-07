@@ -1,30 +1,30 @@
 # Architecture Decision Records (ADRs)
 
-> Registro de decisiones arquitectónicas del proyecto Bibliotecario-IA.
+> Record of the Bibliotecario-IA project's architectural decisions.
 >
-> Cada ADR documenta una decisión técnica significativa: el contexto,
-> las alternativas evaluadas, la decisión tomada y sus consecuencias.
+> Each ADR documents a significant technical decision: the context,
+> the alternatives evaluated, the decision made, and its consequences.
 
 ---
 
-## Índice
+## Index
 
-| ADR | Título | Estado | Fecha |
+| ADR | Title | Status | Date |
 |-----|--------|--------|-------|
-| [ADR-001](001-arquitectura-hexagonal.md) | Arquitectura Hexagonal (Puertos y Adaptadores) | Aceptada | 2025-11 |
-| [ADR-002](002-ollama-local.md) | Ollama nativo en macOS para LLM local | Aceptada | 2025-11 |
-| [ADR-003](003-chromadb-vector-store.md) | ChromaDB como base de datos vectorial | Aceptada | 2025-11 |
-| [ADR-004](004-query-expansion-rag.md) | Query Expansion en el pipeline RAG | Aceptada | 2025-12 |
-| [ADR-005](005-react-vite-frontend.md) | React + Vite + Tailwind para el frontend | Aceptada | 2025-12 |
-| [ADR-006](006-docker-servicios-ollama-nativo.md) | Docker para servicios, Ollama nativo | Aceptada | 2026-02 |
-| [ADR-007](007-despliegue-cloud-groq-chroma.md) | Despliegue cloud gratuito con Groq y Chroma Cloud | Aceptada | 2026-08 |
+| [ADR-001](001-hexagonal-architecture.md) | Hexagonal Architecture (Ports and Adapters) | Accepted | 2025-11 |
+| [ADR-002](002-native-ollama-macos.md) | Native Ollama on macOS for the local LLM | Accepted | 2025-11 |
+| [ADR-003](003-chromadb-vector-store.md) | ChromaDB as the vector database | Accepted | 2025-11 |
+| [ADR-004](004-query-expansion-rag.md) | Query Expansion in the RAG pipeline | Accepted | 2025-12 |
+| [ADR-005](005-react-vite-frontend.md) | React + Vite + Tailwind for the frontend | Accepted | 2025-12 |
+| [ADR-006](006-docker-services-native-ollama.md) | Docker for services, native Ollama | Accepted | 2026-02 |
+| [ADR-007](007-cloud-deployment-groq-chroma.md) | Free cloud deployment with Groq and Chroma Cloud | Accepted | 2026-08 |
 
 ---
 
-## Formato
+## Format
 
-Cada ADR sigue la estructura:
-- **Contexto**: Situación y problema a resolver
-- **Alternativas**: Opciones evaluadas
-- **Decisión**: Qué se eligió y por qué
-- **Consecuencias**: Trade-offs aceptados
+Each ADR follows this structure:
+- **Context**: the situation and the problem to solve
+- **Alternatives**: options evaluated
+- **Decision**: what was chosen and why
+- **Consequences**: trade-offs accepted
