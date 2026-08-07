@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <!-- interactive-widget=resizes-content: en navegadores que lo soportan
-         (Safari 17.4+, Chrome 108+) hace que el propio navegador encoja el
-         layout viewport cuando aparece el teclado virtual, en vez de solo
-         desplazar/comprimir el visual viewport. Con esto, dvh/--app-height
-         se ajustan de forma nativa y el hook useViewportHeight pasa a ser
-         solo un fallback para navegadores más antiguos. -->
+    <!-- interactive-widget=resizes-content: in browsers that support it
+         (Safari 17.4+, Chrome 108+) this makes the browser itself shrink
+         the layout viewport when the virtual keyboard appears, instead of
+         just shifting/compressing the visual viewport. With this,
+         dvh/--app-height adjust natively and the useViewportHeight hook
+         becomes just a fallback for older browsers. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <title>Bibliotecario-IA</title>
   </head>

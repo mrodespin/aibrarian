@@ -62,9 +62,9 @@
 
 /* Global styles - Dark Mode */
 html {
-  /* Fallback para navegadores sin JS o sin soporte de visualViewport;
-     useViewportHeight() las sobrescribe con valores reales en px. Ver
-     hooks/useViewportHeight.js para el porqué (salto del teclado en iOS). */
+  /* Fallback for browsers without JS or without visualViewport support;
+     useViewportHeight() overrides these with real px values. See
+     hooks/useViewportHeight.js for why (the iOS keyboard jump bug). */
   --app-height: 100dvh;
   --app-offset-top: 0px;
 }
@@ -72,10 +72,10 @@ html {
 html,
 body {
   height: 100%;
-  /* El documento nunca hace scroll: cada zona scrolleable (MessageList,
-     Sidebar, ...) controla su propio overflow-y-auto. Esto evita que
-     Safari intente hacer scroll de toda la página para "revelar" el
-     input al enfocarlo con el teclado abierto. */
+  /* The document itself never scrolls: each scrollable area (MessageList,
+     Sidebar, ...) controls its own overflow-y-auto. This stops Safari
+     from trying to scroll the whole page to "reveal" the input when it's
+     focused with the keyboard open. */
   overflow: hidden;
   overscroll-behavior: none;
 }
@@ -88,15 +88,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Contenedor raíz de la app, anclado fuera del flujo del documento.
-   `position: fixed` + traslación por --app-offset-top es necesario porque
-   el "layout viewport" (sistema de coordenadas del documento) no se mueve
-   cuando aparece el teclado en iOS, pero el "visual viewport" (lo visible)
-   sí se desplaza; sin compensar ese offset, este contenedor se queda
-   anclado en y=0 mientras la ventana visible mira un trozo desplazado de
-   la página. dvh/0px son el fallback para navegadores sin JS o sin
-   soporte de visualViewport; useViewportHeight sobrescribe ambas variables
-   en runtime. Ver ese hook para el detalle completo. */
+/* The app's root container, anchored outside the document's normal flow.
+   `position: fixed` + translation by --app-offset-top is necessary
+   because the "layout viewport" (the document's coordinate system)
+   doesn't move when the keyboard appears on iOS, but the "visual
+   viewport" (what's visible) does shift; without compensating for that
+   offset, this container stays anchored at y=0 while the visible window
+   looks at a shifted slice of the page. dvh/0px are the fallback for
+   browsers without JS or without visualViewport support;
+   useViewportHeight overrides both variables at runtime. See that hook
+   for the full detail. */
 .h-app {
   position: fixed;
   inset: 0;
