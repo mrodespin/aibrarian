@@ -61,13 +61,37 @@
 }
 
 /* Global styles - Dark Mode */
+html {
+  /* Fallback para navegadores sin JS o sin soporte de visualViewport;
+     useViewportHeight() la sobrescribe con la altura real en px. Ver
+     hooks/useViewportHeight.js para el porqué (salto del teclado en iOS). */
+  --app-height: 100dvh;
+}
+
+html,
+body {
+  height: 100%;
+  /* El documento nunca hace scroll: cada zona scrolleable (MessageList,
+     Sidebar, ...) controla su propio overflow-y-auto. Esto evita que
+     Safari intente hacer scroll de toda la página para "revelar" el
+     input al enfocarlo con el teclado abierto. */
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   background: #16161d;
   color: #f5f5f7;  /* Light text */
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  min-height: 100vh;
+}
+
+/* Altura real de la app: dvh como fallback, sobrescrita en runtime por
+   --app-height (ver useViewportHeight) para reaccionar al teclado en iOS. */
+.h-app {
+  height: 100dvh;
+  height: var(--app-height);
 }
 
 /* Scrollbar styling - Dark */

@@ -28,7 +28,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="h-dvh flex items-center justify-center bg-bg-900 px-4">
+    <div className="h-app flex items-center justify-center bg-bg-900 px-4">
       <Card title="📚 Bibliotecario-IA" className="w-full max-w-sm">
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input

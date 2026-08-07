@@ -8,13 +8,14 @@ import { Layout } from './components/layout';
 import { ChatContainer } from './components/chat';
 import { LoginPage } from './components/auth';
 import { Spinner } from './components/common';
+import { useViewportHeight } from './hooks/useViewportHeight';
 
 function AuthGate() {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
-      <div className="h-dvh flex items-center justify-center bg-bg-900">
+      <div className="h-app flex items-center justify-center bg-bg-900">
         <Spinner size="lg" />
       </div>
     );
@@ -37,6 +38,8 @@ function AuthGate() {
 }
 
 function App() {
+  useViewportHeight();
+
   return (
     <AuthProvider>
       <AuthGate />
