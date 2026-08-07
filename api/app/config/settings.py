@@ -49,6 +49,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Field: permite añadir metadatos y validación a cada variable
 from pydantic import Field
 from typing import Optional
+from pathlib import Path
+
+# pydantic-settings resuelve un env_file relativo contra el directorio de
+# trabajo (CWD) en el momento de instanciar Settings, NO contra la ubicación
+# de este archivo. Eso funcionaba "por accidente" en los dos sitios donde
+# CWD == api/ (uvicorn lanzado desde api/, y el contenedor Docker con
+# WORKDIR /app), pero se rompía en silencio para los scripts CLI de
+# scripts/*.py (create_user.py, ingest_pdfs.py, ingest_notion.py), que se
+# documentan para ejecutarse desde la raíz del repo: ahí CWD era la raíz
+# del proyecto, ".env" no existía en esa ruta, y Settings caía a los
+# valores por defecto sin avisar (p.ej. DATABASE_URL quedaba None aunque
+# api/.env sí lo tuviera configurado).
+# Anclar la ruta a este archivo (api/app/config/settings.py -> api/.env)
+# la hace independiente del CWD desde el que se invoque Python.
+_ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
 
 
 # ============================================================================
@@ -293,7 +308,7 @@ class Settings(BaseSettings):
     # ===================================
     # model_config controla cómo se comporta la carga de variables
     model_config = SettingsConfigDict(
-        env_file=".env",                   # Lee variables del archivo .env
+        env_file=_ENV_FILE,                # Lee variables de api/.env, sin importar el CWD (ver comentario junto al import de Path arriba)
         env_file_encoding="utf-8",         # Encoding del archivo
         case_sensitive=False,              # OLLAMA_MODEL = ollama_model (indistinto)
         extra="ignore"                     # Ignora vars de entorno no definidas aquí
