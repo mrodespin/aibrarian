@@ -15,11 +15,11 @@ function EmptyState() {
       <div className="text-center max-w-md">
         <div className="text-6xl mb-4">📚</div>
         <h2 className="text-xl font-bold text-text-50 mb-2">
-          Bienvenido a Bibliotecario-IA
+          Welcome to Bibliotecario-IA
         </h2>
         <p className="text-text-200 leading-relaxed">
-          Hazme preguntas sobre los documentos que has sincronizado.
-          Buscaré en la base de conocimiento y te daré respuestas basadas en el contenido.
+          Ask me questions about the documents you've synced.
+          I'll search the knowledge base and give you answers grounded in that content.
         </p>
       </div>
     </div>
@@ -43,7 +43,7 @@ export function ChatContainer() {
       {messages.length > 0 && (
         <div className="flex justify-end p-2 border-b border-bg-700 bg-bg-850/50 backdrop-blur-sm">
           <Button variant="ghost" size="sm" onClick={clearHistory}>
-            Limpiar chat
+            Clear chat
           </Button>
         </div>
       )}
@@ -58,7 +58,7 @@ export function ChatContainer() {
       {/* Service warning */}
       {!servicesAvailable && (
         <div className="px-4 py-2 bg-error-500/10 border-t border-error-500/30 text-error-400 text-sm">
-          ⚠️ Servicio no disponible: {downServices.join(' y ')}.
+          ⚠️ Service unavailable: {downServices.join(' and ')}.
         </div>
       )}
 

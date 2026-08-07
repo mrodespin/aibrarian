@@ -36,13 +36,14 @@ export function Header({ onMenuClick }) {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Service status badges — ocultos por debajo de lg (mismo breakpoint
-              que usa Layout.jsx para el sidebar fijo/off-canvas): en mobile y
-              tablet esta misma info ya está en el panel lateral (StatsPanel,
-              vía el botón de menú), con más detalle y sin apelotonarse contra
-              el logo y "Salir" — mostrarla aquí también en pantallas estrechas
-              solo añadía ruido duplicado. En desktop el sidebar es fijo, así
-              que aquí sirve de vistazo rápido sin abrir nada. */}
+          {/* Service status badges — hidden below lg (the same breakpoint
+              Layout.jsx uses for the fixed/off-canvas sidebar): on mobile
+              and tablet this same info already lives in the side panel
+              (StatsPanel, via the menu button), with more detail and
+              without crowding the logo and "Log out" — showing it here
+              too on narrow screens was just duplicated noise. On desktop
+              the sidebar is fixed, so this serves as a quick glance
+              without opening anything. */}
           <div className="hidden lg:flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${health.api ? 'bg-accent-500 animate-pulse shadow-lg shadow-accent-500/50' : 'bg-error-500'}`} />
@@ -58,14 +59,14 @@ export function Header({ onMenuClick }) {
             </div>
           </div>
 
-          {/* Sesión */}
+          {/* Session */}
           <span className="text-sm text-text-300 hidden sm:inline">{user?.email}</span>
           <button
             onClick={logout}
             className="text-sm font-medium text-text-200 hover:text-text-50 transition-colors px-2 py-1 rounded-lg hover:bg-bg-800 whitespace-nowrap"
-            aria-label="Cerrar sesión"
+            aria-label="Log out"
           >
-            Salir
+            Log out
           </button>
         </div>
       </div>

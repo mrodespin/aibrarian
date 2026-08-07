@@ -41,7 +41,7 @@ export function ChatInput({ onSend, isLoading, disabled }) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Escribe tu pregunta..."
+          placeholder="Type your question..."
           disabled={isLoading || disabled}
           rows={1}
           className="
@@ -68,7 +68,7 @@ export function ChatInput({ onSend, isLoading, disabled }) {
         </Button>
       </div>
       <p className="text-xs text-text-300 mt-2">
-        Presiona Enter para enviar, Shift+Enter para nueva línea
+        Press Enter to send, Shift+Enter for a new line
       </p>
     </form>
   );

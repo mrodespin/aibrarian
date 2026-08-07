@@ -4,9 +4,9 @@
 
 import { tokenStorage } from './tokenStorage';
 
-// Exportado para que chat.js (askStream) pueda montar la URL de /ask/stream
-// sin duplicar la lógica de VITE_API_URL — necesita su propio fetch() en vez
-// de pasar por request() porque este último siempre hace response.json().
+// Exported so chat.js (askStream) can build the /ask/stream URL without
+// duplicating the VITE_API_URL logic — it needs its own fetch() instead
+// of going through request() because the latter always calls response.json().
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 /**
@@ -31,8 +31,8 @@ async function request(endpoint, options = {}) {
   const config = {
     headers: {
       'Content-Type': 'application/json',
-      // Adjunta el JWT de sesión a mano (en vez de cookie) — ver
-      // tokenStorage.js para el porqué (Safari ITP + cross-site).
+      // Attach the session JWT by hand (instead of a cookie) — see
+      // tokenStorage.js for why (Safari ITP + cross-site).
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
