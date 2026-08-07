@@ -1,4 +1,4 @@
-# 📚 API & Services Documentation (tfm-bibliotecario-ia)
+# 📚 API & Services Documentation (AIbrarian)
 
 This documentation covers every service, port, and endpoint of AIbrarian's API.
 

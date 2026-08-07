@@ -1,4 +1,4 @@
-# 🤖 tfm-bibliotecario-ia
+# 🤖 AIbrarian
 
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Tests](https://img.shields.io/badge/Tests-142_passed-brightgreen.svg)
@@ -405,7 +405,7 @@ VECTOR_SEARCH_LATENCY.observe(duration)
 ```bash
 # 1. Clone the repository
 git clone <REPO_URL>
-cd tfm-bibliotecario-ia
+cd aibrarian
 
 # 2. Run the setup script
 python3 scripts/setup.py
@@ -424,7 +424,7 @@ The `setup.py` script automatically configures:
 ```bash
 # 1. Clone the repository
 git clone <REPO_URL>
-cd tfm-bibliotecario-ia
+cd aibrarian
 
 # 2. Install Ollama and pull the models
 brew install ollama

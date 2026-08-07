@@ -7,7 +7,7 @@ This project is organized as a **monorepo** implementing a **Hexagonal Architect
 ## 🌳 Full Project Structure
 
 ```text
-/tfm-bibliotecario-ia
+/aibrarian
 │
 ├── /api/                           # Python backend (FastAPI)
 │   ├── /app/                       # Application code
