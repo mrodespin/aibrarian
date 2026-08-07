@@ -207,9 +207,13 @@ class GroqAdapter(LLMPort):
             client = self._get_client()
 
             extraction_prompt = (
-                "Extract the keywords and proper nouns from this question.\n"
-                "Return ONLY the keywords, one per line, with no explanations or numbering.\n"
-                "If there's a movie title, book title, or proper noun, include it exactly as it appears.\n\n"
+                "Extract the specific proper nouns, titles, or named entities from this "
+                "question — the exact words someone would need to find this in a search engine.\n"
+                "Return ONLY those, one per line, with no explanations or numbering.\n"
+                "Do NOT return generic category words on their own (e.g. \"book\", \"movie\", "
+                "\"song\", \"document\", \"author\") — only include them if they're literally "
+                "part of a title. If the question has no proper noun or specific title, "
+                "return nothing.\n\n"
                 f"Question: {question}\n\nKeywords:"
             )
 

@@ -369,8 +369,8 @@ class RAGService:
         Pipeline:
             ① Extract keywords         → extract_keywords()
             ② Vectorize the question   → generate_embedding()
-            ③ Search with keywords     → similarity_search(keyword_filter)
-            ④ Semantic fallback        → similarity_search() with no filter
+            ③ Search with EVERY keyword → similarity_search(keyword_filter), merged + deduped
+            ④ Semantic fallback        → similarity_search() with no filter, only if ③ found nothing
             (③ and ④ always go through _filter_by_relevance)
 
         Args:
@@ -407,24 +407,50 @@ class RAGService:
         # ================================================================
         # STEP 3: Search with Query Expansion (keyword + semantic)
         # ================================================================
-        # We try searching with each extracted keyword
-        # If we find results, we use those; otherwise, semantic fallback
+        # We search with EVERY extracted keyword and merge the results —
+        # NOT "stop at the first keyword that returns anything".
+        #
+        # Why not stop early (bug seen in production, not hypothetical):
+        # extract_keywords() doesn't always limit itself to the specific
+        # proper noun — for "What about the book Fahrenheit 451?" it can
+        # return ["book", "Fahrenheit 451"], in that order. "book" is
+        # generic enough to coincidentally $contains-match some unrelated
+        # chunk; if we stopped at the first keyword with any passing
+        # result, we'd use that unrelated chunk as context and NEVER even
+        # try "Fahrenheit 451" — the LLM then correctly reports the
+        # (wrong) context has no relevant info. Trying every keyword and
+        # merging closes this off: even if a generic keyword sneaks in
+        # and matches noise, the real title's results still make it into
+        # the pool, deduped and ranked by relevance below.
         source_documents = []
 
         if keywords:
-            # Try searching with the most relevant keyword first
-            # (usually the proper noun or title)
+            seen_chunks = set()
+            combined_results = []
             for keyword in keywords:
-                source_documents = await self.vector_db.similarity_search(
+                results = await self.vector_db.similarity_search(
                     query_embedding=query_embedding,
                     collection_name=collection,
                     top_k=max_results,
                     keyword_filter=keyword
                 )
-                source_documents = self._filter_by_relevance(source_documents)
-                if source_documents:
-                    logger.info(f"Found {len(source_documents)} docs with keyword '{keyword}'")
-                    break  # We found results, stop searching
+                results = self._filter_by_relevance(results)
+                for doc in results:
+                    # (document_id, chunk_index) identifies a chunk
+                    # uniquely — document_id alone isn't enough, a
+                    # document has many chunks.
+                    dedup_key = (doc.document_id, doc.metadata.get("chunk_index"))
+                    if dedup_key not in seen_chunks:
+                        seen_chunks.add(dedup_key)
+                        combined_results.append(doc)
+
+            if combined_results:
+                # Best matches first, capped to what the caller asked for
+                combined_results.sort(key=lambda d: d.relevance_score or 0.0, reverse=True)
+                source_documents = combined_results[:max_results]
+                logger.info(
+                    f"Found {len(source_documents)} docs across {len(keywords)} keyword(s): {keywords}"
+                )
 
         # ================================================================
         # STEP 4: Fall back to pure semantic search

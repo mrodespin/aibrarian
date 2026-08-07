@@ -273,6 +273,62 @@ async def test_query_includes_source_metadata(rag_service_with_mocks, sample_que
 
 
 # ============================================================================
+# QUERY EXPANSION TESTS
+# ============================================================================
+# Regression coverage for a bug seen in production (2026-08-07): when
+# extract_keywords() returns multiple keywords and a generic one (e.g.
+# "book") happens to come before the real proper noun (e.g. "Fahrenheit
+# 451"), the old code stopped at the FIRST keyword that returned any
+# passing result — a coincidental match on "book" won and the real title
+# was never even tried, so the LLM correctly reported the (wrong) context
+# had no relevant info. _retrieve() now tries every keyword and merges.
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_generic_keyword_does_not_shadow_the_real_title(
+    rag_service_with_mocks, mock_ollama, mock_chromadb
+):
+    """A coincidental match on a generic keyword must not prevent trying the rest."""
+    from app.core.domain.models import Query, SourceDocument
+
+    mock_ollama.extract_keywords = AsyncMock(return_value=["book", "Fahrenheit 451"])
+
+    async def mock_search(*args, **kwargs):
+        keyword = kwargs.get("keyword_filter")
+        if keyword == "book":
+            # Coincidental match on an unrelated document — passes the
+            # relevance threshold, but is NOT what the user asked about.
+            return [
+                SourceDocument(
+                    document_id="unrelated_doc",
+                    chunk_content="Some unrelated chunk that happens to mention a book",
+                    metadata={"chunk_index": 0},
+                    relevance_score=0.4
+                )
+            ]
+        if keyword == "Fahrenheit 451":
+            return [
+                SourceDocument(
+                    document_id="fahrenheit_451",
+                    chunk_content="Fahrenheit 451 is a novel by Ray Bradbury...",
+                    metadata={"chunk_index": 0},
+                    relevance_score=0.85
+                )
+            ]
+        return []
+
+    mock_chromadb.similarity_search = AsyncMock(side_effect=mock_search)
+
+    query = Query(question="What about the book Fahrenheit 451?")
+    response = await rag_service_with_mocks.ask_question(query)
+
+    doc_ids = [source.document_id for source in response.source_documents]
+    assert "fahrenheit_451" in doc_ids
+    # Both keywords must have been tried — not just the first one
+    assert mock_chromadb.similarity_search.call_count == 2
+
+
+# ============================================================================
 # ERROR HANDLING TESTS
 # ============================================================================
 

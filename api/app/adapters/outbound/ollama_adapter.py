@@ -539,9 +539,10 @@ ANSWER (based ONLY on the previous conversation):"""
             llm = self._get_llm()
 
             # Prompt optimized for keyword extraction
-            extraction_prompt = f"""Extract the keywords and proper nouns from this question.
-Return ONLY the keywords, one per line, with no explanations or numbering.
-If there's a movie title, book title, or proper noun, include it exactly as it appears.
+            extraction_prompt = f"""Extract the specific proper nouns, titles, or named entities from this question — the exact words someone would need to find this in a search engine.
+Return ONLY those, one per line, with no explanations or numbering.
+Do NOT return generic category words on their own (e.g. "book", "movie", "song", "document", "author") — only include them if they're literally part of a title.
+If the question has no proper noun or specific title, return nothing.
 
 Question: {question}
 
