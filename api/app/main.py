@@ -1,22 +1,22 @@
 # /api/app/main.py
 """
-Entry Point de la API FastAPI - TFM Bibliotecario-IA
+FastAPI Entry Point - Bibliotecario-IA
 
-Este archivo es el PUNTO DE ENTRADA de toda la aplicación.
-Cuando ejecutas `uvicorn app.main:app`, Python carga este módulo.
+This file is the ENTRY POINT for the whole application. When you run
+`uvicorn app.main:app`, Python loads this module.
 
-¿Qué hace este archivo?
-1. INYECTA las dependencias: crea adaptadores y los conecta a los servicios
-2. DEFINE el ciclo de vida de la app (startup y shutdown)
-3. DECLARA los endpoints de la API REST
-4. CONFIGURA middleware (CORS para permitir peticiones del frontend)
+What does this file do?
+1. INJECTS the dependencies: creates adapters and wires them into services
+2. DEFINES the app's lifecycle (startup and shutdown)
+3. DECLARES the REST API's endpoints
+4. CONFIGURES middleware (CORS to allow requests from the frontend)
 
-¿Por qué todo aquí y no en archivos separados?
-- Es el patrón estándar de FastAPI para aplicaciones de tamaño medio
-- Los endpoints necesitan acceso directo a los servicios inyectados
-- Mantiene la wiring (conexión de dependencias) en un solo lugar
+Why put it all here instead of separate files?
+- It's FastAPI's standard pattern for medium-sized applications
+- The endpoints need direct access to the injected services
+- Keeps the wiring (dependency connections) in a single place
 
-Equivalente en TypeScript con Express:
+TypeScript equivalent with Express:
     // app.ts
     const app = express();
     const chromaDb = new ChromaDBAdapter();
@@ -27,34 +27,34 @@ Equivalente en TypeScript con Express:
     app.post('/ask', async (req, res) => { ... });
     app.listen(8000);
 
-Relación con otros ficheros:
-- Importa los ADAPTADORES directamente (para la inyección de dependencias)
-- Importa los SERVICIOS (que internamente hablan con los puertos)
-- Importa los MODELOS de dominio (Query, SyncResult) para los schemas de la API
+Relationship to other files:
+- Imports the ADAPTERS directly (for dependency injection)
+- Imports the SERVICES (which internally talk to the ports)
+- Imports the domain MODELS (Query, SyncResult) for the API's schemas
 """
 
 # ============================================================================
 # IMPORTS
 # ============================================================================
-import asyncio                              # Para lanzar el warm-up del LLM en segundo plano
-import json                                 # Para serializar los eventos SSE de /ask/stream
-from collections import defaultdict         # Contador de intentos de login por IP (rate limiting)
-from contextlib import asynccontextmanager  # Para definir el ciclo de vida (startup/shutdown)
-from pathlib import Path                    # Manejo de rutas de archivos
-from time import monotonic                  # Reloj monótono para la ventana de rate limiting
+import asyncio                              # To launch the LLM's warm-up in the background
+import json                                 # To serialize /ask/stream's SSE events
+from collections import defaultdict         # Login attempt counter per IP (rate limiting)
+from contextlib import asynccontextmanager  # To define the lifecycle (startup/shutdown)
+from pathlib import Path                    # File path handling
+from time import monotonic                  # Monotonic clock for the rate-limit window
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Request  # Framework web + excepciones HTTP
-from fastapi.responses import StreamingResponse  # Para el streaming SSE de /ask/stream
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials  # Para leer el JWT del header Authorization
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Request  # Web framework + HTTP exceptions
+from fastapi.responses import StreamingResponse  # For /ask/stream's SSE streaming
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials  # To read the JWT from the Authorization header
 import tempfile
 import shutil
-from fastapi.middleware.cors import CORSMiddleware  # Middleware para permitir origen cruzado
-from pydantic import BaseModel              # Para los modelos de request/response de la API
+from fastapi.middleware.cors import CORSMiddleware  # Middleware to allow cross-origin requests
+from pydantic import BaseModel              # For the API's request/response models
 
-# Modelos del dominio que se reutilizan como schemas de la API
+# Domain models reused as API schemas
 from app.config.settings import settings
 from app.core.domain.models import Query, QueryResult, SyncResult
-# Observabilidad: logging estructurado y métricas Prometheus
+# Observability: structured logging and Prometheus metrics
 from app.core.observability import (
     configure_structlog,
     get_logger,
@@ -66,7 +66,7 @@ from app.core.observability import (
     DOCUMENTS_SYNCED,
     CHUNKS_CREATED,
 )
-# Servicios de lógica de negocio
+# Business logic services
 from app.core.services.sync_service import SyncService
 from app.core.services.rag_service import RAGService
 from app.core.services.auth_service import (
@@ -76,12 +76,12 @@ from app.core.services.auth_service import (
     TokenPayload,
 )
 from app.core.services.conversation_service import ConversationService
-# Adaptadores concretos (las únicas implementaciones que conoce este fichero)
-# Nota: ChromaCloudAdapter y GroqAdapter se importan más abajo, dentro de sus
-# respectivos "if settings...", no aquí arriba. Sus paquetes (groq,
-# sentence-transformers → torch) son dependencias pesadas que solo hacen
-# falta si esos proveedores están activos; importarlas aquí obligaría a
-# instalarlas incluso para el flujo local con Ollama (ADR-007).
+# Concrete adapters (the only implementations this file knows about)
+# Note: ChromaCloudAdapter and GroqAdapter are imported further below,
+# inside their respective "if settings..." blocks, not up here. Their
+# packages (groq, sentence-transformers → torch) are heavy dependencies
+# only needed if those providers are active; importing them here would
+# force installing them even for the local Ollama flow (ADR-007).
 from app.adapters.outbound.chromadb_adapter import ChromaDBAdapter
 from app.adapters.outbound.ollama_adapter import OllamaAdapter
 from app.adapters.outbound.pdf_processor_adapter import PDFProcessorAdapter
@@ -91,38 +91,38 @@ from app.adapters.outbound.postgres_conversation_adapter import PostgresConversa
 
 
 # ============================================================================
-# CONFIGURACIÓN DE LOGGING ESTRUCTURADO
+# STRUCTURED LOGGING SETUP
 # ============================================================================
-# structlog reemplaza el logging básico con logs en formato JSON.
-# Esto facilita la búsqueda y análisis en herramientas como ELK, Loki, etc.
+# structlog replaces basic logging with JSON-formatted logs.
+# This makes searching and analysis easier in tools like ELK, Loki, etc.
 #
-# En desarrollo (debug=True): formato human-readable con colores
-# En producción (debug=False): formato JSON para parsing automático
+# In development (debug=True): human-readable format
+# In production (debug=False): JSON format for automatic parsing
 configure_structlog(json_format=not settings.debug)
 logger = get_logger(__name__)
 
 
 # ============================================================================
-# INYECCIÓN DE DEPENDENCIAS
+# DEPENDENCY INJECTION
 # ============================================================================
-# Aquí se conectan los adaptadores con los servicios.
-# Es el ÚNICO lugar donde se crea una instancia concreta de cada adaptador.
-# El resto del código solo habla con las interfaces (puertos).
+# This is where the adapters get wired into the services.
+# It's the ONLY place where a concrete instance of each adapter is created.
+# Everywhere else in the code only talks to the interfaces (ports).
 #
-# Como Python ejecuta los módulos una sola vez, estas variables son
-# efectivamente singletons: la misma instancia se reutiliza en toda la app.
+# Since Python only executes modules once, these variables are
+# effectively singletons: the same instance is reused across the whole app.
 #
-# Equivalente JS:
+# JS equivalent:
 #   const chromaDb  = new ChromaDBAdapter();
 #   const ollama    = new OllamaAdapter();
 #   const syncSvc   = new SyncService(pdfProcessor, ollama, chromaDb);
 
-# --- Adaptadores (implementaciones concretas de los puertos) ---
-# La clase concreta de LLMPort/VectorDBPort se elige por configuración
-# (settings.llm_provider / settings.vector_db_provider), no por código.
-# Default = setup local de siempre (Ollama nativo + ChromaDB en Docker).
-# En Render, LLM_PROVIDER=groq y VECTOR_DB_PROVIDER=chroma_cloud vía env vars.
-# Ninguno de los dos adaptadores nuevos toca OllamaAdapter/ChromaDBAdapter.
+# --- Adapters (concrete implementations of the ports) ---
+# The concrete LLMPort/VectorDBPort class is chosen via configuration
+# (settings.llm_provider / settings.vector_db_provider), not in code.
+# Default = the usual local setup (native Ollama + ChromaDB in Docker).
+# On Render, LLM_PROVIDER=groq and VECTOR_DB_PROVIDER=chroma_cloud via env vars.
+# Neither of the two new adapters touches OllamaAdapter/ChromaDBAdapter.
 if settings.llm_provider == "groq":
     from app.adapters.outbound.groq_adapter import GroqAdapter
     llm_adapter = GroqAdapter()
@@ -138,13 +138,13 @@ else:
 pdf_processor = PDFProcessorAdapter()
 notion_processor = NotionProcessorAdapter()
 
-# --- Servicios de lógica de negocio ---
-# Nota: hay DOS instancias de SyncService, una por cada tipo de fuente.
-# Comparten el mismo LLM y VectorDB, pero difieren en el DocumentProcessor:
-#   - sync_service        → usa pdf_processor     (para PDFs)
-#   - notion_sync_service → usa notion_processor  (para Notion)
-# Este patrón es posible gracias a la interfaz DocumentProcessorPort:
-# SyncService no sabe si procesa PDFs o Notion, solo habla con el puerto.
+# --- Business logic services ---
+# Note: there are TWO SyncService instances, one per source type.
+# They share the same LLM and VectorDB, but differ in the DocumentProcessor:
+#   - sync_service        → uses pdf_processor     (for PDFs)
+#   - notion_sync_service → uses notion_processor  (for Notion)
+# This pattern is possible thanks to the DocumentProcessorPort interface:
+# SyncService doesn't know whether it's processing PDFs or Notion, it only talks to the port.
 sync_service = SyncService(
     document_processor=pdf_processor,
     llm=llm_adapter,
@@ -157,45 +157,45 @@ notion_sync_service = SyncService(
     vector_db=chromadb_adapter
 )
 
-# RAGService solo necesita LLM + VectorDB (no procesa documentos nuevos)
+# RAGService only needs LLM + VectorDB (doesn't process new documents)
 rag_service = RAGService(
     llm=llm_adapter,
     vector_db=chromadb_adapter
 )
 
-# --- Autenticación (Postgres/Neon + JWT) ---
-# Mismo patrón manual de DI que el resto: instancia global del adapter,
-# inyectada en el servicio. connect()/close() se llaman desde el
-# lifespan (abajo), no aquí — crear el pool es una operación async.
+# --- Authentication (Postgres/Neon + JWT) ---
+# Same manual DI pattern as the rest: a global adapter instance, injected
+# into the service. connect()/close() are called from the lifespan
+# (below), not here — creating the pool is an async operation.
 user_repository = PostgresUserAdapter()
 auth_service = AuthService(user_repository=user_repository)
 
-# --- Historial de conversación (Postgres/Neon) ---
-# Mismo patrón que el bloque de arriba, pool propio (ver
-# postgres_conversation_adapter.py). Deliberadamente NO se inyecta en
-# RAGService (que solo necesita LLM + VectorDB) — el endpoint /ask compone
-# ambos servicios: pide el historial antes de llamar a rag_service, lo
-# persiste después.
+# --- Conversation history (Postgres/Neon) ---
+# Same pattern as the block above, its own pool (see
+# postgres_conversation_adapter.py). Deliberately NOT injected into
+# RAGService (which only needs LLM + VectorDB) — the /ask endpoint
+# composes both services: it fetches the history before calling
+# rag_service, and persists it afterward.
 conversation_repository = PostgresConversationAdapter()
 conversation_service = ConversationService(conversation_repository=conversation_repository)
 
 
 # ============================================================================
-# CICLO DE VIDA DE LA APLICACIÓN
+# APPLICATION LIFECYCLE
 # ============================================================================
-# @asynccontextmanager permite definir código que se ejecuta al
-# iniciar y al cerrar la app (startup/shutdown).
+# @asynccontextmanager lets you define code that runs when the app starts
+# and when it shuts down.
 #
-# ¿Cómo funciona?
-#   - Todo antes de "yield" se ejecuta al INICIAR (startup)
-#   - Todo después de "yield" se ejecuta al CERRAR (shutdown)
-#   - El "yield" es donde la app está activa y atiende peticiones
+# How does it work?
+#   - Everything before "yield" runs on STARTUP
+#   - Everything after "yield" runs on SHUTDOWN
+#   - "yield" is where the app is active and serving requests
 #
-# Equivalente JS con Express:
+# JS equivalent with Express:
 #   process.on('beforeExit', () => console.log('Shutting down'));
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Gestor del ciclo de vida de la aplicación FastAPI."""
+    """FastAPI application lifecycle manager."""
     # --- STARTUP ---
     logger.info(
         "Starting application",
@@ -205,46 +205,46 @@ async def lifespan(app: FastAPI):
         vector_db_provider=settings.vector_db_provider,
     )
 
-    # Verificar que el LLM (Ollama o Groq, según settings.llm_provider) está
-    # disponible antes de atender peticiones. Si no lo está, la app inicia
-    # de todas formas pero los endpoints que necesitan al LLM fallarán con
-    # error descriptivo.
+    # Check that the LLM (Ollama or Groq, per settings.llm_provider) is
+    # available before serving requests. If it isn't, the app starts
+    # anyway but the endpoints that need the LLM will fail with a
+    # descriptive error.
     is_available = await llm_adapter.is_available()
     if not is_available:
         logger.warning("LLM service is not available", provider=settings.llm_provider)
     else:
         logger.info("LLM service is ready", provider=settings.llm_provider, model_info=llm_adapter.get_model_info())
 
-    # Warm-up en segundo plano: para GroqAdapter, precarga el modelo de
-    # embeddings local en memoria (no-op para otros adaptadores, ver
-    # LLMPort.warm_up). Se lanza con create_task (no se hace `await`)
-    # a propósito: uvicorn no abre el puerto hasta que este generador
-    # llega al `yield`, así que un warm-up bloqueante aquí reproduciría
-    # el mismo timeout de arranque en Render que causaba is_available()
-    # antes de este fix. Se guarda la referencia en app.state para que
-    # el garbage collector no la cancele a mitad de ejecución.
+    # Background warm-up: for GroqAdapter, preloads the local embedding
+    # model into memory (a no-op for other adapters, see
+    # LLMPort.warm_up). Launched with create_task (not `await`ed) on
+    # purpose: uvicorn doesn't open the port until this generator
+    # reaches `yield`, so a blocking warm-up here would reproduce the
+    # same startup timeout on Render that is_available() used to cause
+    # before this fix. The reference is stored in app.state so the
+    # garbage collector doesn't cancel it mid-run.
     app.state.warm_up_task = asyncio.create_task(llm_adapter.warm_up())
 
-    # Conectar a Postgres (users/auth). No tumba el arranque si falla —
-    # igual que la comprobación del LLM de arriba, la app sigue viva pero
-    # los endpoints de /auth/* devolverán 500 hasta que se arregle.
+    # Connect to Postgres (users/auth). Doesn't crash startup if it
+    # fails — same as the LLM check above, the app stays up but
+    # /auth/* endpoints will return 500 until this is fixed.
     try:
         await user_repository.connect()
         logger.info("Connected to Postgres (users)")
     except Exception as e:
         logger.warning("Failed to connect to Postgres — auth endpoints will fail until this is fixed", error=str(e))
 
-    # Conectar a Postgres (historial de conversación). Igual que arriba,
-    # no tumba el arranque si falla — /ask simplemente sigue funcionando
-    # sin historial hasta que se arregle (ver el try/except en el propio
-    # endpoint, que degrada del mismo modo petición a petición).
+    # Connect to Postgres (conversation history). Same as above,
+    # doesn't crash startup if it fails — /ask simply keeps working
+    # without history until this is fixed (see the try/except in the
+    # endpoint itself, which degrades the same way request by request).
     try:
         await conversation_repository.connect()
         logger.info("Connected to Postgres (conversation history)")
     except Exception as e:
         logger.warning("Failed to connect to Postgres — conversation history will be unavailable until this is fixed", error=str(e))
 
-    yield  # ← La app está activa y atiende peticiones desde aquí
+    yield  # ← The app is active and serving requests from here on
 
     # --- SHUTDOWN ---
     logger.info("Shutting down application")
@@ -253,20 +253,20 @@ async def lifespan(app: FastAPI):
 
 
 # ============================================================================
-# APLICACIÓN FASTAPI
+# FASTAPI APPLICATION
 # ============================================================================
 app = FastAPI(
     title=settings.app_name,
     description="API for the AI Librarian RAG project - Local knowledge base with privacy.",
     version=settings.app_version,
-    lifespan=lifespan  # Conecta el gestor de ciclo de vida definido arriba
+    lifespan=lifespan  # Wires in the lifecycle manager defined above
 )
 
-# Middleware CORS: permite que el frontend (otro origen) haga peticiones a esta API.
-# allow_origins=[settings.frontend_url]: SOLO el origen exacto del frontend.
-# allow_credentials=False porque la sesión ya no viaja en cookie: el JWT va
-# en el header Authorization, que el cliente adjunta explícitamente y que
-# "*" en allow_headers ya cubre.
+# CORS middleware: lets the frontend (a different origin) make requests to this API.
+# allow_origins=[settings.frontend_url]: ONLY the frontend's exact origin.
+# allow_credentials=False because the session no longer travels as a
+# cookie: the JWT goes in the Authorization header, which the client
+# attaches explicitly and which "*" in allow_headers already covers.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],
@@ -275,25 +275,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Middleware de métricas: registra contador y latencia de cada request HTTP
-# Las métricas se exponen en /metrics para que Prometheus las recolecte
+# Metrics middleware: records a counter and latency for every HTTP request
+# The metrics are exposed at /metrics for Prometheus to scrape
 app.add_middleware(MetricsMiddleware)
 
 
 # ============================================================================
-# AUTENTICACIÓN — HEADER AUTHORIZATION Y DEPENDENCIA DE FASTAPI
+# AUTHENTICATION — AUTHORIZATION HEADER AND FASTAPI DEPENDENCY
 # ============================================================================
-# El JWT viaja en el header `Authorization: Bearer <token>`, adjuntado a
-# mano por el frontend (ver frontend/src/api/client.js), en vez de en una
-# cookie. Motivo: en prod, frontend y API viven en subdominios distintos
-# de Render (cross-site) y Safari (ITP) bloquea/descarta agresivamente las
-# cookies cross-site incluso con SameSite=None; Secure=True — el resto de
-# peticiones autenticadas (stats, documentos, /ask) fallaban en Safari
-# mientras funcionaban en Chrome/Brave. El header no sufre ese bloqueo
-# porque no es una cookie del navegador.
+# The JWT travels in the `Authorization: Bearer <token>` header, attached
+# by hand by the frontend (see frontend/src/api/client.js), instead of in
+# a cookie. Why: in prod, frontend and API live on different Render
+# subdomains (cross-site) and Safari (ITP) aggressively blocks/drops
+# cross-site cookies even with SameSite=None; Secure=True — every other
+# authenticated request (stats, documents, /ask) failed on Safari while
+# working fine on Chrome/Brave. The header doesn't suffer that block
+# because it isn't a browser cookie.
 #
-# auto_error=False: queremos lanzar nuestro propio 401 con mensaje
-# consistente en vez del 403 genérico que HTTPBearer daría por defecto.
+# auto_error=False: we want to raise our own 401 with a consistent
+# message instead of the generic 403 HTTPBearer would give by default.
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
@@ -301,14 +301,14 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme)
 ) -> TokenPayload:
     """
-    Dependencia de FastAPI que exige una sesión válida.
+    FastAPI dependency that requires a valid session.
 
-    Uso: dependencies=[Depends(get_current_user)] en cualquier endpoint
-    que deba requerir login (ver el resto del fichero).
+    Usage: dependencies=[Depends(get_current_user)] on any endpoint that
+    should require login (see the rest of the file).
 
     Raises:
-        HTTPException(401): si falta el header Authorization o el token
-            no es válido/expiró.
+        HTTPException(401): if the Authorization header is missing or
+            the token isn't valid/has expired.
     """
     if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -319,63 +319,63 @@ def get_current_user(
 
 
 # ============================================================================
-# MODELOS DE REQUEST/RESPONSE (CAPA API)
+# REQUEST/RESPONSE MODELS (API LAYER)
 # ============================================================================
-# Estos modelos son DIFERENTES a los del dominio (models.py).
-# Su propósito es definir los schemas de entrada y salida de la API.
+# These models are DIFFERENT from the domain ones (models.py).
+# Their purpose is to define the API's input/output schemas.
 #
-# ¿Por qué no usar los modelos del dominio directamente?
-# - Los modelos del dominio representan conceptos de negocio internos
-# - Estos modelos representan la FORMA de las peticiones HTTP
-# - Separar ambas capas es parte de la arquitectura hexagonal
+# Why not use the domain models directly?
+# - The domain models represent internal business concepts
+# - These models represent the SHAPE of HTTP requests
+# - Separating both layers is part of hexagonal architecture
 #
-# FastAPI los usa para:
-# - Deserializar el JSON de la petición automáticamente
-# - Validar los datos de entrada (Pydantic)
-# - Generar documentación Swagger/OpenAPI automáticamente
+# FastAPI uses them to:
+# - Automatically deserialize the request's JSON
+# - Validate input data (Pydantic)
+# - Automatically generate Swagger/OpenAPI documentation
 
 class SyncFileRequest(BaseModel):
     """
-    Request para sincronizar un archivo PDF individual.
+    Request to sync a single PDF file.
 
-    Ejemplo de petición:
+    Example request:
         POST /sync
         {"file_path": "./data/manual.pdf", "collection_name": null}
     """
-    file_path: str                          # Ruta al archivo PDF
-    collection_name: str | None = None      # Colección destino (None = usar default de settings)
+    file_path: str                          # Path to the PDF file
+    collection_name: str | None = None      # Target collection (None = use settings' default)
 
 
 class SyncNotionPageRequest(BaseModel):
     """
-    Request para sincronizar una página de Notion.
+    Request to sync a Notion page.
 
-    Ejemplo de petición:
+    Example request:
         POST /sync/notion
         {"page_id": "a1b2c3d4e5f6...", "collection_name": null}
     """
-    page_id: str                            # ID de página o URL de Notion
+    page_id: str                            # Notion page ID or URL
     collection_name: str | None = None
 
 
 class SyncNotionDatabaseRequest(BaseModel):
     """
-    Request para sincronizar todas las páginas de una base de datos de Notion.
+    Request to sync every page of a Notion database.
 
-    Ejemplo de petición:
+    Example request:
         POST /sync/notion/database
         {"database_id": "abc123...", "max_pages": 10, "collection_name": null}
     """
-    database_id: str | None = None          # ID de la base de datos (None = usar de settings)
-    max_pages: int | None = None            # Límite de páginas (None = todas)
+    database_id: str | None = None          # Database ID (None = use settings')
+    max_pages: int | None = None            # Page limit (None = all)
     collection_name: str | None = None
 
 
 class LoginRequest(BaseModel):
     """
-    Request para iniciar sesión.
+    Request to log in.
 
-    Ejemplo de petición:
+    Example request:
         POST /auth/login
         {"email": "ana@example.com", "password": "..."}
     """
@@ -385,11 +385,11 @@ class LoginRequest(BaseModel):
 
 class UserResponse(BaseModel):
     """
-    Response con los datos públicos de un usuario.
+    Response with a user's public data.
 
-    Deliberadamente NO incluye password_hash — a diferencia del User de
-    dominio (core/domain/models.py), este modelo es lo único que sale
-    de la API. Misma separación dominio/API que HealthResponse.
+    Deliberately does NOT include password_hash — unlike the domain
+    User (core/domain/models.py), this model is the only thing that
+    leaves the API. Same domain/API separation as HealthResponse.
     """
     id: int
     email: str
@@ -397,9 +397,9 @@ class UserResponse(BaseModel):
 
 class LoginResponse(UserResponse):
     """
-    Response de /auth/login: datos del usuario + el JWT que el frontend
-    debe guardar (localStorage) y reenviar como
-    `Authorization: Bearer <access_token>` en cada petición posterior.
+    /auth/login's response: the user's data + the JWT the frontend must
+    store (localStorage) and resend as
+    `Authorization: Bearer <access_token>` on every subsequent request.
     """
     access_token: str
     token_type: str = "bearer"
@@ -407,10 +407,10 @@ class LoginResponse(UserResponse):
 
 class HealthResponse(BaseModel):
     """
-    Response del health check básico.
+    Basic health check response.
 
-    response_model=HealthResponse en el endpoint le dice a FastAPI
-    que valide y filtre la respuesta con este schema antes de devolverla.
+    response_model=HealthResponse on the endpoint tells FastAPI to
+    validate and filter the response against this schema before returning it.
     """
     status: str
     version: str
@@ -421,7 +421,7 @@ class HealthResponse(BaseModel):
 
 
 # ============================================================================
-# ENDPOINTS DE LA API
+# API ENDPOINTS
 # ============================================================================
 
 # ----------------------------------------------------------------------------
@@ -431,16 +431,16 @@ class HealthResponse(BaseModel):
 @app.get("/", response_model=HealthResponse)
 async def root():
     """
-    Endpoint raíz — Health check básico.
+    Root endpoint — basic health check.
 
-    Verifica en tiempo real si el LLM y la base vectorial configurados
-    (Ollama/Groq, ChromaDB local/Chroma Cloud, según settings.llm_provider
-    y settings.vector_db_provider) están disponibles. Útil para monitoreo
-    (p.ej. healthCheckPath de Render) y para que el frontend sepa si la
-    API está lista.
+    Checks in real time whether the configured LLM and vector DB
+    (Ollama/Groq, ChromaDB local/Chroma Cloud, per settings.llm_provider
+    and settings.vector_db_provider) are available. Useful for
+    monitoring (e.g. Render's healthCheckPath) and for the frontend to
+    know whether the API is ready.
 
-    @app.get("/"): registra esta función como handler de GET /
-    response_model=HealthResponse: FastAPI valida la respuesta con ese schema
+    @app.get("/"): registers this function as the handler for GET /
+    response_model=HealthResponse: FastAPI validates the response against that schema
     """
     llm_ok = await llm_adapter.is_available()
     vector_db_ok = await chromadb_adapter.collection_exists(settings.chromadb_collection_name)
@@ -458,19 +458,19 @@ async def root():
 @app.get("/health")
 async def health_check():
     """
-    Health check detallado.
+    Detailed health check.
 
-    Devuelve más información que el endpoint raíz: estado de servicios
-    y configuración actual. Útil para debugging y monitoreo.
+    Returns more information than the root endpoint: service status
+    and current configuration. Useful for debugging and monitoring.
 
-    Sin response_model: devuelve el dict tal cual, sin validación de schema.
+    No response_model: returns the dict as-is, with no schema validation.
     """
     return {
         "status": "healthy",
         "services": {
-            # La clave se mantiene "ollama" por compatibilidad con el frontend
-            # (health.services.ollama), aunque con llm_provider="groq" refleja
-            # la disponibilidad de Groq, no de un Ollama real.
+            # The key stays "ollama" for frontend compatibility
+            # (health.services.ollama), even though with llm_provider="groq"
+            # it reflects Groq's availability, not a real Ollama's.
             "ollama": await llm_adapter.is_available(),
             "chromadb": await chromadb_adapter.collection_exists(settings.chromadb_collection_name)
         },
@@ -487,11 +487,11 @@ async def health_check():
 @app.get("/stats", dependencies=[Depends(get_current_user)])
 async def get_stats():
     """
-    Estadísticas de la colección vectorial y del modelo.
+    Statistics for the vector collection and the model.
 
-    Delega a RAGService.get_collection_info() que combina:
-    - Estadísticas de ChromaDB (total de chunks almacenados)
-    - Información del modelo LLM activo
+    Delegates to RAGService.get_collection_info(), which combines:
+    - ChromaDB stats (total stored chunks)
+    - Info about the active LLM model
     """
     try:
         info = await rag_service.get_collection_info()
@@ -504,21 +504,21 @@ async def get_stats():
 @app.get("/metrics")
 async def get_metrics():
     """
-    Endpoint de métricas Prometheus.
+    Prometheus metrics endpoint.
 
-    Expone todas las métricas de la aplicación en formato Prometheus.
-    Este endpoint es scrapeado periódicamente por Prometheus para
-    recolectar métricas y almacenarlas en su base de datos de series temporales.
+    Exposes all of the application's metrics in Prometheus format. This
+    endpoint is scraped periodically by Prometheus to collect metrics
+    and store them in its time-series database.
 
-    Métricas incluidas:
-    - http_requests_total: Contador de requests por método/endpoint/status
-    - http_request_duration_seconds: Histograma de latencias HTTP
-    - rag_queries_total: Contador de consultas RAG (éxito/error)
-    - rag_query_duration_seconds: Tiempo de procesamiento de queries
-    - documents_synced_total: Documentos sincronizados por fuente
-    - llm_requests_total: Requests al LLM por operación
+    Metrics included:
+    - http_requests_total: Request counter by method/endpoint/status
+    - http_request_duration_seconds: Histogram of HTTP latencies
+    - rag_queries_total: RAG query counter (success/error)
+    - rag_query_duration_seconds: Query processing time
+    - documents_synced_total: Documents synced by source
+    - llm_requests_total: LLM requests by operation
 
-    Uso con Prometheus (prometheus.yml):
+    Usage with Prometheus (prometheus.yml):
         scrape_configs:
           - job_name: 'bibliotecario-ia'
             static_configs:
@@ -528,17 +528,17 @@ async def get_metrics():
 
 
 # ----------------------------------------------------------------------------
-# Autenticación
+# Authentication
 # ----------------------------------------------------------------------------
 
-# Rate limiting de /auth/login, en memoria — sin Redis/slowapi porque una
-# sola tabla de usuarios y una sola instancia (Render free tier, ya ajustado
-# de RAM, ver requirements.txt) no lo justifican. Si el servicio llegara a
-# escalar a varias instancias, cada una llevaría su propio contador (deja de
-# ser un límite global estricto), pero sigue frenando fuerza bruta desde una
-# IP dada contra cualquier instancia individual.
-_LOGIN_RATE_LIMIT = 5      # intentos
-_LOGIN_RATE_WINDOW = 60.0  # segundos
+# In-memory rate limiting for /auth/login — no Redis/slowapi because a
+# single users table and a single instance (Render free tier, already
+# RAM-constrained, see requirements.txt) don't justify it. If the
+# service ever scaled to multiple instances, each would carry its own
+# counter (it stops being a strict global limit), but it would still
+# throttle brute force from a given IP against any individual instance.
+_LOGIN_RATE_LIMIT = 5      # attempts
+_LOGIN_RATE_WINDOW = 60.0  # seconds
 _login_attempts: dict[str, list[float]] = defaultdict(list)
 
 
@@ -562,18 +562,17 @@ def _enforce_login_rate_limit(request: Request) -> None:
 @app.post("/auth/login", response_model=LoginResponse)
 async def login(request: LoginRequest, http_request: Request):
     """
-    Inicia sesión: verifica credenciales y, si son correctas, devuelve un
-    JWT de sesión (válido durante settings.jwt_expiration_minutes) en el
-    cuerpo de la respuesta.
+    Logs in: verifies credentials and, if correct, returns a session
+    JWT (valid for settings.jwt_expiration_minutes) in the response body.
 
-    El frontend guarda ese token (localStorage) y lo reenvía a mano como
-    `Authorization: Bearer <token>` en cada petición posterior — ver
-    get_current_user() más arriba para el porqué de este diseño en vez
-    de una cookie de sesión.
+    The frontend stores that token (localStorage) and resends it by
+    hand as `Authorization: Bearer <token>` on every subsequent request
+    — see get_current_user() above for why this design was chosen over
+    a session cookie.
 
     Raises:
-        HTTPException(429): más de _LOGIN_RATE_LIMIT intentos desde la
-            misma IP en los últimos _LOGIN_RATE_WINDOW segundos.
+        HTTPException(429): more than _LOGIN_RATE_LIMIT attempts from
+            the same IP in the last _LOGIN_RATE_WINDOW seconds.
     """
     _enforce_login_rate_limit(http_request)
     try:
@@ -593,44 +592,44 @@ async def login(request: LoginRequest, http_request: Request):
 @app.post("/auth/logout")
 async def logout():
     """
-    Cierra sesión. El JWT es stateless (sin blocklist server-side): el
-    cliente simplemente descarta el token guardado en localStorage.
+    Logs out. The JWT is stateless (no server-side blocklist): the
+    client simply discards the token stored in localStorage.
     """
     return {"status": "success"}
 
 
 @app.get("/auth/me", response_model=UserResponse)
 async def me(current_user: TokenPayload = Depends(get_current_user)):
-    """Devuelve el usuario de la sesión actual (usado por el frontend al cargar)."""
+    """Returns the current session's user (used by the frontend on load)."""
     return UserResponse(id=current_user.user_id, email=current_user.email)
 
 
 # ----------------------------------------------------------------------------
-# Sincronización de documentos (Ingesta)
+# Document Sync (Ingestion)
 # ----------------------------------------------------------------------------
 
 @app.post("/sync", response_model=SyncResult, dependencies=[Depends(get_current_user)])
 async def sync_document(request: SyncFileRequest):
     """
-    Sincroniza un archivo PDF individual a la base de datos vectorial.
+    Syncs a single PDF file into the vector database.
 
-    Pipeline que ejecuta internamente (delegado a SyncService):
-        1. Carga el PDF y extrae texto
-        2. Divide en chunks
-        3. Genera embeddings para cada chunk
-        4. Almacena en ChromaDB
+    Pipeline it runs internally (delegated to SyncService):
+        1. Loads the PDF and extracts text
+        2. Splits it into chunks
+        3. Generates embeddings for each chunk
+        4. Stores them in ChromaDB
 
-    Manejo de errores:
-    - 404 si el archivo no existe
-    - 400 si no es un PDF
-    - 500 si falla el procesamiento interno
+    Error handling:
+    - 404 if the file doesn't exist
+    - 400 if it isn't a PDF
+    - 500 if internal processing fails
 
-    ¿Por qué "except HTTPException: raise"?
-    Los HTTPException que lanzamos nosotros (404, 400) no deben ser
-    capturados por el except genérico de abajo. El "raise" los resuelta
-    sin envolverlos en otro 500.
+    Why "except HTTPException: raise"?
+    The HTTPExceptions we raise ourselves (404, 400) shouldn't be
+    caught by the generic except below. The "raise" lets them resolve
+    without wrapping them in another 500.
 
-    Equivalente JS con Express:
+    Express (JS) equivalent:
         app.post('/sync', async (req, res) => {
             if (!fs.existsSync(req.body.file_path))
                 return res.status(404).json({ detail: 'File not found' });
@@ -642,25 +641,25 @@ async def sync_document(request: SyncFileRequest):
         file_path = Path(request.file_path)
         logger.info("Syncing PDF document", file_path=str(file_path))
 
-        # Validaciones previas al procesamiento
+        # Validations before processing
         if not file_path.exists():
             raise HTTPException(status_code=404, detail=f"File not found: {request.file_path}")
 
         if not pdf_processor.supports_format(file_path):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
-        # Delegar al servicio de sincronización
+        # Delegate to the sync service
         result = await sync_service.sync_document_from_file(
             file_path=file_path,
             collection_name=request.collection_name
         )
 
-        # Si el servicio reporta fallo, lanzar error 500
+        # If the service reports a failure, raise a 500 error
         if not result.success:
             DOCUMENTS_SYNCED.labels(source='pdf', status='error').inc()
             raise HTTPException(status_code=500, detail=result.message)
 
-        # Registrar métricas de éxito
+        # Record success metrics
         DOCUMENTS_SYNCED.labels(source='pdf', status='success').inc()
         CHUNKS_CREATED.inc(result.chunks_created)
         logger.info("PDF sync completed", document_id=result.document_id, chunks=result.chunks_created)
@@ -668,7 +667,7 @@ async def sync_document(request: SyncFileRequest):
         return result
 
     except HTTPException:
-        raise  # Re-lanza HTTPException sin envolverla en otra
+        raise  # Re-raise HTTPException without wrapping it in another one
     except Exception as e:
         DOCUMENTS_SYNCED.labels(source='pdf', status='error').inc()
         logger.error("Sync endpoint error", error=str(e), file_path=request.file_path)
@@ -681,45 +680,45 @@ async def sync_upload(
     collection_name: str = Form(None)
 ):
     """
-    Sube y sincroniza un archivo PDF desde el navegador.
+    Uploads and syncs a PDF file from the browser.
 
-    Este endpoint acepta multipart/form-data con un archivo PDF.
-    El archivo se guarda temporalmente, se procesa y luego se elimina.
+    This endpoint accepts multipart/form-data with a PDF file. The file
+    is saved temporarily, processed, and then deleted.
 
-    Ejemplo con curl:
+    Example with curl:
         curl -X POST "http://localhost:8000/sync/upload" \
-             -F "file=@documento.pdf"
+             -F "file=@document.pdf"
 
     Args:
-        file: Archivo PDF subido (multipart/form-data)
-        collection_name: Colección destino (opcional)
+        file: Uploaded PDF file (multipart/form-data)
+        collection_name: Target collection (optional)
 
     Returns:
-        SyncResult con el resultado de la sincronización
+        SyncResult with the sync's result
     """
-    # Validar que es un PDF
+    # Validate it's a PDF
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(
             status_code=400,
             detail="Only PDF files are supported. Please upload a .pdf file."
         )
 
-    # Validar content type
+    # Validate the content type
     if file.content_type and file.content_type != 'application/pdf':
         logger.warning(f"Unexpected content type: {file.content_type}")
 
     temp_file = None
     try:
-        # Crear archivo temporal para guardar el PDF
-        # suffix mantiene la extensión .pdf para que el procesador lo reconozca
+        # Create a temp file to save the PDF
+        # suffix keeps the .pdf extension so the processor recognizes it
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-            # Copiar contenido del upload al archivo temporal
+            # Copy the upload's content into the temp file
             shutil.copyfileobj(file.file, temp_file)
             temp_path = Path(temp_file.name)
 
         logger.info("Uploaded file saved to temp", temp_path=str(temp_path), filename=file.filename)
 
-        # Procesar el PDF usando el servicio existente
+        # Process the PDF using the existing service
         result = await sync_service.sync_document_from_file(
             file_path=temp_path,
             collection_name=collection_name
@@ -729,11 +728,11 @@ async def sync_upload(
             DOCUMENTS_SYNCED.labels(source='pdf', status='error').inc()
             raise HTTPException(status_code=500, detail=result.message)
 
-        # Registrar métricas de éxito
+        # Record success metrics
         DOCUMENTS_SYNCED.labels(source='pdf', status='success').inc()
         CHUNKS_CREATED.inc(result.chunks_created)
 
-        # Añadir el nombre original del archivo al mensaje
+        # Add the file's original name to the message
         result.message = f"Uploaded and synced: {file.filename}"
         logger.info("Upload sync completed", filename=file.filename, chunks=result.chunks_created)
 
@@ -746,7 +745,7 @@ async def sync_upload(
         logger.error("Upload sync error", error=str(e), filename=file.filename)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # Limpiar archivo temporal
+        # Clean up the temp file
         if temp_file and Path(temp_file.name).exists():
             try:
                 Path(temp_file.name).unlink()
@@ -758,27 +757,27 @@ async def sync_upload(
 @app.post("/sync/directory", dependencies=[Depends(get_current_user)])
 async def sync_directory(directory_path: str | None = None):
     """
-    Sincroniza todos los PDFs de un directorio.
+    Syncs every PDF in a directory.
 
-    directory_path es un query parameter opcional.
-    Si no se proporciona, usa el directorio configurado en settings.
+    directory_path is an optional query parameter.
+    If not provided, uses the directory configured in settings.
 
-    ¿Cómo se pasa el parámetro?
-        POST /sync/directory                         → usa settings.data_directory
-        POST /sync/directory?directory_path=./docs   → usa ./docs
+    How is the parameter passed?
+        POST /sync/directory                         → uses settings.data_directory
+        POST /sync/directory?directory_path=./docs   → uses ./docs
 
-    En FastAPI, los parámetros de función que NO están en el path
-    y NO son modelos Pydantic se interpretan como query parameters.
-    Equivalente JS: req.query.directory_path
+    In FastAPI, function parameters that are NOT in the path and are
+    NOT Pydantic models are interpreted as query parameters.
+    JS equivalent: req.query.directory_path
 
-    Retorna un resumen con total, exitosos, fallidos y detalle por archivo.
+    Returns a summary with total, successful, failed and a per-file breakdown.
     """
     try:
         dir_path = directory_path or settings.data_directory
 
         results = await sync_service.sync_directory(dir_path)
 
-        # Generar resumen de resultados
+        # Build the results summary
         successful = sum(1 for r in results if r.success)
         failed = len(results) - successful
 
@@ -795,35 +794,35 @@ async def sync_directory(directory_path: str | None = None):
 
 
 # ----------------------------------------------------------------------------
-# Sincronización de Notion
+# Notion Sync
 # ----------------------------------------------------------------------------
 
 @app.post("/sync/notion", response_model=SyncResult, dependencies=[Depends(get_current_user)])
 async def sync_notion_page(request: SyncNotionPageRequest):
     """
-    Sincroniza una página de Notion a la base de datos vectorial.
+    Syncs a Notion page into the vector database.
 
-    Flujo:
-        1. Verifica que NOTION_API_KEY esté configurada
-        2. Conecta a la API de Notion
-        3. Carga el contenido de la página
-        4. Divide en chunks, genera embeddings y almacena
+    Flow:
+        1. Checks that NOTION_API_KEY is configured
+        2. Connects to Notion's API
+        3. Loads the page's content
+        4. Splits into chunks, generates embeddings, and stores them
 
-    Usa notion_sync_service (otra instancia de SyncService que tiene
-    NotionProcessorAdapter en lugar de PDFProcessorAdapter).
-    El resto del pipeline es idéntico al de PDFs.
+    Uses notion_sync_service (another SyncService instance wired with
+    NotionProcessorAdapter instead of PDFProcessorAdapter). The rest of
+    the pipeline is identical to the PDF one.
     """
     try:
         logger.info("Syncing Notion page", page_id=request.page_id)
 
-        # Verificar configuración antes de proceder
+        # Check the configuration before proceeding
         if not settings.notion_api_key:
             raise HTTPException(
                 status_code=400,
                 detail="Notion API key not configured. Set NOTION_API_KEY environment variable."
             )
 
-        # En Notion el "file_path" del servicio es el page_id
+        # In Notion, the service's "file_path" is the page_id
         result = await notion_sync_service.sync_document_from_file(
             file_path=request.page_id,
             collection_name=request.collection_name
@@ -833,7 +832,7 @@ async def sync_notion_page(request: SyncNotionPageRequest):
             DOCUMENTS_SYNCED.labels(source='notion', status='error').inc()
             raise HTTPException(status_code=500, detail=result.message)
 
-        # Registrar métricas de éxito
+        # Record success metrics
         DOCUMENTS_SYNCED.labels(source='notion', status='success').inc()
         CHUNKS_CREATED.inc(result.chunks_created)
         logger.info("Notion page sync completed", page_id=request.page_id, chunks=result.chunks_created)
@@ -851,29 +850,29 @@ async def sync_notion_page(request: SyncNotionPageRequest):
 @app.post("/sync/notion/database", dependencies=[Depends(get_current_user)])
 async def sync_notion_database(request: SyncNotionDatabaseRequest):
     """
-    Sincroniza todas las páginas de una base de datos de Notion.
+    Syncs every page of a Notion database.
 
-    Este endpoint es más complejo que sync_notion_page porque:
-    1. Primero carga TODAS las páginas de la base de datos
-    2. Luego procesa cada una individualmente (chunks → embeddings → store)
+    This endpoint is more complex than sync_notion_page because:
+    1. It first loads ALL the database's pages
+    2. Then processes each individually (chunks → embeddings → store)
 
-    ¿Por qué no delegar todo a notion_sync_service?
-    - notion_sync_service.sync_document_from_file() procesa UN documento
-    - Una base de datos puede tener decenas de páginas
-    - load_database_pages() ya las tiene en memoria, no tiene sentido
-      volver a cargarlas una por una desde la API de Notion
+    Why not delegate everything to notion_sync_service?
+    - notion_sync_service.sync_document_from_file() processes ONE document
+    - A database can have dozens of pages
+    - load_database_pages() already has them in memory, there's no point
+      loading them again one by one from Notion's API
 
-    Por eso este endpoint implementa el pipeline split → embeddings → store
-    de forma directa, reutilizando los adaptadores ya instanciados.
+    That's why this endpoint implements the split → embeddings → store
+    pipeline directly, reusing the already-instantiated adapters.
 
-    Resiliencia por página: el bucle envuelve cada documento en su propio
-    try/except (igual que ya hace ingest_database() en scripts/ingest_notion.py,
-    que sí tenía esta protección — este endpoint no la tenía). Sin esto, una
-    sola página que falle (embeddings, ChromaDB, lo que sea) aborta TODA la
-    petición con un 500 y las páginas restantes ni se intentan — encontrado
-    en producción depurando por qué solo 2 de 12 páginas de una BD de Notion
-    llegaban a indexarse. Ahora una página que falla se registra como
-    resultado fallido y el bucle sigue con las demás.
+    Per-page resilience: the loop wraps each document in its own
+    try/except (the same protection ingest_database() in
+    scripts/ingest_notion.py already had — this endpoint didn't). Without
+    this, a single page failing (embeddings, ChromaDB, whatever) would
+    abort the ENTIRE request with a 500 and the remaining pages wouldn't
+    even be attempted — found in production while debugging why only 2
+    of 12 pages of a Notion database were getting indexed. Now a failing
+    page gets recorded as a failed result and the loop continues with the rest.
     """
     try:
         if not settings.notion_api_key:
@@ -882,7 +881,7 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
                 detail="Notion API key not configured. Set NOTION_API_KEY environment variable."
             )
 
-        # database_id puede venir del request o de settings
+        # database_id can come from the request or from settings
         database_id = request.database_id or settings.notion_database_id
 
         if not database_id:
@@ -891,13 +890,13 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
                 detail="Database ID is required. Provide in request or set NOTION_DATABASE_ID environment variable."
             )
 
-        # Cargar todas las páginas de la base de datos
+        # Load every page in the database
         documents = await notion_processor.load_database_pages(
             database_id=database_id,
             max_pages=request.max_pages
         )
 
-        # Si no hay páginas, retornar respuesta vacía (no es error)
+        # If there are no pages, return an empty response (not an error)
         if not documents:
             return {
                 "total": 0,
@@ -907,26 +906,26 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
                 "results": []
             }
 
-        # Procesar cada documento: split → embeddings → store.
-        # Cada iteración está aislada: si una página falla, se registra como
-        # resultado fallido y se sigue con la siguiente (ver docstring).
+        # Process each document: split → embeddings → store.
+        # Each iteration is isolated: if a page fails, it's recorded as a
+        # failed result and the loop continues with the next one (see docstring).
         results = []
         for doc in documents:
             title = doc.metadata.get("title", "Untitled")
             try:
-                # Dividir en chunks
+                # Split into chunks
                 chunks = await notion_processor.split_into_chunks(doc)
 
-                # Generar embeddings en batch (más eficiente que uno por uno)
+                # Generate embeddings in a batch (more efficient than one by one)
                 chunk_texts = [chunk.content for chunk in chunks]
                 embeddings = await llm_adapter.generate_embeddings_batch(chunk_texts)
 
-                # Asignar embeddings a los chunks
-                # zip() empareja chunks[i] con embeddings[i]
+                # Assign embeddings to the chunks
+                # zip() pairs chunks[i] with embeddings[i]
                 for chunk, embedding in zip(chunks, embeddings):
                     chunk.embedding = embedding
 
-                # Almacenar en ChromaDB
+                # Store in ChromaDB
                 collection = request.collection_name or settings.chromadb_collection_name
                 success = await chromadb_adapter.store_chunks(chunks, collection)
 
@@ -940,8 +939,8 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
                 )
 
             except Exception as e:
-                # No relanzar: una página rota no debe tumbar el resto del
-                # sync. Se registra como fallo y el bucle continúa.
+                # Don't re-raise: a broken page shouldn't take down the
+                # rest of the sync. It's recorded as a failure and the loop continues.
                 logger.error(
                     "Failed to sync Notion page, continuing with the rest",
                     document_id=doc.id, title=title, error=str(e)
@@ -955,7 +954,7 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
                     )
                 )
 
-        # Resumen final
+        # Final summary
         successful = sum(1 for r in results if r.success)
         failed = len(results) - successful
 
@@ -975,35 +974,35 @@ async def sync_notion_database(request: SyncNotionDatabaseRequest):
 
 
 # ----------------------------------------------------------------------------
-# Consultas RAG
+# RAG Queries
 # ----------------------------------------------------------------------------
 
 @app.post("/ask", response_model=QueryResult)
 async def ask_question(query: Query, current_user: TokenPayload = Depends(get_current_user)):
     """
-    Endpoint principal del sistema RAG: hacer preguntas al "bibliotecario".
+    Main endpoint of the RAG system: asking the "librarian" questions.
 
-    Este es el endpoint que el frontend usará para el chat.
+    This is the endpoint the frontend uses for the chat.
 
-    Flujo completo:
-        1. (Si hay session_id) Recuperar historial reciente de la conversación
-        2. Delegar a RAGService: vectorizar, buscar chunks, construir contexto,
-           generar respuesta (con el historial como contexto adicional)
-        3. (Si hay session_id) Persistir el nuevo turno (pregunta + respuesta)
-        4. Retornar la respuesta + las fuentes usadas
+    Full flow:
+        1. (If there's a session_id) Fetch the conversation's recent history
+        2. Delegate to RAGService: vectorize, search chunks, build
+           context, generate the answer (with the history as extra context)
+        3. (If there's a session_id) Persist the new turn (question + answer)
+        4. Return the answer + the sources used
 
-    El historial es una mejora de UX, no una decisión de negocio: si
-    Postgres no está disponible, se loguea y se continúa sin historial en
-    vez de fallar la petición completa (ver ConversationService).
+    History is a UX enhancement, not a business decision: if Postgres
+    isn't available, it's logged and the request continues without
+    history instead of failing entirely (see ConversationService).
 
-    Ejemplo de petición:
+    Example request:
         POST /ask
-        {"question": "¿Qué es Docker?", "max_results": 3, "session_id": "abc-123"}
+        {"question": "What is Docker?", "max_results": 3, "session_id": "abc-123"}
 
-    Ejemplo de respuesta:
+    Example response:
         {
-            "question": "¿Qué es Docker?",
-            "answer": "Docker es una plataforma de contenedores...",
+            "question": "What is Docker?",
+            "answer": "Docker is a container platform...",
             "source_documents": [
                 {"document_id": "pdf_abc123", "chunk_content": "...", "relevance_score": 0.92}
             ],
@@ -1024,7 +1023,7 @@ async def ask_question(query: Query, current_user: TokenPayload = Depends(get_cu
         logger.info("Processing RAG query", question=query.question[:100])
         result = await rag_service.ask_question(query, history=history)
 
-        # Registrar métricas de éxito
+        # Record success metrics
         duration = time.perf_counter() - start_time
         RAG_QUERIES_TOTAL.labels(status='success').inc()
         RAG_QUERY_DURATION.observe(duration)
@@ -1046,7 +1045,7 @@ async def ask_question(query: Query, current_user: TokenPayload = Depends(get_cu
         return result
 
     except Exception as e:
-        # Registrar métricas de error
+        # Record error metrics
         RAG_QUERIES_TOTAL.labels(status='error').inc()
         logger.error("Ask endpoint error", error=str(e), question=query.question[:50])
         raise HTTPException(status_code=500, detail=str(e))
@@ -1054,15 +1053,15 @@ async def ask_question(query: Query, current_user: TokenPayload = Depends(get_cu
 
 def _sse_event(event_type: str, data: dict) -> str:
     """
-    Formatea un evento en el formato Server-Sent Events que espera el
-    cliente (ver frontend/src/api/chat.js askStream()):
+    Formats an event in the Server-Sent Events format the client expects
+    (see frontend/src/api/chat.js's askStream()):
 
         event: <event_type>
         data: <JSON>
-        <línea en blanco>
+        <blank line>
 
-    ensure_ascii=False: mantiene los acentos/ñ tal cual en vez de \\uXXXX,
-    el body ya viaja como UTF-8.
+    ensure_ascii=False: keeps accented characters as-is instead of
+    \\uXXXX, the body already travels as UTF-8.
     """
     return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
@@ -1070,27 +1069,28 @@ def _sse_event(event_type: str, data: dict) -> str:
 @app.post("/ask/stream")
 async def ask_question_stream(query: Query, current_user: TokenPayload = Depends(get_current_user)):
     """
-    Versión en streaming de /ask: la respuesta del LLM se envía trozo a
-    trozo vía Server-Sent Events en vez de esperar a tenerla completa.
+    Streaming version of /ask: the LLM's answer is sent chunk by chunk
+    via Server-Sent Events instead of waiting to have it complete.
 
-    Endpoint separado en vez de content-negotiation sobre /ask: /ask usa
-    response_model=QueryResult, que FastAPI valida/serializa como un único
-    JSON — incompatible con StreamingResponse. Este endpoint recibe el
-    mismo body (Query) pero devuelve text/event-stream.
+    A separate endpoint instead of content-negotiation over /ask: /ask
+    uses response_model=QueryResult, which FastAPI validates/serializes
+    as a single JSON payload — incompatible with StreamingResponse. This
+    endpoint receives the same body (Query) but returns text/event-stream.
 
-    IMPORTANTE para el cliente: no se puede usar EventSource nativo, porque
-    no permite mandar el header Authorization (ver frontend/src/api/chat.js
-    askStream(), que usa fetch() + lectura manual del stream).
+    IMPORTANT for the client: native EventSource can't be used, because
+    it doesn't allow sending the Authorization header (see
+    frontend/src/api/chat.js's askStream(), which uses fetch() + manual
+    stream reading).
 
-    Eventos emitidos (uno por línea `data:`, formato SSE):
-        event: sources → {"source_documents": [...]}  (una vez, tras el retrieval)
-        event: token   → {"text": "..."}               (uno por fragmento generado)
-        event: done    → {"processing_time": ..., "session_id": ...}  (una vez, al final)
-        event: error   → {"detail": "..."}             (solo si algo falla a mitad de stream)
+    Events emitted (one per `data:` line, SSE format):
+        event: sources → {"source_documents": [...]}  (once, right after retrieval)
+        event: token   → {"text": "..."}               (one per generated fragment)
+        event: done    → {"processing_time": ..., "session_id": ...}  (once, at the end)
+        event: error   → {"detail": "..."}             (only if something fails mid-stream)
 
-    El historial de conversación se recupera antes de empezar a generar y
-    se persiste al final, mismo patrón que /ask (degradación silenciosa —
-    logged-only — si Postgres no está disponible).
+    Conversation history is fetched before generation starts and
+    persisted at the end, same pattern as /ask (silent — logged-only —
+    degradation if Postgres isn't available).
     """
     history = None
     if query.session_id:
@@ -1143,25 +1143,25 @@ async def ask_question_stream(query: Query, current_user: TokenPayload = Depends
 
 
 # ----------------------------------------------------------------------------
-# Endpoints de utilidad
+# Utility Endpoints
 # ----------------------------------------------------------------------------
 
 @app.get("/documents", dependencies=[Depends(get_current_user)])
 async def list_documents():
     """
-    Lista todos los documentos indexados en la base de conocimiento.
+    Lists every document indexed in the knowledge base.
 
-    A diferencia de POST /ask, esto NO pasa por el LLM ni por similarity
-    search — devuelve el catálogo completo agrupando chunks por
-    document_id (ver RAGService.list_known_documents / VectorDBPort.list_documents).
+    Unlike POST /ask, this does NOT go through the LLM or similarity
+    search — it returns the full catalog, grouping chunks by document_id
+    (see RAGService.list_known_documents / VectorDBPort.list_documents).
 
-    Pensado para que el frontend pueda mostrar "qué hay indexado" sin
-    depender de que el chat sepa responder bien preguntas agregadas tipo
-    "¿cuántos documentos tienes?" (el RAG semántico por sí solo no puede
-    garantizar cubrir el catálogo completo, ver LLMPort.is_catalog_question
-    para el caso equivalente dentro del chat).
+    Meant so the frontend can show "what's indexed" without relying on
+    the chat being able to answer aggregate questions like "how many
+    documents do you have?" well (semantic RAG alone can't guarantee
+    covering the whole catalog, see LLMPort.is_catalog_question for the
+    equivalent case inside the chat).
 
-    Ejemplo de respuesta:
+    Example response:
         {
             "total": 12,
             "documents": [
@@ -1181,18 +1181,18 @@ async def list_documents():
 @app.delete("/documents/{document_id}", dependencies=[Depends(get_current_user)])
 async def delete_document(document_id: str):
     """
-    Elimina un documento (y todos sus chunks) de la base de datos vectorial.
+    Deletes a document (and all its chunks) from the vector database.
 
-    {document_id} en la ruta es un path parameter.
-    FastAPI lo extrae automáticamente y lo pasa como argumento de la función.
-    Equivalente JS: router.delete('/documents/:documentId', ...)
+    {document_id} in the route is a path parameter.
+    FastAPI extracts it automatically and passes it as a function argument.
+    JS equivalent: router.delete('/documents/:documentId', ...)
 
-    ¿Cuándo usar esto?
-    - Si actualizas un PDF y quieres re-ingestar la versión nueva
-    - Si quieres eliminar documentos obsoletos
-    - Para limpiar la base de datos durante desarrollo
+    When would you use this?
+    - If you update a PDF and want to re-ingest the new version
+    - If you want to remove stale documents
+    - To clean up the database during development
 
-    Ejemplo:
+    Example:
         DELETE /documents/pdf_a3f2b1c9
         → {"status": "success", "message": "Document pdf_a3f2b1c9 deleted"}
     """
@@ -1212,22 +1212,22 @@ async def delete_document(document_id: str):
 
 
 # ============================================================================
-# PUNTO DE ENTRADA DIRECTO
+# DIRECT ENTRY POINT
 # ============================================================================
-# Este bloque solo se ejecuta si lanzas el script directamente:
+# This block only runs if you launch the script directly:
 #     python main.py
 #
-# En desarrollo se usa uvicorn desde la línea de comandos:
+# In development, uvicorn is used from the command line instead:
 #     uvicorn app.main:app --reload
 #
-# ¿Por qué la diferencia?
-# - uvicorn --reload: monitorea cambios en archivos y reinicia automáticamente
-# - python main.py: lanzamiento manual sin reload (útil para producción simple)
+# Why the difference?
+# - uvicorn --reload: watches for file changes and restarts automatically
+# - python main.py: manual launch with no reload (useful for simple production)
 #
 # if __name__ == "__main__":
-#     Se ejecuta solo cuando este archivo es el módulo principal.
-#     Si otro módulo lo importa (como uvicorn), __name__ será "app.main"
-#     y este bloque NO se ejecuta.
+#     Only runs when this file is the main module.
+#     If another module imports it (like uvicorn), __name__ will be "app.main"
+#     and this block does NOT run.
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
