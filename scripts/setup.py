@@ -8,19 +8,22 @@ Detecta qué está instalado y qué falta, luego instala sólo lo necesario.
 
 Configuración:
 - Ollama: Nativo en macOS (acceso a GPU Metal, ~10x más rápido)
-- ChromaDB: Docker (persistencia con volúmenes)
+- ChromaDB + Postgres: Docker (persistencia con volúmenes)
 - API: Docker (hot-reload con volume mount)
 - Frontend: React + Vite (npm run dev)
 
-¿Qué hace?
+¿Qué hace? (el número coincide con el encabezado que verás en pantalla)
 1. Verifica el sistema operativo (macOS)
-2. Verifica/instala Homebrew
-3. Instala Ollama y descarga modelos
-4. Verifica Docker y levanta ChromaDB + API
-5. Configura entorno Python (venv + dependencias para scripts CLI)
-6. Crea archivo .env
-7. Configura Frontend (Node.js 18+ + npm install)
-8. Ejecuta verify_setup.py para confirmar
+2. Verifica conexión a internet
+3. Verifica/instala Homebrew
+4. Instala Ollama y descarga modelos
+5. Verifica Docker (instalación + daemon activo)
+6. Configura entorno Python (venv + dependencias para scripts CLI)
+7. Crea archivo .env (con un JWT_SECRET_KEY generado, no el placeholder)
+8. Levanta servicios Docker (ChromaDB + Postgres + API)
+9. Configura Frontend (Node.js 18+ + npm install)
+10. Ejecuta verify_setup.py para confirmar
+11. Crea tu usuario (no hay registro en el frontend, ver create_user.py)
 
 Uso:
     python3 scripts/setup.py
@@ -217,7 +220,7 @@ def install_docker():
 
 
 def setup_docker_services():
-    print_header("8. Iniciando Servicios Docker (ChromaDB + API)")
+    print_header("8. Iniciando Servicios Docker (ChromaDB + Postgres + API)")
 
     try:
         # Build y start de todos los servicios
@@ -227,6 +230,7 @@ def setup_docker_services():
             cwd=Path(__file__).parent.parent
         )
         print_success("ChromaDB iniciado en puerto 8001")
+        print_success("Postgres iniciado en puerto 5432")
         print_success("API iniciada en puerto 8000")
         return True
     except subprocess.CalledProcessError:
@@ -295,6 +299,23 @@ def setup_env_file():
         shutil.copy(env_example, env_file)
         print_success("Archivo .env creado desde .env.example")
         print_info("Configuración: Ollama en localhost:11434, ChromaDB en localhost:8001")
+
+        # .env.example trae JWT_SECRET_KEY=change-me-generate-a-random-secret
+        # como placeholder documentado (ver comentario en el propio archivo).
+        # Generamos uno real aquí para que nadie se quede corriendo con ese
+        # valor de ejemplo — es solo para dev local, pero no cuesta nada
+        # hacerlo bien desde el principio.
+        import secrets
+        jwt_secret = secrets.token_hex(32)
+        with open(env_file, 'r') as f:
+            content = f.read()
+        content = content.replace(
+            "JWT_SECRET_KEY=change-me-generate-a-random-secret",
+            f"JWT_SECRET_KEY={jwt_secret}"
+        )
+        with open(env_file, 'w') as f:
+            f.write(content)
+        print_success("JWT_SECRET_KEY generado automáticamente")
 
         # Preguntar por Notion (opcional)
         if ask_yes_no("¿Configurar credenciales de Notion? (opcional)", default=False):
@@ -396,6 +417,51 @@ def run_verification():
 
 
 # ============================================================================
+# CREACIÓN DEL PRIMER USUARIO
+# ============================================================================
+def create_first_user():
+    """
+    Da de alta el primer usuario en Postgres vía scripts/create_user.py.
+
+    No hay pantalla de registro en el frontend (es una app de un solo
+    usuario/familiar, no multi-tenant público): sin este paso, el
+    entorno queda perfectamente instalado pero nadie puede hacer login.
+    Por eso no es opcional en el flujo feliz, aunque si el usuario
+    prefiere hacerlo luego a mano puede saltárselo aquí.
+    """
+    print_header("11. Creando tu Usuario")
+    print_info("No hay registro en el frontend: los usuarios se dan de alta")
+    print_info("exclusivamente con scripts/create_user.py.\n")
+
+    if not ask_yes_no("¿Crear tu usuario ahora?"):
+        print_info("Puedes crearlo más tarde con:")
+        print_info("  python scripts/create_user.py --email tu@email.com")
+        return True
+
+    email = input(f"{Colors.CYAN}Email: {Colors.ENDC}").strip()
+    if not email:
+        print_warning("Email vacío, saltando creación de usuario")
+        print_info("Puedes crearlo más tarde con:")
+        print_info("  python scripts/create_user.py --email tu@email.com")
+        return True
+
+    project_root = Path(__file__).parent.parent
+    venv_python = project_root / "api" / "venv" / "bin" / "python"
+    create_user_script = Path(__file__).parent / "create_user.py"
+
+    # check=False y sin capturar stdout/stderr: create_user.py pide la
+    # contraseña de forma interactiva (getpass) y necesita heredar la
+    # terminal. Si falla (p.ej. Postgres no arrancó a tiempo, o el email
+    # ya existe de una ejecución anterior de setup.py), no abortamos todo
+    # el setup por esto — ya se puede reintentar a mano después.
+    subprocess.run(
+        [str(venv_python), str(create_user_script), "--email", email],
+        cwd=project_root, check=False
+    )
+    return True
+
+
+# ============================================================================
 # FUNCIÓN PRINCIPAL
 # ============================================================================
 def main():
@@ -404,7 +470,7 @@ def main():
 
         print_info("Este script configura el entorno de desarrollo:")
         print_info("  - Ollama nativo (GPU Metal)")
-        print_info("  - ChromaDB + API en Docker")
+        print_info("  - ChromaDB + Postgres + API en Docker")
         print_info("  - Frontend con npm\n")
 
         if not ask_yes_no("¿Continuar con la instalación?"):
@@ -422,6 +488,7 @@ def main():
         if not setup_docker_services(): return
         setup_frontend()
         run_verification()
+        create_first_user()
 
         # Resumen final
         print_header("✨ Instalación Completada ✨")
@@ -431,7 +498,7 @@ def main():
         print_info("  # Terminal 1: Ollama (mantener abierto)")
         print_info("  ollama serve")
         print_info("")
-        print_info("  # Terminal 2: Docker (ChromaDB + API)")
+        print_info("  # Terminal 2: Docker (ChromaDB + Postgres + API)")
         print_info("  docker-compose up -d")
         print_info("")
         print_info("  # Terminal 3: Frontend")
@@ -440,6 +507,7 @@ def main():
         print_info("  🌐 Frontend: http://localhost:5173")
         print_info("  📚 API Docs: http://localhost:8000/docs")
         print_info("  💾 ChromaDB: http://localhost:8001")
+        print_info("  🔑 ¿Sin usuario todavía? python scripts/create_user.py --email tu@email.com")
         print_info("")
         print_info("📚 Documentación:")
         print_info("  - README.md: Guía general")
