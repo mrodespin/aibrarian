@@ -1,33 +1,35 @@
 # /api/app/adapters/outbound/groq_adapter.py
 """
-Adaptador Groq - Implementación concreta de LLMPort - TFM Bibliotecario-IA
+Groq Adapter - Concrete implementation of LLMPort - Bibliotecario-IA
 
-Este adaptador reemplaza a OllamaAdapter para el despliegue en la nube
-(Render free tier), donde no hay GPU ni un proceso Ollama corriendo.
+This adapter replaces OllamaAdapter for the cloud deployment (Render
+free tier), where there's no GPU or Ollama process running.
 
-¿Por qué un solo adaptador para dos backends distintos?
-LLMPort exige tanto generación de texto (generate_response, extract_keywords)
-como embeddings (generate_embedding, generate_embeddings_batch). Groq NO
-ofrece un endpoint de embeddings — solo inferencia de chat sobre modelos
-open-weight (Llama, gpt-oss, Qwen...) en su hardware LPU.
+Why a single adapter for two different backends?
+LLMPort requires both text generation (generate_response,
+extract_keywords) and embeddings (generate_embedding,
+generate_embeddings_batch). Groq does NOT offer an embeddings endpoint
+— only chat inference over open-weight models (Llama, gpt-oss, Qwen...)
+on its LPU hardware.
 
-En vez de partir LLMPort en dos interfaces (lo que obligaría a tocar
-RAGService, SyncService y main.py), este adaptador compone dos motores
-internamente y expone un único LLMPort, igual que hace OllamaAdapter:
-    - Generación de texto  → Groq API (rápida, gratuita, cloud)
-    - Embeddings           → sentence-transformers local (CPU, sin API key,
-                              sin límite de peticiones, corre en el mismo
-                              contenedor de la API)
+Instead of splitting LLMPort into two interfaces (which would force
+changes to RAGService, SyncService and main.py), this adapter composes
+two engines internally and exposes a single LLMPort, the same way
+OllamaAdapter does:
+    - Text generation → Groq API (fast, free, cloud)
+    - Embeddings      → local sentence-transformers (CPU, no API key,
+                         no request limit, runs in the same API container)
 
-Esto mantiene el resto del hexágono intacto: RAGService y SyncService no
-saben si están hablando con Ollama o con Groq+sentence-transformers.
+This keeps the rest of the hexagon untouched: RAGService and
+SyncService don't know whether they're talking to Ollama or to
+Groq+sentence-transformers.
 
-Nota sobre dimensiones: nomic-embed-text (Ollama) genera vectores de 768
-dimensiones; all-MiniLM-L6-v2 (sentence-transformers) genera 384. ChromaDB
-infiere la dimensión de la colección del primer chunk insertado, así que
-cambiar de adaptador implica re-ingestar los documentos en una colección
-nueva (no se puede mezclar embeddings de distinta dimensión en la misma
-colección).
+Note on dimensions: nomic-embed-text (Ollama) generates 768-dimension
+vectors; all-MiniLM-L6-v2 (sentence-transformers) generates 384.
+ChromaDB infers a collection's dimension from the first chunk inserted,
+so switching adapters means re-ingesting documents into a new
+collection (you can't mix embeddings of different dimensions in the
+same collection).
 """
 
 from typing import List, Optional, Dict, Any
@@ -44,56 +46,56 @@ from app.core.observability import get_logger, LLM_REQUESTS, LLM_LATENCY
 
 logger = get_logger(__name__)
 
-# Prompt de sistema con las mismas reglas anti-alucinación que usa
-# OllamaAdapter.generate_response, para que la calidad de respuesta
-# no dependa de qué adaptador esté activo.
-_RAG_SYSTEM_PROMPT = """Eres un asistente bibliotecario que SOLO responde usando la información proporcionada en el contexto.
+# System prompt with the same anti-hallucination rules OllamaAdapter's
+# generate_response uses, so answer quality doesn't depend on which
+# adapter is active.
+_RAG_SYSTEM_PROMPT = """You are a librarian assistant that ONLY answers using the information provided in the context.
 
-REGLAS ESTRICTAS:
-1. SOLO usa la información del contexto para responder
-2. NO uses tu conocimiento general o información externa
-3. Si la información no está en el contexto, di "No tengo información sobre eso en mi base de conocimientos"
-4. Cita las fuentes cuando sea relevante
-5. Responde en el mismo idioma que la pregunta"""
+STRICT RULES:
+1. Only use the information in the context to answer
+2. Do NOT use your general knowledge or outside information
+3. If the information isn't in the context, say so clearly, in the same language as the question — do not guess or fill the gap with outside knowledge
+4. Cite sources when relevant
+5. Always answer in the same language as the question"""
 
-# Usado cuando context=None pero sí hay history. RAGService no debería
-# llegar aquí en el flujo normal (condense_question() reescribe la
-# pregunta de seguimiento y sigue retrievando como siempre — ver
-# RAGService.ask_question), pero se deja como red de seguridad para
-# cualquier llamada con context=None + history. _RAG_SYSTEM_PROMPT no vale
-# aquí porque habla de "contexto" (chunks de ChromaDB), que en este caso
-# no existe — las mismas reglas anti-alucinación, aplicadas a la
-# conversación previa en vez de a chunks recuperados.
-_HISTORY_ONLY_SYSTEM_PROMPT = """Eres un asistente bibliotecario. Ya has hablado con el usuario sobre esto en esta misma conversación — la respuesta a su pregunta debería estar en lo que ya se dijo antes.
+# Used when context=None but history is present. RAGService shouldn't
+# normally reach this branch (condense_question() rewrites the
+# follow-up question and retrieval proceeds as usual — see
+# RAGService.ask_question), but it's kept as a safety net for any call
+# made with context=None + history. _RAG_SYSTEM_PROMPT doesn't fit here
+# because it talks about "the context" (ChromaDB chunks), which doesn't
+# exist in this case — the same anti-hallucination rules, applied to
+# the previous conversation instead of retrieved chunks.
+_HISTORY_ONLY_SYSTEM_PROMPT = """You are a librarian assistant. You've already talked with the user about this earlier in this same conversation — the answer to their question should be in what was already said before.
 
-REGLAS ESTRICTAS:
-1. Responde ÚNICAMENTE con información que ya aparece en la conversación previa
-2. NO uses tu conocimiento general ni inventes datos que no estén ahí
-3. Si la respuesta no está en la conversación previa, di "No tengo esa información en mi base de conocimientos"
-4. Responde en el mismo idioma que la pregunta"""
+STRICT RULES:
+1. Answer ONLY with information that already appears in the previous conversation
+2. Do NOT use your general knowledge or make up data that isn't there
+3. If the answer isn't in the previous conversation, say so clearly, in the same language as the question
+4. Always answer in the same language as the question"""
 
 
 class GroqAdapter(LLMPort):
     """
-    Implementación de LLMPort que combina Groq (generación) con el
-    embedder ONNX local de ChromaDB (embeddings).
+    LLMPort implementation combining Groq (generation) with ChromaDB's
+    local ONNX embedder (embeddings).
 
-    Mismo patrón de Lazy Singleton que OllamaAdapter: los clientes
-    (AsyncGroq, ONNXMiniLM_L6_V2) se crean en el primer uso, no en
-    __init__, para que la app arranque aunque falte la API key o el
-    modelo de embeddings aún no se haya descargado.
+    Same Lazy Singleton pattern as OllamaAdapter: the clients
+    (AsyncGroq, ONNXMiniLM_L6_V2) are created on first use, not in
+    __init__, so the app starts even if the API key is missing or the
+    embedding model hasn't been downloaded yet.
     """
 
     def __init__(self):
         self._client: Optional[AsyncGroq] = None
-        self._embedder = None  # ONNXMiniLM_L6_V2, tipado perezoso para no importar onnxruntime en el arranque
+        self._embedder = None  # ONNXMiniLM_L6_V2, lazily typed to avoid importing onnxruntime at startup
 
     def _get_client(self) -> AsyncGroq:
         if self._client is None:
             if not settings.groq_api_key:
                 raise RuntimeError(
-                    "GROQ_API_KEY no configurada. Añádela a api/.env "
-                    "(consíguela en https://console.groq.com/keys)."
+                    "GROQ_API_KEY not configured. Add it to api/.env "
+                    "(get one at https://console.groq.com/keys)."
                 )
             self._client = AsyncGroq(api_key=settings.groq_api_key)
             logger.info("Initialized Groq client", model=settings.groq_model)
@@ -101,22 +103,25 @@ class GroqAdapter(LLMPort):
 
     def _get_embedder(self):
         """
-        Carga el modelo de embeddings local (lazy), según settings.embedding_backend:
+        Loads the local embedding model (lazily), based on
+        settings.embedding_backend:
 
         - 'onnx' (default): chromadb.utils.embedding_functions.ONNXMiniLM_L6_V2,
-          mismo modelo (all-MiniLM-L6-v2, 384 dims, mean pooling + normalización
-          L2) pero vía onnxruntime, que ya es dependencia transitiva de chromadb.
-          No añade nada a requirements.txt. Recomendado para Render free tier:
-          torch+transformers (backend 'sentence_transformers') por sí solos
-          añaden ~650MB en disco y suficiente RAM en el import como para
-          provocar un OOM (512MB) antes de atender ninguna petición real.
-        - 'sentence_transformers': requiere `pip install sentence-transformers`
-          aparte (deliberadamente fuera de requirements.txt, ver ahí el porqué).
-          Pensado para desarrollo local con más RAM disponible.
+          the same model (all-MiniLM-L6-v2, 384 dims, mean pooling + L2
+          normalization) but via onnxruntime, which is already a
+          transitive dependency of chromadb. Adds nothing to
+          requirements.txt. Recommended for the Render free tier:
+          torch+transformers (the 'sentence_transformers' backend) alone
+          add ~650MB on disk and enough RAM on import to trigger an OOM
+          (512MB) before serving a single real request.
+        - 'sentence_transformers': requires `pip install sentence-transformers`
+          separately (deliberately kept out of requirements.txt, see the
+          comment there for why). Meant for local development with more
+          RAM available.
 
-        La primera llamada descarga el modelo si no está en caché (ver
-        Dockerfile, que lo pre-descarga en el build); llamadas siguientes
-        reutilizan la instancia.
+        The first call downloads the model if it's not cached (see the
+        Dockerfile, which pre-downloads it at build time); subsequent
+        calls reuse the instance.
         """
         if self._embedder is None:
             if settings.embedding_backend == "sentence_transformers":
@@ -124,10 +129,10 @@ class GroqAdapter(LLMPort):
                     from sentence_transformers import SentenceTransformer
                 except ImportError as e:
                     raise RuntimeError(
-                        "EMBEDDING_BACKEND=sentence_transformers pero el paquete "
-                        "no está instalado (deliberadamente no está en requirements.txt, "
-                        "ver comentario ahí). Instálalo con `pip install sentence-transformers` "
-                        "o cambia EMBEDDING_BACKEND=onnx."
+                        "EMBEDDING_BACKEND=sentence_transformers but the package "
+                        "isn't installed (deliberately not in requirements.txt, "
+                        "see the comment there). Install it with `pip install sentence-transformers` "
+                        "or switch to EMBEDDING_BACKEND=onnx."
                     ) from e
                 self._embedder = SentenceTransformer(settings.embedding_model_name)
                 logger.info(
@@ -142,7 +147,7 @@ class GroqAdapter(LLMPort):
         return self._embedder
 
     # ========================================================================
-    # Generación de texto (Groq)
+    # Text generation (Groq)
     # ========================================================================
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
@@ -157,24 +162,24 @@ class GroqAdapter(LLMPort):
     ) -> str:
         client = self._get_client()
 
-        # Vía "history" del router (context=None, history presente): system
-        # prompt distinto, centrado en la conversación previa en vez de en
-        # "el contexto" (que en este caso no existe). Ver _HISTORY_ONLY_SYSTEM_PROMPT.
+        # "history"-only path (context=None, history present): a different
+        # system prompt, focused on the previous conversation instead of
+        # "the context" (which doesn't exist in this case). See _HISTORY_ONLY_SYSTEM_PROMPT.
         system_prompt = _HISTORY_ONLY_SYSTEM_PROMPT if (not context and history) else _RAG_SYSTEM_PROMPT
         messages = [{"role": "system", "content": system_prompt}]
         if history:
-            # Bloque ya formateado por ConversationService.get_history_prompt_block
-            # (mismo formato de texto que usa OllamaAdapter, en vez de turnos
-            # nativos user/assistant en el array — simplicidad para v1, ambos
-            # adaptadores consumen el mismo string).
+            # Block already formatted by ConversationService.get_history_prompt_block
+            # (same text format OllamaAdapter uses, instead of native
+            # user/assistant turns in the array — kept simple for v1, both
+            # adapters consume the same string).
             messages.append({
                 "role": "user",
-                "content": f"CONVERSACIÓN PREVIA (turnos anteriores, para contexto):\n{history}",
+                "content": f"PREVIOUS CONVERSATION (earlier turns, for context):\n{history}",
             })
         if context:
             messages.append({
                 "role": "user",
-                "content": f"CONTEXTO (información de tu base de conocimientos):\n{context}\n\nPREGUNTA DEL USUARIO: {prompt}",
+                "content": f"CONTEXT (information from your knowledge base):\n{context}\n\nUSER QUESTION: {prompt}",
             })
         else:
             messages.append({"role": "user", "content": prompt})
@@ -202,10 +207,10 @@ class GroqAdapter(LLMPort):
             client = self._get_client()
 
             extraction_prompt = (
-                "Extrae las palabras clave y nombres propios de esta pregunta.\n"
-                "Devuelve SOLO las keywords, una por línea, sin explicaciones ni numeración.\n"
-                "Si hay un título de película, libro, o nombre propio, inclúyelo exactamente como aparece.\n\n"
-                f"Pregunta: {question}\n\nKeywords:"
+                "Extract the keywords and proper nouns from this question.\n"
+                "Return ONLY the keywords, one per line, with no explanations or numbering.\n"
+                "If there's a movie title, book title, or proper noun, include it exactly as it appears.\n\n"
+                f"Question: {question}\n\nKeywords:"
             )
 
             start_time = time.perf_counter()
@@ -235,29 +240,29 @@ class GroqAdapter(LLMPort):
 
     @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=1, max=5))
     async def is_catalog_question(self, question: str) -> bool:
-        """Ver LLMPort.is_catalog_question — mismo prompt/criterio que OllamaAdapter."""
+        """See LLMPort.is_catalog_question — same prompt/criteria as OllamaAdapter."""
         try:
             client = self._get_client()
 
             classification_prompt = (
-                "Clasifica la siguiente pregunta en una sola categoría.\n\n"
-                "CATALOG: la pregunta pide el número total, un listado o un resumen de "
-                "TODOS los documentos que hay en la base de conocimiento, como colección. "
-                "Ejemplos: \"¿cuántos libros conoces?\", \"how many books do you have?\", "
-                "\"qué documentos tienes\", \"lista los libros\", \"qué hay en tu base de conocimiento\".\n"
-                "CONTENT: la pregunta pide información sobre UN documento concreto (aunque no lo "
-                "nombre explícitamente y se sobreentienda por el contexto de la conversación) — "
-                "incluye preguntas que piden una CANTIDAD sobre ESE documento en particular: "
-                "páginas, capítulos, año de publicación, precio, etc. Ejemplos: "
-                "\"¿quién escribió 1984?\", \"what is Docker?\", \"resume el capítulo 3\", "
-                "\"¿cuántas páginas tiene?\", \"¿cuántos capítulos tiene este libro?\", "
-                "\"¿en qué año se publicó?\".\n\n"
-                "Regla clave para desambiguar: si la pregunta pide una cantidad SOBRE UN "
-                "documento (páginas, capítulos, año...) es CONTENT, no CATALOG. Solo es CATALOG "
-                "si pregunta por el número o listado de TODOS los documentos de la base de "
-                "conocimiento en su conjunto.\n\n"
-                "Responde con una única palabra: CATALOG o CONTENT. Nada más.\n\n"
-                f"Pregunta: {question}\n\nCategoría:"
+                "Classify the following question into a single category.\n\n"
+                "CATALOG: the question asks for the total number, a listing, or a summary of "
+                "ALL the documents in the knowledge base, as a collection. "
+                "Examples: \"how many books do you know?\", \"how many books do you have?\", "
+                "\"what documents do you have\", \"list the books\", \"what's in your knowledge base\".\n"
+                "CONTENT: the question asks for information about ONE specific document (even if not "
+                "explicitly named and implied by the conversation's context) — "
+                "this includes questions asking for a QUANTITY about that particular document: "
+                "pages, chapters, publication year, price, etc. Examples: "
+                "\"who wrote 1984?\", \"what is Docker?\", \"summarize chapter 3\", "
+                "\"how many pages does it have?\", \"how many chapters does this book have?\", "
+                "\"what year was it published?\".\n\n"
+                "Key rule to disambiguate: if the question asks for a quantity ABOUT ONE "
+                "document (pages, chapters, year...) it's CONTENT, not CATALOG. It's only CATALOG "
+                "if it asks for the number or listing of ALL the documents in the "
+                "knowledge base as a whole.\n\n"
+                "Answer with a single word: CATALOG or CONTENT. Nothing else.\n\n"
+                f"Question: {question}\n\nCategory:"
             )
 
             start_time = time.perf_counter()
@@ -283,23 +288,23 @@ class GroqAdapter(LLMPort):
 
     @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=1, max=5))
     async def condense_question(self, question: str, history: str) -> str:
-        """Ver LLMPort.condense_question — mismo prompt/criterio que OllamaAdapter."""
+        """See LLMPort.condense_question — same prompt/criteria as OllamaAdapter."""
         try:
             client = self._get_client()
 
             condense_prompt = (
-                "Dada la conversación previa y la pregunta de seguimiento del usuario, "
-                "reescribe la pregunta de seguimiento como una pregunta autocontenida "
-                "(standalone) que incluya todo el contexto necesario para entenderla sin "
-                "necesitar la conversación previa.\n\n"
-                "Si la pregunta de seguimiento YA es autocontenida (por ejemplo, ya "
-                "menciona explícitamente el documento o tema del que habla), devuélvela "
-                "EXACTAMENTE IGUAL, sin cambiarla.\n\n"
-                "Responde SOLO con la pregunta (reescrita o igual), sin explicaciones, "
-                "sin comillas, sin prefijos.\n\n"
-                f"CONVERSACIÓN PREVIA:\n{history}\n\n"
-                f"PREGUNTA DE SEGUIMIENTO: {question}\n\n"
-                "PREGUNTA AUTOCONTENIDA:"
+                "Given the previous conversation and the user's follow-up question, "
+                "rewrite the follow-up question as a standalone question that includes "
+                "all the context needed to understand it without needing the previous "
+                "conversation.\n\n"
+                "If the follow-up question is ALREADY standalone (for example, it already "
+                "explicitly mentions the document or topic it's about), return it "
+                "EXACTLY AS IS, unchanged.\n\n"
+                "Answer ONLY with the question (rewritten or unchanged), with no "
+                "explanations, no quotes, no prefixes.\n\n"
+                f"PREVIOUS CONVERSATION:\n{history}\n\n"
+                f"FOLLOW-UP QUESTION: {question}\n\n"
+                "STANDALONE QUESTION:"
             )
 
             start_time = time.perf_counter()
@@ -325,7 +330,7 @@ class GroqAdapter(LLMPort):
             return question
 
     # ========================================================================
-    # Embeddings (local, backend configurable — ver _get_embedder)
+    # Embeddings (local, configurable backend — see _get_embedder)
     # ========================================================================
 
     async def generate_embedding(self, text: str) -> List[float]:
@@ -335,12 +340,12 @@ class GroqAdapter(LLMPort):
     @staticmethod
     def _encode_sync(embedder, texts: List[str]) -> List[List[float]]:
         """
-        Encapsula la llamada CPU-bound al embedder (se ejecuta en un executor,
-        ver generate_embeddings_batch). Las dos librerías exponen una API
-        distinta pese a producir el mismo tipo de vector (384 floats
-        normalizados): sentence-transformers usa .encode(...) y devuelve un
-        único array 2D; ONNXMiniLM_L6_V2 se invoca directamente (__call__) y
-        devuelve una lista de arrays 1D, uno por texto.
+        Wraps the CPU-bound call to the embedder (runs in an executor,
+        see generate_embeddings_batch). The two libraries expose a
+        different API despite producing the same kind of vector (384
+        normalized floats): sentence-transformers uses .encode(...) and
+        returns a single 2D array; ONNXMiniLM_L6_V2 is called directly
+        (__call__) and returns a list of 1D arrays, one per text.
         """
         if settings.embedding_backend == "sentence_transformers":
             vectors = embedder.encode(texts, batch_size=32, convert_to_numpy=True)
@@ -362,22 +367,22 @@ class GroqAdapter(LLMPort):
         return vectors
 
     # ========================================================================
-    # Utilidades
+    # Utilities
     # ========================================================================
 
     async def is_available(self) -> bool:
         """
-        Comprueba solo Groq (llamada ligera a /models).
+        Only checks Groq (a lightweight call to /models).
 
-        Deliberadamente NO carga aquí el modelo de embeddings local: esta
-        función se llama en el startup de FastAPI (ver lifespan en main.py),
-        y uvicorn no empieza a escuchar en el puerto hasta que el startup
-        termina. Cargar sentence-transformers aquí (síncrono, sin timeout,
-        puede implicar descargar el modelo de Hugging Face) bloqueaba el
-        arranque el tiempo suficiente para que Render diera el deploy por
-        timeout ("no open ports detected") antes de que el puerto llegara
-        a abrirse. El modelo de embeddings se sigue cargando de forma lazy
-        en el primer uso real (_get_embedder), como indica su docstring.
+        Deliberately does NOT load the local embedding model here: this
+        function is called during FastAPI's startup (see lifespan in
+        main.py), and uvicorn doesn't start listening on the port until
+        startup finishes. Loading sentence-transformers here
+        (synchronous, no timeout, can involve downloading the model from
+        Hugging Face) used to block startup long enough for Render to
+        time out the deploy ("no open ports detected") before the port
+        ever opened. The embedding model still loads lazily on first
+        real use (_get_embedder), as its docstring says.
         """
         if not settings.groq_api_key:
             logger.warning("Groq service unavailable: GROQ_API_KEY not set")
@@ -401,12 +406,12 @@ class GroqAdapter(LLMPort):
 
     async def warm_up(self) -> None:
         """
-        Precarga el modelo de embeddings local en un hilo aparte para que
-        la primera petición real (sync o chat) no pague el coste de
-        cargarlo. Se ejecuta como tarea en segundo plano tras el arranque
-        (ver main.py), así que un fallo aquí no debe tumbar la app: si algo
-        va mal, _get_embedder() se reintentará de forma lazy en el primer
-        uso real y ese error sí se propagará al endpoint correspondiente.
+        Preloads the local embedding model in a separate thread so the
+        first real request (sync or chat) doesn't pay the cost of
+        loading it. Runs as a background task after startup (see
+        main.py), so a failure here must not crash the app: if something
+        goes wrong, _get_embedder() will retry lazily on first real use
+        and that error will propagate to the corresponding endpoint then.
         """
         try:
             loop = asyncio.get_running_loop()

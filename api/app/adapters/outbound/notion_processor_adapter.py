@@ -1,36 +1,36 @@
 # /api/app/adapters/outbound/notion_processor_adapter.py
 """
-Adaptador de procesamiento de Notion - TFM Bibliotecario-IA
+Notion Processing Adapter - Bibliotecario-IA
 
-Implementación concreta de DocumentProcessorPort para páginas de Notion.
-Es el adaptador que convierte una página de Notion en chunks para el sistema RAG.
+Concrete implementation of DocumentProcessorPort for Notion pages. This
+is the adapter that turns a Notion page into chunks for the RAG system.
 
-¿Diferencias con el adaptador PDF?
-- PDF: lee archivos locales del disco
-- Notion: hace llamadas a la API remota de Notion
-- PDF: el texto viene pre-extraído por PyPDFLoader
-- Notion: el texto tiene que extraerse bloque a bloque manualmente
+Differences from the PDF adapter?
+- PDF: reads local files from disk
+- Notion: makes calls to Notion's remote API
+- PDF: the text comes pre-extracted by PyPDFLoader
+- Notion: the text has to be manually extracted block by block
 
-¿Qué es la estructura de bloques de Notion?
-Una página de Notion no es texto plano. Es una lista de bloques tipados:
-    [paragraph] "Este es un párrafo..."
-    [heading_1] "Título principal"
+What is Notion's block structure?
+A Notion page isn't plain text. It's a list of typed blocks:
+    [paragraph] "This is a paragraph..."
+    [heading_1] "Main title"
     [code]      "const x = 5;"
-    [quote]     "Una cita importante"
+    [quote]     "An important quote"
 
-Cada bloque tiene un tipo y contiene "rich text" (texto con formato).
+Each block has a type and contains "rich text" (formatted text).
 
-¿Qué es rich text?
-Notion no devuelve texto plano. Cada fragmento es un objeto:
-    [{"plain_text": "Este es ", "bold": false},
-     {"plain_text": "importante", "bold": true}]
-Se extrae solo el plain_text y se une: "Este es importante"
+What is rich text?
+Notion doesn't return plain text. Each fragment is an object:
+    [{"plain_text": "This is ", "bold": false},
+     {"plain_text": "important", "bold": true}]
+Only the plain_text is extracted and joined: "This is important"
 
-Método extra vs PDF:
-- load_database_pages(): carga TODAS las páginas de una base de datos de Notion
-  No existe en el PDF porque los PDFs son archivos individuales
+Extra method vs. PDF:
+- load_database_pages(): loads ALL pages of a Notion database.
+  Doesn't exist for PDFs because PDFs are individual files.
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     class NotionProcessorAdapter implements DocumentProcessorPort {
         constructor(private notionApiKey?: string) {}
         async loadDocument(source: string | Path): Promise<Document> { ... }
@@ -49,14 +49,14 @@ from pathlib import Path
 import logging
 import uuid
 
-# NotionDBLoader: carga contenido de bases de datos de Notion (LangChain)
+# NotionDBLoader: loads content from Notion databases (LangChain)
 from langchain_community.document_loaders import NotionDBLoader
-# Mismo splitter que en el adaptador PDF
+# Same splitter as the PDF adapter
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-# Cliente oficial de Notion para interactuar con su API
+# Notion's official client for interacting with its API
 from notion_client import Client as NotionClient
 
-# Importamos el PUERTO (interfaz) que implementamos
+# Import the PORT (interface) we're implementing
 from app.core.ports.document_processor_port import DocumentProcessorPort
 from app.core.domain.models import Document, Chunk, DocumentSource
 from app.config.settings import settings
@@ -66,56 +66,57 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# ADAPTADOR NOTION
+# NOTION ADAPTER
 # ============================================================================
 class NotionProcessorAdapter(DocumentProcessorPort):
     """
-    Implementación concreta de DocumentProcessorPort para Notion.
+    Concrete implementation of DocumentProcessorPort for Notion.
 
-    Esta clase es el ÚNICO lugar que conoce cómo comunicarse con la API de Notion.
-    El resto del sistema solo habla con la interfaz DocumentProcessorPort.
+    This class is the ONLY place that knows how to talk to Notion's API.
+    Everywhere else in the system only talks to the
+    DocumentProcessorPort interface.
 
-    Requiere una API key de Notion para autenticarse.
-    La key se obtiene de settings o se pasa directamente al constructor.
+    Requires a Notion API key to authenticate. The key comes from
+    settings or is passed directly to the constructor.
     """
 
     def __init__(self, notion_api_key: Optional[str] = None):
         """
-        Inicializa el procesador de Notion.
+        Initializes the Notion processor.
 
-        La API key puede venir de dos fuentes:
-        1. Parámetro directo (útil para testing)
-        2. settings.notion_api_key (variable de entorno, por defecto)
+        The API key can come from two sources:
+        1. Direct parameter (useful for testing)
+        2. settings.notion_api_key (environment variable, default)
 
-        El operador "or" selecciona el primero que no sea None/vacío.
+        The "or" operator picks the first one that isn't None/empty.
 
         Args:
-            notion_api_key: API key de Notion (opcional, usa settings si no se da)
+            notion_api_key: Notion API key (optional, uses settings if not given)
         """
         # notion_api_key or settings.notion_api_key:
-        # Si se pasa API key, la usa. Si no, busca en settings (env vars)
+        # If an API key is passed, use it. Otherwise, look in settings (env vars)
         self._api_key = notion_api_key or settings.notion_api_key
-        self._client = None          # Cliente Notion (lazy initialization)
+        self._client = None          # Notion client (lazy initialization)
         self._text_splitter = None
 
-        # Advertencia temprana si no hay API key configurada
+        # Early warning if no API key is configured
         if not self._api_key:
             logger.warning("Notion API key not configured")
 
     def _get_client(self) -> NotionClient:
         """
-        Obtiene o crea el cliente de Notion (Lazy Singleton).
+        Gets or creates the Notion client (Lazy Singleton).
 
-        El cliente necesita la API key para autenticarse.
-        Si no hay key, lanza un error explicativo.
+        The client needs the API key to authenticate.
+        If there's no key, it raises an explanatory error.
 
         Returns:
-            NotionClient: Cliente autenticado con la API de Notion
+            NotionClient: Client authenticated against Notion's API
         """
         if self._client is None:
             if not self._api_key:
                 raise ValueError("Notion API key is required")
-            # NotionClient(auth=key): crea cliente autenticado
+            # NotionClient(auth=key): creates an authenticated client
             self._client = NotionClient(auth=self._api_key)
             logger.info("Initialized Notion client")
         return self._client
@@ -126,17 +127,17 @@ class NotionProcessorAdapter(DocumentProcessorPort):
         chunk_overlap: int = None
     ) -> RecursiveCharacterTextSplitter:
         """
-        Crea el mismo RecursiveCharacterTextSplitter que el adaptador PDF.
+        Creates the same RecursiveCharacterTextSplitter as the PDF adapter.
 
-        La lógica de dividir texto es IDÉNTICA entre PDF y Notion.
-        Solo difiere cómo se OBTIENE el texto (archivo vs API).
+        The text-splitting logic is IDENTICAL between PDF and Notion.
+        Only how the text is OBTAINED differs (file vs. API).
 
         Args:
-            chunk_size: Tamaño objetivo por chunk (None = usa settings)
-            chunk_overlap: Overlap entre chunks (None = usa settings)
+            chunk_size: Target size per chunk (None = uses settings)
+            chunk_overlap: Overlap between chunks (None = uses settings)
 
         Returns:
-            RecursiveCharacterTextSplitter configurado
+            A configured RecursiveCharacterTextSplitter
         """
         actual_chunk_size = chunk_size or settings.chunk_size
         actual_overlap = chunk_overlap or settings.chunk_overlap
@@ -149,54 +150,54 @@ class NotionProcessorAdapter(DocumentProcessorPort):
         )
 
     # ========================================================================
-    # MÉTODOS PRINCIPALES - Implementación de DocumentProcessorPort
+    # MAIN METHODS - DocumentProcessorPort implementation
     # ========================================================================
 
     async def load_document(self, source: str | Path) -> Document:
         """
-        Carga una página de Notion y extrae todo su texto.
+        Loads a Notion page and extracts all its text.
 
-        Proceso interno:
-        1. Extrae el page_id de la URL (si es URL) o lo usa directamente
-        2. Obtiene metadatos de la página (título, fechas, etc.)
-        3. Obtiene el contenido bloque a bloque (_get_page_content)
-        4. Crea un objeto Document
+        Internal process:
+        1. Extracts the page_id from the URL (if it's a URL) or uses it directly
+        2. Gets the page's metadata (title, dates, etc.)
+        3. Gets the content block by block (_get_page_content)
+        4. Creates a Document object
 
-        ¿Por qué el ID del documento es notion_{page_id} y no un uuid?
-        Porque las páginas de Notion ya tienen ID único.
-        Esto permite re-ingestar la misma página sin crear duplicados.
+        Why is the document's ID notion_{page_id} instead of a uuid?
+        Because Notion pages already have a unique ID.
+        This lets you re-ingest the same page without creating duplicates.
 
         Args:
-            source: ID de página o URL de Notion
-                   Ejemplos:
-                   - "a1b2c3d4e5f6..." (32 caracteres, el page_id)
-                   - "https://www.notion.so/Mi-Pagina-a1b2c3d4e5f6..."
+            source: Notion page ID or URL
+                   Examples:
+                   - "a1b2c3d4e5f6..." (32 characters, the page_id)
+                   - "https://www.notion.so/My-Page-a1b2c3d4e5f6..."
 
         Returns:
-            Document: con contenido extraído y metadatos de Notion
+            Document: with the extracted content and Notion metadata
         """
         try:
-            # Extrae el page_id limpio (funciona con URL o ID directo)
+            # Extracts the clean page_id (works with a URL or a direct ID)
             page_id = self._extract_page_id(str(source))
 
             client = self._get_client()
 
-            # pages.retrieve: obtiene metadatos de la página (no el contenido)
+            # pages.retrieve: gets the page's metadata (not its content)
             page = client.pages.retrieve(page_id=page_id)
 
-            # Extraer título de las propiedades de la página
+            # Extract the title from the page's properties
             title = self._extract_title(page)
 
-            # Extraer contenido de propiedades de BD (columnas como Nombre, Contenido, etc.)
+            # Extract content from DB properties (columns like Name, Content, etc.)
             properties_content = self._extract_properties_content(page)
 
-            # Obtener el contenido de bloques (párrafos dentro de la página)
+            # Get the block content (paragraphs within the page)
             blocks_content = await self._get_page_content(page_id)
 
-            # Combinar: título prominente + propiedades + bloques
+            # Combine: prominent title + properties + blocks
             content_parts = []
 
-            # Añadir título como encabezado para mejor búsqueda semántica
+            # Add the title as a heading for better semantic search
             if title and title != "Untitled":
                 content_parts.append(f"# {title}")
 
@@ -206,9 +207,9 @@ class NotionProcessorAdapter(DocumentProcessorPort):
                 content_parts.append(blocks_content)
             content = "\n\n".join(content_parts)
 
-            # Crear objeto Document con metadatos de Notion
+            # Create the Document object with Notion metadata
             document = Document(
-                id=f"notion_{page_id}",        # ID determinista (mismo page_id)
+                id=f"notion_{page_id}",        # Deterministic ID (same page_id)
                 source=DocumentSource.NOTION,
                 content=content,
                 metadata={
@@ -229,34 +230,34 @@ class NotionProcessorAdapter(DocumentProcessorPort):
 
     async def _get_page_content(self, page_id: str) -> str:
         """
-        Extrae el texto de una página de Notion bloque a bloque.
+        Extracts the text of a Notion page, block by block.
 
-        MÉTODO PRIVADO - es donde ocurre el trabajo real de parsear Notion.
+        PRIVATE METHOD — this is where the real work of parsing Notion happens.
 
-        La API de Notion devuelve el contenido como una lista de bloques.
-        Cada bloque tiene un "type" y contenido específico según ese tipo.
+        Notion's API returns the content as a list of blocks. Each block
+        has a "type" and specific content depending on that type.
 
-        Tipos de bloque soportados:
+        Supported block types:
         - paragraph, heading_1/2/3, bulleted_list_item, numbered_list_item
-            → se extrae el texto directamente
-        - code → se envuelve en ``` para mantener formato
-        - quote → se añade ">" para formato de cita
+            → text extracted directly
+        - code → wrapped in ``` to preserve formatting
+        - quote → prefixed with ">" for quote formatting
 
-        Tipos NO soportados (se ignoran):
+        Unsupported types (ignored):
         - image, file, embed, divider, table, etc.
-        - Solo procesamos bloques que contienen texto
+        - We only process blocks that contain text
 
         Args:
-            page_id: ID de la página de Notion
+            page_id: The Notion page's ID
 
         Returns:
-            str: Todo el texto de la página unido con \n\n
+            str: All of the page's text, joined with \n\n
         """
         client = self._get_client()
 
         try:
-            # blocks.children.list: obtiene todos los bloques de la página
-            # Retorna un objeto con "results" (lista de bloques)
+            # blocks.children.list: gets all of the page's blocks
+            # Returns an object with "results" (list of blocks)
             blocks = client.blocks.children.list(block_id=page_id)
 
             content_parts = []
@@ -264,29 +265,29 @@ class NotionProcessorAdapter(DocumentProcessorPort):
             for block in blocks.get("results", []):
                 block_type = block.get("type")
 
-                # Bloques de texto estándar: párrafos, títulos, listas
+                # Standard text blocks: paragraphs, headings, lists
                 if block_type in ["paragraph", "heading_1", "heading_2", "heading_3", "bulleted_list_item", "numbered_list_item"]:
                     text_content = self._extract_text_from_block(block)
                     if text_content:
                         content_parts.append(text_content)
 
-                # Bloques de código: se envuelven en ``` para preservar formato
+                # Code blocks: wrapped in ``` to preserve formatting
                 elif block_type == "code":
                     code_block = block.get("code", {})
                     code_text = self._extract_rich_text(code_block.get("rich_text", []))
                     if code_text:
                         content_parts.append(f"```\n{code_text}\n```")
 
-                # Bloques de cita: se añade ">" al inicio
+                # Quote blocks: prefixed with ">"
                 elif block_type == "quote":
                     quote_block = block.get("quote", {})
                     quote_text = self._extract_rich_text(quote_block.get("rich_text", []))
                     if quote_text:
                         content_parts.append(f"> {quote_text}")
 
-                # Otros tipos (image, divider, etc.) se ignoran silenciosamente
+                # Other types (image, divider, etc.) are silently ignored
 
-            # Une todos los bloques con separador de párrafo
+            # Joins all the blocks with a paragraph separator
             final_content = "\n\n".join(content_parts)
             if not final_content:
                 logger.warning(f"Page {page_id}: no text content extracted (may contain only images/embeds)")
@@ -298,84 +299,84 @@ class NotionProcessorAdapter(DocumentProcessorPort):
 
     def _extract_text_from_block(self, block: Dict[str, Any]) -> str:
         """
-        Extrae texto de un bloque genérico de Notion.
+        Extracts text from a generic Notion block.
 
-        La estructura de un bloque es:
+        A block's structure looks like:
             {
                 "type": "paragraph",
-                "paragraph": {           ← el contenido está bajo una key
-                    "rich_text": [...]    ← con nombre igual al "type"
+                "paragraph": {           ← the content is under a key
+                    "rich_text": [...]    ← named the same as "type"
                 }
             }
 
-        block.get(block_type, {}) obtiene el contenido usando el tipo
-        como nombre de la clave. Es un truco genérico que funciona para
-        paragraph, heading_1, bulleted_list_item, etc.
+        block.get(block_type, {}) gets the content using the type as the
+        key's name. It's a generic trick that works for paragraph,
+        heading_1, bulleted_list_item, etc.
 
         Args:
-            block: Objeto bloque de la API de Notion
+            block: Block object from Notion's API
 
         Returns:
-            str: Texto extraído del bloque
+            str: Text extracted from the block
         """
         block_type = block.get("type")
-        # El contenido está en una clave con el mismo nombre que el tipo
+        # The content is under a key with the same name as the type
         block_content = block.get(block_type, {})
         rich_text = block_content.get("rich_text", [])
         return self._extract_rich_text(rich_text)
 
     def _extract_rich_text(self, rich_text_array: List[Dict[str, Any]]) -> str:
         """
-        Extrae texto plano de un array de rich text de Notion.
+        Extracts plain text from a Notion rich text array.
 
-        Notion representa texto con formato como una lista de objetos:
+        Notion represents formatted text as a list of objects:
             [
-                {"plain_text": "Este es ", "annotations": {"bold": false}},
-                {"plain_text": "importante", "annotations": {"bold": true}},
+                {"plain_text": "This is ", "annotations": {"bold": false}},
+                {"plain_text": "important", "annotations": {"bold": true}},
                 {"plain_text": ".", "annotations": {"bold": false}}
             ]
 
-        Solo nos interesa el plain_text, ignoramos el formato (bold, italic, etc.)
-        Resultado: "Este es importante."
+        We only care about plain_text, ignoring the formatting (bold, italic, etc.)
+        Result: "This is important."
 
-        Equivalente JS:
+        JS equivalent:
             richTextArray.map(t => t.plain_text).join("")
 
         Args:
-            rich_text_array: Array de objetos rich text de Notion
+            rich_text_array: Array of Notion rich text objects
 
         Returns:
-            str: Texto plano sin formato
+            str: Plain, unformatted text
         """
-        # List comprehension + join: extrae plain_text de cada objeto y lo une
+        # List comprehension + join: extracts plain_text from each object and joins it
         return "".join([text.get("plain_text", "") for text in rich_text_array])
 
     def _extract_properties_content(self, page: Dict[str, Any]) -> str:
         """
-        Extrae texto de las propiedades de una página de base de datos de Notion.
+        Extracts text from a Notion database page's properties.
 
-        Cuando las páginas vienen de una BD, las columnas son "propiedades"
-        que contienen datos estructurados (texto, números, selects, etc.).
+        When pages come from a database, the columns are "properties"
+        holding structured data (text, numbers, selects, etc.).
 
-        Este método extrae el contenido de texto de propiedades relevantes
-        para incluirlo en el documento indexable.
+        This method extracts the text content from relevant properties
+        to include it in the indexable document.
 
-        Tipos de propiedad soportados:
-        - title: título de la página
-        - rich_text: texto enriquecido (ej: "Contenido", "Descripción")
-        - number: números (ej: "Año" → "Año: 2024")
-        - select: selección única (ej: "Director" → "Director: Spielberg")
-        - multi_select: selección múltiple (ej: "Géneros" → "Géneros: Acción, Drama")
-        - date: fechas
+        Supported property types:
+        - title: the page's title
+        - rich_text: formatted text (e.g. "Content", "Description")
+        - number: numbers (e.g. "Year" → "Year: 2024")
+        - select: single choice (e.g. "Director" → "Director: Spielberg")
+        - multi_select: multiple choice (e.g. "Genres" → "Genres: Action, Drama")
+        - date: dates
         - url: URLs
         - email: emails
-        - phone_number: teléfonos
+        - phone_number: phone numbers
 
         Args:
-            page: Objeto página devuelto por la API de Notion
+            page: Page object returned by Notion's API
 
         Returns:
-            str: Contenido extraído de las propiedades, formateado como "Propiedad: valor"
+            str: Content extracted from the properties, formatted as "Property: value"
         """
         properties = page.get("properties", {})
         content_parts = []
@@ -426,13 +427,13 @@ class NotionProcessorAdapter(DocumentProcessorPort):
             elif prop_type == "checkbox":
                 checked = prop_data.get("checkbox")
                 if checked is not None:
-                    value = "Sí" if checked else "No"
+                    value = "Yes" if checked else "No"
 
-            # Si hay valor, añadirlo con formato "Propiedad: valor"
+            # If there's a value, add it formatted as "Property: value"
             if value:
-                # Poner título/nombre al principio para mejor indexación
+                # Put the title/name first for better indexing
                 if prop_type == "title":
-                    content_parts.insert(0, f"Título: {value}")
+                    content_parts.insert(0, f"Title: {value}")
                 else:
                     content_parts.append(f"{prop_name}: {value}")
 
@@ -440,35 +441,36 @@ class NotionProcessorAdapter(DocumentProcessorPort):
 
     def _extract_title(self, page: Dict[str, Any]) -> str:
         """
-        Extrae el título de una página de Notion.
+        Extracts a Notion page's title.
 
-        En Notion, el título es una propiedad especial de tipo "title" —
-        pero el NOMBRE de esa propiedad (la columna que ve el usuario) es
-        arbitrario: puede llamarse "Nombre", "Película", "Libro", "Título"
-        con tilde, lo que sea. Notion no garantiza el nombre, solo garantiza
-        que exista exactamente UNA propiedad con type=="title" por página
-        (venga o no de una base de datos).
+        In Notion, the title is a special property of type "title" — but
+        the NAME of that property (the column the user sees) is
+        arbitrary: it can be called "Name", "Movie", "Book", "Title",
+        whatever. Notion doesn't guarantee the name, only that exactly
+        ONE property with type=="title" exists per page (whether or not
+        it comes from a database).
 
-        Por eso este método NO adivina nombres de columna (la versión
-        anterior probaba una lista fija ["title", "Title", "Name", "name",
-        "Nombre"], que fallaba en cuanto la BD usaba cualquier otro nombre
-        — daba "Untitled" para las 12 páginas de una BD real con la columna
-        llamada de otra forma). En su lugar busca por type, igual que ya
-        hace _extract_properties_content() unas líneas más abajo — mismo
-        criterio en los dos sitios que leen el título.
+        That's why this method does NOT guess column names (the previous
+        version tried a fixed list ["title", "Title", "Name", "name",
+        "Nombre"], which failed as soon as the database used any other
+        name — it returned "Untitled" for all 12 pages of a real
+        database whose column was named something else). Instead it
+        searches by type, the same way _extract_properties_content()
+        already does a few lines below — same criterion in both places
+        that read the title.
 
-        Si la propiedad título existe pero está vacía (nadie escribió nada
-        en esa celda de Notion), sigue devolviendo "Untitled" como fallback.
+        If the title property exists but is empty (nobody wrote anything
+        in that Notion cell), it still returns "Untitled" as a fallback.
 
         Args:
-            page: Objeto página devuelto por la API de Notion
+            page: Page object returned by Notion's API
 
         Returns:
-            str: Título de la página o "Untitled"
+            str: The page's title, or "Untitled"
         """
         properties = page.get("properties", {})
 
-        # Busca la propiedad con type=="title" sin importar su nombre
+        # Looks for the property with type=="title", regardless of its name
         for prop_data in properties.values():
             if prop_data.get("type") == "title":
                 title_array = prop_data.get("title", [])
@@ -480,36 +482,38 @@ class NotionProcessorAdapter(DocumentProcessorPort):
 
     def _extract_page_id(self, source: str) -> str:
         """
-        Extrae el page_id de una URL de Notion o lo retorna tal cual si ya es un ID.
+        Extracts the page_id from a Notion URL, or returns it as-is if
+        it's already an ID.
 
-        Las URLs de Notion tienen este formato:
-            https://www.notion.so/Titulo-De-La-Pagina-a1b2c3d4e5f6789...
+        Notion URLs look like this:
+            https://www.notion.so/Page-Title-a1b2c3d4e5f6789...
             └─────────────────────────────────────┘└──── 32 chars ────┘
 
-        El page_id son los últimos 32 caracteres hexadecimales.
+        The page_id is the last 32 hexadecimal characters.
 
-        Si el source ya es un ID (32 chars sin guiones), lo limpia y lo retorna.
-        Los IDs de Notion pueden venir con guiones: "a1b2c3d4-e5f6-..." que se elimina.
+        If the source is already an ID (32 chars with no dashes), it's
+        cleaned up and returned.
+        Notion IDs can come with dashes: "a1b2c3d4-e5f6-..." which get stripped.
 
         Args:
-            source: URL de Notion o page_id directo
+            source: A Notion URL or a direct page_id
 
         Returns:
-            str: ID limpio de 32 caracteres
+            str: Clean 32-character ID
         """
-        # Si es una URL de Notion, extraer el ID del final
+        # If it's a Notion URL, extract the ID from the end
         if "notion.so" in source or "notion.site" in source:
-            # Formato: https://www.notion.so/Page-Title-{32-char-id}
-            # split("-") divide por guiones, el último elemento es el ID
+            # Format: https://www.notion.so/Page-Title-{32-char-id}
+            # split("-") splits on dashes, the last element is the ID
             parts = source.split("-")
             if len(parts) > 0:
-                # El último part puede tener query params (?v=...)
+                # The last part may have query params (?v=...)
                 potential_id = parts[-1].split("?")[0]
                 if len(potential_id) == 32:
                     return potential_id
 
-        # Si no es URL, eliminar guiones si los tiene
-        # Los IDs de Notion son 32 chars: con o sin guiones
+        # If it's not a URL, strip dashes if it has any
+        # Notion IDs are 32 chars: with or without dashes
         clean_id = source.replace("-", "")
         return clean_id
 
@@ -520,42 +524,42 @@ class NotionProcessorAdapter(DocumentProcessorPort):
         chunk_overlap: int = 200
     ) -> List[Chunk]:
         """
-        Divide el contenido de la página de Notion en chunks.
+        Splits the Notion page's content into chunks.
 
-        La lógica es IDÉNTICA a la del adaptador PDF.
-        Una vez que tenemos el texto extraído de Notion, el proceso
-        de dividir en chunks es exactamente el mismo.
+        The logic is IDENTICAL to the PDF adapter's. Once we have the
+        text extracted from Notion, the chunking process is exactly the
+        same.
 
-        Esto demuestra la utilidad de la interfaz DocumentProcessorPort:
-        la lógica de chunking es la misma independientemente de la fuente.
+        This shows the value of the DocumentProcessorPort interface: the
+        chunking logic is the same regardless of the source.
 
         Args:
-            document: Documento ya cargado desde Notion
-            chunk_size: Tamaño objetivo por chunk en caracteres
-            chunk_overlap: Caracteres de overlap entre chunks
+            document: Document already loaded from Notion
+            chunk_size: Target size per chunk in characters
+            chunk_overlap: Overlap characters between chunks
 
         Returns:
-            List[Chunk]: Lista de chunks sin embeddings
+            List[Chunk]: List of chunks with no embeddings
         """
         try:
             text_splitter = self._get_text_splitter(chunk_size, chunk_overlap)
 
-            # Divide el texto extraído de Notion en fragmentos
+            # Splits the text extracted from Notion into fragments
             text_chunks = text_splitter.split_text(document.content)
 
-            # Crea objetos Chunk con metadatos de Notion
+            # Creates Chunk objects with Notion metadata
             chunks = []
             for i, chunk_text in enumerate(text_chunks):
                 chunk = Chunk(
-                    # ID trazable: "notion_{page_id}_chunk_0"
+                    # Traceable ID: "notion_{page_id}_chunk_0"
                     id=f"{document.id}_chunk_{i}",
                     document_id=document.id,
                     content=chunk_text,
-                    embedding=None,  # Se añade después en SyncService
+                    embedding=None,  # Added later in SyncService
                     metadata={
-                        **document.metadata,            # Hereda metadatos de Notion (title, url, etc.)
-                        "chunk_index": i,               # Posición del chunk
-                        "chunk_total": len(text_chunks) # Total de chunks
+                        **document.metadata,            # Inherits Notion metadata (title, url, etc.)
+                        "chunk_index": i,               # Chunk position
+                        "chunk_total": len(text_chunks) # Total number of chunks
                     }
                 )
                 chunks.append(chunk)
@@ -574,24 +578,24 @@ class NotionProcessorAdapter(DocumentProcessorPort):
         chunk_overlap: int = 200
     ) -> tuple[Document, List[Chunk]]:
         """
-        Pipeline completo: carga la página de Notion y la divide en chunks.
+        Full pipeline: loads the Notion page and splits it into chunks.
 
-        Método de conveniencia que combina load_document() + split_into_chunks().
-        Es el que lo llama el SyncService.
+        A convenience method combining load_document() + split_into_chunks().
+        This is the one SyncService calls.
 
         Args:
-            source: ID de página o URL de Notion
-            chunk_size: Tamaño de chunks
-            chunk_overlap: Overlap entre chunks
+            source: Notion page ID or URL
+            chunk_size: Chunk size
+            chunk_overlap: Overlap between chunks
 
         Returns:
-            tuple[Document, List[Chunk]]: Documento y sus chunks
+            tuple[Document, List[Chunk]]: The document and its chunks
         """
         try:
-            # Paso 1: Cargar página desde la API de Notion
+            # Step 1: Load the page from Notion's API
             document = await self.load_document(source)
 
-            # Paso 2: Dividir en chunks
+            # Step 2: Split into chunks
             chunks = await self.split_into_chunks(document, chunk_size, chunk_overlap)
 
             logger.info(
@@ -607,32 +611,32 @@ class NotionProcessorAdapter(DocumentProcessorPort):
 
     def supports_format(self, file_path: str | Path) -> bool:
         """
-        Verifica si el source es una página de Notion válida.
+        Checks whether the source is a valid Notion page.
 
-        A diferencia del PDF (que verifica extensión de archivo),
-        aquí verificamos si es una URL de Notion o un ID válido.
+        Unlike the PDF adapter (which checks the file extension), here
+        we check whether it's a Notion URL or a valid ID.
 
-        Criterios de validación:
-        1. Contiene "notion.so" o "notion.site" → es una URL de Notion
-        2. Es un string de 32 caracteres alfanuméricos → es un page_id
+        Validation criteria:
+        1. Contains "notion.so" or "notion.site" → it's a Notion URL
+        2. Is a 32-character alphanumeric string → it's a page_id
 
-        isalnum(): retorna True si todos los caracteres son alfanuméricos
-        Equivalente JS: /^[a-zA-Z0-9]+$/.test(cleanId)
+        isalnum(): returns True if every character is alphanumeric
+        JS equivalent: /^[a-zA-Z0-9]+$/.test(cleanId)
 
         Args:
-            file_path: Source a verificar (URL o page_id)
+            file_path: The source to check (URL or page_id)
 
         Returns:
-            bool: True si parece ser una página de Notion
+            bool: True if it looks like a Notion page
         """
         source = str(file_path)
 
-        # Verificar si es URL de Notion
+        # Check whether it's a Notion URL
         if "notion.so" in source or "notion.site" in source:
             return True
 
-        # Verificar si es un page_id válido (32 chars alfanuméricos)
-        # Los IDs de Notion pueden venir con guiones, los eliminamos primero
+        # Check whether it's a valid page_id (32 alphanumeric chars)
+        # Notion IDs can come with dashes, strip them first
         clean_id = source.replace("-", "")
         if len(clean_id) == 32 and clean_id.isalnum():
             return True
@@ -640,7 +644,7 @@ class NotionProcessorAdapter(DocumentProcessorPort):
         return False
 
     # ========================================================================
-    # MÉTODO EXTRA - No existe en el adaptador PDF
+    # EXTRA METHOD - Doesn't exist in the PDF adapter
     # ========================================================================
 
     async def load_database_pages(
@@ -649,57 +653,57 @@ class NotionProcessorAdapter(DocumentProcessorPort):
         max_pages: Optional[int] = None
     ) -> List[Document]:
         """
-        Carga todas las páginas de una base de datos de Notion.
+        Loads all pages of a Notion database.
 
-        MÉTODO EXTRA que no existe en la interfaz DocumentProcessorPort.
-        Es específico de Notion porque solo Notion tiene el concepto
-        de "bases de datos" (como tablas con filas que son páginas).
+        EXTRA METHOD that doesn't exist in the DocumentProcessorPort
+        interface. Notion-specific because only Notion has the concept
+        of "databases" (like tables whose rows are pages).
 
-        Útil cuando tienes una base de datos con muchos artículos
-        y quieres ingestarlos todos de una vez.
+        Useful when you have a database with many articles and want to
+        ingest them all at once.
 
-        ¿Por qué page_size = min(max_pages, 100)?
-        La API de Notion tiene un límite de 100 resultados por petición.
-        Si pides más, necesitarías paginación (no implementada aquí en MVP).
+        Why page_size = min(max_pages, 100)?
+        Notion's API has a limit of 100 results per request. If you ask
+        for more, you'd need pagination (not implemented here in this MVP).
 
-        Manejo de errores por página:
-        Si una página falla, se loguea el error pero el bucle CONTINÚA
-        con las siguientes páginas (continue). No falla todo por una página.
+        Per-page error handling:
+        If a page fails, the error is logged but the loop CONTINUES with
+        the remaining pages (continue). A single page doesn't fail the whole run.
 
         Args:
-            database_id: ID de la base de datos de Notion
-            max_pages: Máximo de páginas a cargar (None = todas)
+            database_id: Notion database ID
+            max_pages: Maximum number of pages to load (None = all)
 
         Returns:
-            List[Document]: Lista de documentos cargados exitosamente
+            List[Document]: List of successfully loaded documents
         """
         try:
             client = self._get_client()
 
-            # Preparar parámetros de la query
+            # Prepare the query's parameters
             query_params = {}
             if max_pages:
-                # Limitar page_size al mínimo entre max_pages y 100 (límite de Notion)
+                # Cap page_size at the min of max_pages and 100 (Notion's limit)
                 query_params["page_size"] = min(max_pages, 100)
 
-            # databases.query: busca todas las páginas en la base de datos
+            # databases.query: finds every page in the database
             response = client.databases.query(database_id=database_id, **query_params)
 
             documents = []
 
-            # Obtener resultados, limitado por max_pages si se especifica
-            # [:max_pages] es slicing: toma los primeros N elementos
+            # Get the results, capped by max_pages if given
+            # [:max_pages] is slicing: takes the first N elements
             pages = response.get("results", [])[:max_pages] if max_pages else response.get("results", [])
 
             for page in pages:
                 try:
                     page_id = page["id"]
-                    # Carga cada página individualmente
+                    # Loads each page individually
                     document = await self.load_document(page_id)
                     documents.append(document)
                 except Exception as e:
-                    # Si una página falla, se loguea pero se continúa con las siguientes
-                    # "continue" salta a la siguiente iteración del bucle
+                    # If a page fails, it's logged but the loop continues
+                    # "continue" jumps to the next loop iteration
                     logger.error(f"Failed to load page {page.get('id')}: {e}")
                     continue
 
