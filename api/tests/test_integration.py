@@ -1,17 +1,17 @@
 # /api/tests/test_integration.py
 """
-Tests de Integración End-to-End.
+End-to-End Integration Tests.
 
-Estos tests verifican el flujo completo del sistema con servicios reales:
-- Ollama para embeddings y generación
-- ChromaDB para almacenamiento vectorial
-- Pipeline completo: ingest → store → retrieve → generate
+These tests verify the system's full flow with real services:
+- Ollama for embeddings and generation
+- ChromaDB for vector storage
+- Full pipeline: ingest → store → retrieve → generate
 
-IMPORTANTE:
-Estos tests requieren servicios corriendo y se ejecutan con:
+IMPORTANT:
+These tests require running services and are run with:
     pytest -m integration
 
-No se ejecutan por defecto para mantener los tests rápidos.
+They don't run by default, to keep the test suite fast.
 """
 
 import pytest
@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 # ============================================================================
-# TEST E2E: FLUJO COMPLETO DE INGESTA Y QUERY
+# E2E TEST: FULL INGESTION AND QUERY FLOW
 # ============================================================================
 
 @pytest.mark.integration
@@ -27,20 +27,20 @@ from pathlib import Path
 @pytest.mark.asyncio
 async def test_full_rag_pipeline():
     """
-    Test E2E: Flujo completo de ingesta y consulta.
+    E2E test: full ingestion and query flow.
 
-    Requisitos previos:
-    1. Ollama corriendo: ollama serve
-    2. ChromaDB corriendo: docker-compose up chromadb
-    3. PDF de prueba en /data/test_document.pdf
+    Prerequisites:
+    1. Ollama running: ollama serve
+    2. ChromaDB running: docker-compose up chromadb
+    3. Test PDF at /data/test_document.pdf
 
-    Flujo:
-    1. Ingesta el PDF de prueba
-    2. Verifica que se almacenó en ChromaDB
-    3. Hace una query relacionada con el contenido
-    4. Verifica que la respuesta es coherente
+    Flow:
+    1. Ingests the test PDF
+    2. Verifies it was stored in ChromaDB
+    3. Runs a query related to the content
+    4. Verifies the answer is coherent
 
-    Este test tarda ~10-30 segundos dependiendo del hardware.
+    This test takes ~10-30 seconds depending on the hardware.
     """
     from app.core.services.sync_service import SyncService
     from app.core.services.rag_service import RAGService
@@ -49,8 +49,8 @@ async def test_full_rag_pipeline():
     from app.adapters.outbound.pdf_processor_adapter import PDFProcessorAdapter
     from app.config.settings import settings
 
-    # Arrange: Inicializar servicios reales
-    # Los adaptadores usan lazy initialization y obtienen configuración de settings
+    # Arrange: initialize real services
+    # The adapters use lazy initialization and pull config from settings
     ollama = OllamaAdapter()
     chromadb = ChromaDBAdapter()
     pdf_processor = PDFProcessorAdapter()
@@ -66,96 +66,95 @@ async def test_full_rag_pipeline():
         vector_db=chromadb
     )
 
-    # Verificar que existe el PDF de prueba (criterios de evaluación del TFM)
-    # El PDF está en tests/data/ relativo al archivo de test
+    # Verify the test PDF exists
+    # The PDF lives in tests/data/, relative to this test file
     test_dir = Path(__file__).parent / "data"
     test_pdf = test_dir / "test_rag_document.pdf"
     if not test_pdf.exists():
-        pytest.skip(f"PDF de prueba no encontrado en {test_pdf}. Coloca un PDF ahí para ejecutar este test.")
+        pytest.skip(f"Test PDF not found at {test_pdf}. Place a PDF there to run this test.")
 
-    # Act: Paso 1 - Ingestar el PDF
+    # Act: Step 1 - Ingest the PDF
     try:
         result = await sync_service.sync_document_from_file(str(test_pdf))
-        assert result.success, f"Ingesta falló: {result.message}"
-        print(f"\n📥 Ingesta: {result.chunks_created} chunks creados en {result.processing_time:.2f}s")
+        assert result.success, f"Ingestion failed: {result.message}"
+        print(f"\n📥 Ingestion: {result.chunks_created} chunks created in {result.processing_time:.2f}s")
     except Exception as e:
-        pytest.fail(f"Falló la ingesta: {e}")
+        pytest.fail(f"Ingestion failed: {e}")
 
-    # Act: Paso 2 - Verificar que se almacenó
+    # Act: Step 2 - Verify it was stored
     try:
         stats = await chromadb.get_collection_stats()
         print(f"📊 ChromaDB stats: {stats}")
-        # El campo puede ser 'count' o 'document_count' según la implementación
+        # The field may be 'count' or 'document_count' depending on the implementation
         chunk_count = stats.get("count", stats.get("document_count", 0))
-        # Si la ingesta reportó éxito con chunks, confiamos en eso
+        # If ingestion reported success with chunks, trust that
         if result.chunks_created > 0:
-            print(f"📊 Ingesta reportó {result.chunks_created} chunks creados")
+            print(f"📊 Ingestion reported {result.chunks_created} chunks created")
     except Exception as e:
-        pytest.fail(f"Falló la verificación de almacenamiento: {e}")
+        pytest.fail(f"Storage verification failed: {e}")
 
-    # Act: Paso 3 - Hacer una query relacionada con criterios de evaluación TFM
+    # Act: Step 3 - Run a query related to the document's content
     try:
         from app.core.domain.models import Query
-        query = Query(question="¿Cuáles son los criterios de evaluación del TFM?")
+        query = Query(question="What is this document about?")
         response = await rag_service.ask_question(query)
     except Exception as e:
-        pytest.fail(f"Falló la query: {e}")
+        pytest.fail(f"Query failed: {e}")
 
-    # Assert: Verificar respuesta
+    # Assert: verify the response
     assert response is not None
     assert response.answer is not None
     assert len(response.answer) > 0
     assert len(response.source_documents) > 0
 
-    # Verificar que la respuesta menciona conceptos del documento
-    # (criterios de evaluación, TFM, máster, etc.)
+    # Verify the answer mentions concepts from the document
     answer_lower = response.answer.lower()
-    keywords = ["tfm", "evaluación", "criterio", "trabajo", "máster", "master", "calificación", "nota"]
+    keywords = ["rag", "retrieval", "generation", "document", "system", "architecture"]
     found_keywords = [kw for kw in keywords if kw in answer_lower]
 
-    print(f"\n✅ Test E2E exitoso!")
-    print(f"📝 Respuesta: {response.answer[:200]}...")
-    print(f"📚 Fuentes: {len(response.source_documents)} chunks usados")
-    print(f"🔑 Keywords encontradas: {found_keywords}")
+    print(f"\n✅ E2E test succeeded!")
+    print(f"📝 Answer: {response.answer[:200]}...")
+    print(f"📚 Sources: {len(response.source_documents)} chunks used")
+    print(f"🔑 Keywords found: {found_keywords}")
 
-    # Al menos debe mencionar algo relacionado con el contenido
+    # At minimum, it should mention something related to the content
     assert len(found_keywords) > 0 or len(response.source_documents) > 0, \
-        "La respuesta no parece relacionada con el documento"
+        "The answer doesn't seem related to the document"
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_rag_with_empty_database():
     """
-    Test de integración: query con base de datos vacía.
+    Integration test: query against an empty database.
 
-    Verifica que el sistema maneja gracefully el caso donde
-    no hay documentos ingestados.
+    Verifies the system gracefully handles the case where there are no
+    ingested documents.
     """
     from app.core.services.rag_service import RAGService
     from app.adapters.outbound.ollama_adapter import OllamaAdapter
     from app.adapters.outbound.chromadb_adapter import ChromaDBAdapter
     from app.config.settings import settings
 
-    # Arrange: RAG con colección vacía
-    # Los adaptadores usan lazy initialization y obtienen configuración de settings
+    # Arrange: RAG with an empty collection
+    # The adapters use lazy initialization and pull config from settings
     ollama = OllamaAdapter()
     chromadb = ChromaDBAdapter()
 
     rag_service = RAGService(llm=ollama, vector_db=chromadb)
 
-    # Act: Query sin documentos
+    # Act: query with no documents
     try:
         from app.core.domain.models import Query
-        query = Query(question="¿Qué es RAG?")
+        query = Query(question="What is RAG?")
         response = await rag_service.ask_question(query)
     except Exception as e:
-        pytest.fail(f"El sistema debe manejar BD vacía gracefully, pero falló: {e}")
+        pytest.fail(f"The system must handle an empty DB gracefully, but failed: {e}")
 
-    # Assert: Debe retornar respuesta (aunque sin contexto)
+    # Assert: must return an answer (even without context)
     assert response is not None
     assert response.answer is not None
-    # Sources puede estar vacío
+    # Sources may be empty
     assert isinstance(response.source_documents, list)
 
 
@@ -163,57 +162,57 @@ async def test_rag_with_empty_database():
 @pytest.mark.asyncio
 async def test_ollama_connectivity():
     """
-    Test de integración: verificar conectividad con Ollama.
+    Integration test: verify connectivity with Ollama.
 
-    Pre-check rápido antes de ejecutar tests E2E completos.
+    Quick pre-check before running the full E2E tests.
     """
     from app.adapters.outbound.ollama_adapter import OllamaAdapter
     from app.config.settings import settings
 
-    # Arrange: El adaptador usa lazy initialization
+    # Arrange: the adapter uses lazy initialization
     ollama = OllamaAdapter()
 
-    # Act: Generar embedding simple
+    # Act: generate a simple embedding
     try:
         embedding = await ollama.generate_embedding("test")
     except Exception as e:
-        pytest.fail(f"Ollama no está disponible: {e}")
+        pytest.fail(f"Ollama is not available: {e}")
 
     # Assert
     assert embedding is not None
     assert isinstance(embedding, list)
     assert len(embedding) > 0
-    print(f"✅ Ollama conectado (embedding dimension: {len(embedding)})")
+    print(f"✅ Ollama connected (embedding dimension: {len(embedding)})")
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_chromadb_connectivity():
     """
-    Test de integración: verificar conectividad con ChromaDB.
+    Integration test: verify connectivity with ChromaDB.
 
-    Pre-check rápido antes de ejecutar tests E2E completos.
+    Quick pre-check before running the full E2E tests.
     """
     from app.adapters.outbound.chromadb_adapter import ChromaDBAdapter
     from app.config.settings import settings
 
-    # Arrange: El adaptador usa lazy initialization
+    # Arrange: the adapter uses lazy initialization
     chromadb = ChromaDBAdapter()
 
-    # Act: Obtener estadísticas de la colección por defecto
+    # Act: get the default collection's stats
     try:
         stats = await chromadb.get_collection_stats()
     except Exception as e:
-        pytest.fail(f"ChromaDB no está disponible: {e}")
+        pytest.fail(f"ChromaDB is not available: {e}")
 
     # Assert
     assert stats is not None
     assert isinstance(stats, dict)
-    print(f"✅ ChromaDB conectado (colección: {stats.get('collection_name')})")
+    print(f"✅ ChromaDB connected (collection: {stats.get('collection_name')})")
 
 
 # ============================================================================
-# TEST E2E: FLUJO COMPLETO DE NOTION
+# E2E TEST: FULL NOTION FLOW
 # ============================================================================
 
 @pytest.mark.integration
@@ -221,22 +220,22 @@ async def test_chromadb_connectivity():
 @pytest.mark.asyncio
 async def test_full_notion_pipeline():
     """
-    Test E2E: Flujo completo de ingesta desde Notion (base de datos) y consulta.
+    E2E test: full ingestion flow from Notion (a database) and query.
 
-    Requisitos previos:
-    1. Ollama corriendo: ollama serve
-    2. ChromaDB corriendo: docker-compose up chromadb
-    3. NOTION_API_KEY configurada en .env
-    4. NOTION_DATABASE_ID con una base de datos compartida con la integración
+    Prerequisites:
+    1. Ollama running: ollama serve
+    2. ChromaDB running: docker-compose up chromadb
+    3. NOTION_API_KEY configured in .env
+    4. NOTION_DATABASE_ID pointing to a database shared with the integration
 
-    Flujo:
-    1. Carga todas las páginas de la base de datos de Notion
-    2. Procesa cada página (chunks + embeddings)
-    3. Almacena en ChromaDB
-    4. Hace una query relacionada con el contenido
-    5. Verifica que la respuesta es coherente
+    Flow:
+    1. Loads every page of the Notion database
+    2. Processes each page (chunks + embeddings)
+    3. Stores them in ChromaDB
+    4. Runs a query related to the content
+    5. Verifies the answer is coherent
 
-    Este test se salta si no hay NOTION_API_KEY o NOTION_DATABASE_ID configurados.
+    This test is skipped if NOTION_API_KEY or NOTION_DATABASE_ID aren't configured.
     """
     from app.core.services.sync_service import SyncService
     from app.core.services.rag_service import RAGService
@@ -245,16 +244,16 @@ async def test_full_notion_pipeline():
     from app.adapters.outbound.notion_processor_adapter import NotionProcessorAdapter
     from app.config.settings import settings
 
-    # Skip si no hay API key de Notion configurada
+    # Skip if there's no Notion API key configured
     if not settings.notion_api_key:
-        pytest.skip("NOTION_API_KEY no configurada en .env - skipping Notion E2E test")
+        pytest.skip("NOTION_API_KEY not configured in .env - skipping Notion E2E test")
 
-    # Skip si no hay database_id para probar
+    # Skip if there's no database_id to test against
     database_id = settings.notion_database_id
     if not database_id:
-        pytest.skip("NOTION_DATABASE_ID no configurado - necesario para el test E2E")
+        pytest.skip("NOTION_DATABASE_ID not configured - required for the E2E test")
 
-    # Arrange: Inicializar servicios reales
+    # Arrange: initialize real services
     ollama = OllamaAdapter()
     chromadb = ChromaDBAdapter()
     notion_processor = NotionProcessorAdapter()
@@ -270,110 +269,110 @@ async def test_full_notion_pipeline():
         vector_db=chromadb
     )
 
-    # Act: Paso 1 - Cargar todas las páginas de la base de datos
+    # Act: Step 1 - Load every page of the database
     try:
-        print(f"\n📂 Cargando páginas de la base de datos: {database_id}")
-        documents = await notion_processor.load_database_pages(database_id, max_pages=5)  # Limitar a 5 para el test
+        print(f"\n📂 Loading pages from database: {database_id}")
+        documents = await notion_processor.load_database_pages(database_id, max_pages=5)  # Cap at 5 for the test
 
         if not documents:
-            pytest.fail("No se encontraron páginas en la base de datos de Notion")
+            pytest.fail("No pages found in the Notion database")
 
-        print(f"📄 {len(documents)} páginas encontradas")
+        print(f"📄 {len(documents)} pages found")
     except Exception as e:
-        pytest.fail(f"Error cargando páginas de Notion: {e}")
+        pytest.fail(f"Error loading Notion pages: {e}")
 
-    # Act: Paso 2 - Procesar cada página (chunks + embeddings + almacenar)
+    # Act: Step 2 - Process each page (chunks + embeddings + store)
     total_chunks = 0
     for doc in documents:
         try:
-            # Usar sync_document_from_file con el page_id de cada documento
+            # Use sync_document_from_file with each document's page_id
             page_id = doc.metadata.get("notion_page_id")
             result = await notion_sync_service.sync_document_from_file(page_id)
             if result.success:
                 total_chunks += result.chunks_created
-                print(f"  ✓ {doc.metadata.get('title', 'Sin título')}: {result.chunks_created} chunks")
+                print(f"  ✓ {doc.metadata.get('title', 'Untitled')}: {result.chunks_created} chunks")
             else:
-                print(f"  ✗ {doc.metadata.get('title', 'Sin título')}: {result.message}")
+                print(f"  ✗ {doc.metadata.get('title', 'Untitled')}: {result.message}")
         except Exception as e:
-            print(f"  ✗ Error procesando {doc.id}: {e}")
+            print(f"  ✗ Error processing {doc.id}: {e}")
 
-    print(f"\n📥 Total: {total_chunks} chunks creados de {len(documents)} páginas")
+    print(f"\n📥 Total: {total_chunks} chunks created from {len(documents)} pages")
 
-    # Act: Paso 3 - Verificar almacenamiento
+    # Act: Step 3 - Verify storage
     try:
         stats = await chromadb.get_collection_stats()
         print(f"📊 ChromaDB stats: {stats}")
     except Exception as e:
-        pytest.fail(f"Error verificando ChromaDB: {e}")
+        pytest.fail(f"Error verifying ChromaDB: {e}")
 
-    # Act: Paso 4 - Hacer una query sobre el contenido
+    # Act: Step 4 - Run a query about the content
     try:
         from app.core.domain.models import Query
-        query = Query(question="¿Cuál es la estructura o arquitectura del sistema?")
+        query = Query(question="What is the system's structure or architecture?")
         response = await rag_service.ask_question(query)
     except Exception as e:
-        pytest.fail(f"Error en query: {e}")
+        pytest.fail(f"Error in query: {e}")
 
-    # Assert: Verificar respuesta
+    # Assert: verify the response
     assert response is not None
     assert response.answer is not None
     assert len(response.answer) > 0
 
-    print(f"\n✅ Notion E2E Test exitoso!")
-    print(f"📝 Respuesta: {response.answer[:300]}...")
-    print(f"📚 Fuentes: {len(response.source_documents)} chunks usados")
+    print(f"\n✅ Notion E2E test succeeded!")
+    print(f"📝 Answer: {response.answer[:300]}...")
+    print(f"📚 Sources: {len(response.source_documents)} chunks used")
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_notion_api_connectivity():
     """
-    Test de integración: verificar conectividad con API de Notion.
+    Integration test: verify connectivity with the Notion API.
 
-    Pre-check rápido para validar que la API key es válida.
-    Se salta si no hay API key configurada.
+    Quick pre-check to validate the API key is valid.
+    Skipped if there's no API key configured.
     """
     from app.adapters.outbound.notion_processor_adapter import NotionProcessorAdapter
     from app.config.settings import settings
 
-    # Skip si no hay API key
+    # Skip if there's no API key
     if not settings.notion_api_key:
-        pytest.skip("NOTION_API_KEY no configurada - skipping connectivity test")
+        pytest.skip("NOTION_API_KEY not configured - skipping connectivity test")
 
     # Arrange
     notion = NotionProcessorAdapter()
 
-    # Act: Intentar una operación básica
-    # Nota: Esto depende de cómo esté implementado el adapter
-    # Puede ser necesario ajustar según la implementación real
+    # Act: try a basic operation
+    # Note: this depends on how the adapter is implemented
+    # It may need adjusting to match the real implementation
     try:
-        # Si el adapter tiene un método de health check o similar
+        # If the adapter has a health-check method or similar
         if hasattr(notion, 'is_available'):
             available = await notion.is_available()
-            assert available, "Notion API no disponible"
-        print(f"✅ Notion API key válida y conectada")
+            assert available, "Notion API not available"
+        print(f"✅ Notion API key valid and connected")
     except Exception as e:
-        pytest.fail(f"Notion API no accesible: {e}")
+        pytest.fail(f"Notion API not reachable: {e}")
 
 
 # ============================================================================
-# HELPERS PARA SETUP/TEARDOWN DE TESTS DE INTEGRACIÓN
+# HELPERS FOR INTEGRATION TEST SETUP/TEARDOWN
 # ============================================================================
 
 @pytest.fixture
 async def cleanup_test_collection():
     """
-    Fixture para limpiar colecciones de test después de ejecutar.
+    Fixture to clean up test collections after running.
 
-    Uso:
+    Usage:
         @pytest.mark.integration
         async def test_something(cleanup_test_collection):
             # test code
             pass
-        # Al terminar, se limpia automáticamente
+        # Cleaned up automatically when done
     """
-    yield  # Test se ejecuta aquí
+    yield  # The test runs here
 
-    # Cleanup después del test
-    # (Implementar si necesitas limpiar colecciones de test)
+    # Cleanup after the test
+    # (Implement if you need to clean up test collections)
     pass

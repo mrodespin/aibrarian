@@ -1,15 +1,15 @@
 # /api/tests/test_notion_service.py
 """
-Tests del servicio de sincronización de Notion.
+Tests for the Notion sync service.
 
-Estos tests verifican el flujo de ingesta desde Notion usando mocks,
-sin necesidad de una API key real de Notion.
+These tests verify the Notion ingestion flow using mocks, with no need
+for a real Notion API key.
 
-El flujo de Notion es similar al de PDF:
-1. NotionProcessorAdapter extrae contenido de una página/database
-2. Se generan chunks del contenido
-3. Se generan embeddings con Ollama
-4. Se almacenan en ChromaDB
+The Notion flow is similar to the PDF one:
+1. NotionProcessorAdapter extracts content from a page/database
+2. Chunks are generated from the content
+3. Embeddings are generated with Ollama
+4. They're stored in ChromaDB
 """
 
 import pytest
@@ -21,15 +21,15 @@ from app.adapters.outbound.notion_processor_adapter import NotionProcessorAdapte
 
 
 # ============================================================================
-# FIXTURES ESPECÍFICAS PARA NOTION
+# NOTION-SPECIFIC FIXTURES
 # ============================================================================
 
 @pytest.fixture
 def mock_notion_processor():
     """
-    Mock del NotionProcessorAdapter.
+    Mock of NotionProcessorAdapter.
 
-    Simula la extracción de contenido de Notion sin llamar a la API real.
+    Simulates extracting content from Notion without calling the real API.
     """
     mock = Mock()
 
@@ -38,50 +38,50 @@ def mock_notion_processor():
         chunk_size: int = 1000,
         chunk_overlap: int = 200
     ) -> tuple:
-        """Simula procesar una página de Notion."""
-        # Crear documento mockeado como si viniera de Notion
+        """Simulates processing a Notion page."""
+        # Create a mocked document as if it came from Notion
         document = Document(
             id=f"notion_{source}",
             source=DocumentSource.NOTION,
-            content=f"Contenido de la página de Notion: {source}. "
-                    "Esta es una página de ejemplo con información sobre el proyecto. "
-                    "Incluye detalles técnicos, arquitectura y guías de uso.",
+            content=f"Content of the Notion page: {source}. "
+                    "This is a sample page with information about the project. "
+                    "It includes technical details, architecture and usage guides.",
             metadata={
                 "notion_page_id": source,
-                "title": "Página de Ejemplo",
+                "title": "Sample Page",
                 "url": f"https://notion.so/{source}"
             }
         )
-        # Crear chunks mockeados
+        # Create mocked chunks
         chunks = [
             Chunk(
                 id=f"notion_{source}_chunk_0",
                 document_id=f"notion_{source}",
-                content="Contenido de la página de Notion sobre el proyecto.",
+                content="Content of the Notion page about the project.",
                 metadata={"notion_page_id": source, "chunk_index": 0}
             ),
             Chunk(
                 id=f"notion_{source}_chunk_1",
                 document_id=f"notion_{source}",
-                content="Detalles técnicos y arquitectura del sistema.",
+                content="Technical details and the system's architecture.",
                 metadata={"notion_page_id": source, "chunk_index": 1}
             )
         ]
         return (document, chunks)
 
     async def mock_load_database_pages(database_id: str) -> List[Document]:
-        """Simula cargar todas las páginas de una base de datos de Notion."""
+        """Simulates loading every page of a Notion database."""
         return [
             Document(
                 id=f"notion_db_{database_id}_page_1",
                 source=DocumentSource.NOTION,
-                content="Primera página de la base de datos con contenido relevante.",
+                content="First page of the database with relevant content.",
                 metadata={"database_id": database_id, "page_index": 0}
             ),
             Document(
                 id=f"notion_db_{database_id}_page_2",
                 source=DocumentSource.NOTION,
-                content="Segunda página con más información del proyecto.",
+                content="Second page with more information about the project.",
                 metadata={"database_id": database_id, "page_index": 1}
             )
         ]
@@ -95,7 +95,7 @@ def mock_notion_processor():
 @pytest.fixture
 def notion_sync_service_with_mocks(mock_notion_processor, mock_ollama, mock_chromadb):
     """
-    SyncService configurado con NotionProcessor mockeado.
+    SyncService configured with a mocked NotionProcessor.
     """
     from app.core.services.sync_service import SyncService
 
@@ -107,19 +107,19 @@ def notion_sync_service_with_mocks(mock_notion_processor, mock_ollama, mock_chro
 
 
 # ============================================================================
-# TESTS UNITARIOS - FLUJO DE SINCRONIZACIÓN DE NOTION
+# UNIT TESTS - NOTION SYNC FLOW
 # ============================================================================
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_notion_sync_page_success(notion_sync_service_with_mocks, mock_notion_processor):
     """
-    Test: sincronizar una página de Notion exitosamente.
+    Test: successfully sync a Notion page.
 
-    Verifica el flujo completo:
-    1. Procesa la página de Notion
-    2. Genera embeddings para los chunks
-    3. Almacena en ChromaDB
+    Verifies the full flow:
+    1. Processes the Notion page
+    2. Generates embeddings for the chunks
+    3. Stores them in ChromaDB
     """
     # Arrange
     page_id = "abc123def456"
@@ -138,9 +138,9 @@ async def test_notion_sync_page_success(notion_sync_service_with_mocks, mock_not
 @pytest.mark.asyncio
 async def test_notion_sync_creates_chunks_with_metadata(notion_sync_service_with_mocks, mock_chromadb):
     """
-    Test: los chunks de Notion incluyen metadata correcta.
+    Test: Notion chunks include the right metadata.
 
-    Los chunks deben tener notion_page_id para trazabilidad.
+    Chunks must have notion_page_id for traceability.
     """
     # Arrange
     page_id = "test_page_123"
@@ -155,7 +155,7 @@ async def test_notion_sync_creates_chunks_with_metadata(notion_sync_service_with
 
     for chunk in chunks:
         assert chunk.metadata is not None
-        # Los chunks de Notion deben tener el page_id en metadata
+        # Notion chunks must have the page_id in their metadata
         assert "notion_page_id" in chunk.metadata or "chunk_index" in chunk.metadata
 
 
@@ -163,7 +163,7 @@ async def test_notion_sync_creates_chunks_with_metadata(notion_sync_service_with
 @pytest.mark.asyncio
 async def test_notion_sync_generates_embeddings(notion_sync_service_with_mocks, mock_ollama):
     """
-    Test: se generan embeddings para los chunks de Notion.
+    Test: embeddings are generated for Notion chunks.
     """
     # Arrange
     page_id = "page_with_content"
@@ -179,11 +179,11 @@ async def test_notion_sync_generates_embeddings(notion_sync_service_with_mocks, 
 @pytest.mark.asyncio
 async def test_notion_sync_handles_processor_error(notion_sync_service_with_mocks, mock_notion_processor):
     """
-    Test: manejar error del NotionProcessor gracefully.
+    Test: handle a NotionProcessor error gracefully.
 
-    Si la API de Notion falla, debe retornar SyncResult con success=False.
+    If the Notion API fails, it must return a SyncResult with success=False.
     """
-    # Arrange: simular error de API de Notion
+    # Arrange: simulate a Notion API error
     mock_notion_processor.process_document = AsyncMock(
         side_effect=Exception("Notion API rate limit exceeded")
     )
@@ -201,9 +201,9 @@ async def test_notion_sync_handles_processor_error(notion_sync_service_with_mock
 @pytest.mark.asyncio
 async def test_notion_sync_handles_invalid_page_id(notion_sync_service_with_mocks, mock_notion_processor):
     """
-    Test: manejar page_id inválido.
+    Test: handle an invalid page_id.
     """
-    # Arrange: simular página no encontrada
+    # Arrange: simulate a page not found
     mock_notion_processor.process_document = AsyncMock(
         side_effect=Exception("Page not found: invalid_id")
     )
@@ -220,10 +220,10 @@ async def test_notion_sync_handles_invalid_page_id(notion_sync_service_with_mock
 @pytest.mark.asyncio
 async def test_notion_document_has_correct_source_type(notion_sync_service_with_mocks, mock_notion_processor):
     """
-    Test: documentos de Notion tienen source=NOTION.
+    Test: Notion documents have source=NOTION.
     """
-    # El mock ya retorna DocumentSource.NOTION
-    # Este test verifica que el flujo mantiene ese tipo
+    # The mock already returns DocumentSource.NOTION
+    # This test verifies the flow preserves that type
 
     # Arrange
     page_id = "notion_page_test"
@@ -233,19 +233,19 @@ async def test_notion_document_has_correct_source_type(notion_sync_service_with_
 
     # Assert
     assert result.success == True
-    # Verificar que el processor fue llamado (el mock retorna NOTION)
+    # Verify the processor was called (the mock returns NOTION)
     mock_notion_processor.process_document.assert_called_once()
 
 
 # ============================================================================
-# TESTS UNITARIOS - BASE DE DATOS DE NOTION
+# UNIT TESTS - NOTION DATABASE
 # ============================================================================
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_notion_load_database_pages(mock_notion_processor):
     """
-    Test: cargar páginas de una base de datos de Notion.
+    Test: load the pages of a Notion database.
     """
     # Arrange
     database_id = "db_123456"
@@ -265,7 +265,7 @@ async def test_notion_load_database_pages(mock_notion_processor):
 @pytest.mark.asyncio
 async def test_notion_database_sync_multiple_pages(mock_notion_processor):
     """
-    Test: la base de datos retorna múltiples páginas.
+    Test: the database returns multiple pages.
     """
     # Arrange
     database_id = "multi_page_db"
@@ -274,19 +274,19 @@ async def test_notion_database_sync_multiple_pages(mock_notion_processor):
     pages = await mock_notion_processor.load_database_pages(database_id)
 
     # Assert
-    assert len(pages) >= 2  # El mock retorna 2 páginas
+    assert len(pages) >= 2  # The mock returns 2 pages
 
 
 # ============================================================================
-# TESTS DE VALIDACIÓN DE API ENDPOINTS
+# API ENDPOINT VALIDATION TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_notion_endpoint_without_api_key(test_client):
     """
-    Test: endpoint de Notion rechaza sin API key configurada.
+    Test: the Notion endpoint rejects requests without an API key configured.
 
-    Si NOTION_API_KEY no está en .env, debe retornar 400.
+    If NOTION_API_KEY isn't in .env, it must return 400.
     """
     # Arrange
     payload = {"page_id": "some_page_id"}
@@ -294,15 +294,15 @@ def test_notion_endpoint_without_api_key(test_client):
     # Act
     response = test_client.post("/sync/notion", json=payload)
 
-    # Assert: Sin API key configurada, debe dar error
-    # El código puede ser 400 (no configurado) o 422 (validación)
+    # Assert: without an API key configured, it must error out
+    # The code may be 400 (not configured) or 422 (validation)
     assert response.status_code in [400, 422, 500]
 
 
 @pytest.mark.unit
 def test_notion_database_endpoint_without_api_key(test_client):
     """
-    Test: endpoint de database rechaza sin API key.
+    Test: the database endpoint rejects requests without an API key.
     """
     # Arrange
     payload = {"database_id": "some_db_id"}
@@ -315,17 +315,17 @@ def test_notion_database_endpoint_without_api_key(test_client):
 
 
 # ============================================================================
-# TESTS DE RESILIENCIA DE /sync/notion/database — una página rota no debe
-# abortar el resto (bug real encontrado en producción: sin try/except por
-# página, una excepción en cualquier documento tumbaba TODO el endpoint con
-# un 500 y las páginas siguientes ni se intentaban).
+# /sync/notion/database RESILIENCE TESTS — a broken page must not abort
+# the rest (a real bug found in production: with no try/except per page,
+# an exception on any document took down the WHOLE endpoint with a 500
+# and the following pages weren't even attempted).
 # ============================================================================
 
 def _fake_notion_document(doc_id: str) -> Document:
     return Document(
         id=doc_id,
         source=DocumentSource.NOTION,
-        content="contenido de prueba",
+        content="test content",
         metadata={"title": doc_id}
     )
 
@@ -333,9 +333,9 @@ def _fake_notion_document(doc_id: str) -> Document:
 @pytest.mark.unit
 def test_sync_database_continues_after_one_page_fails(test_client, monkeypatch):
     """
-    3 páginas, la 2ª falla generando embeddings → la 1ª y la 3ª deben
-    seguir procesándose igualmente (antes de este fix, la excepción de la
-    página 2 abortaba todo el endpoint y la 3ª nunca se intentaba).
+    3 pages, the 2nd one fails while generating embeddings → the 1st and
+    3rd must still get processed regardless (before this fix, page 2's
+    exception aborted the whole endpoint and the 3rd was never attempted).
     """
     import app.main as main_module
 
@@ -349,14 +349,14 @@ def test_sync_database_continues_after_one_page_fails(test_client, monkeypatch):
     monkeypatch.setattr(
         main_module.notion_processor, "split_into_chunks",
         AsyncMock(side_effect=lambda doc, *a, **kw: [
-            Chunk(id=f"{doc.id}_chunk_0", document_id=doc.id, content="texto", metadata={})
+            Chunk(id=f"{doc.id}_chunk_0", document_id=doc.id, content="text", metadata={})
         ])
     )
 
-    # Todos los chunks tienen el mismo content ("texto"), así que en vez de
-    # identificar la página por contenido, simulamos el fallo por ORDEN de
-    # llamada: la 2ª invocación de generate_embeddings_batch (la página del
-    # medio) es la que falla.
+    # Every chunk has the same content ("text"), so instead of
+    # identifying the page by content, we simulate the failure by the
+    # ORDER of the call: the 2nd invocation of generate_embeddings_batch
+    # (the middle page) is the one that fails.
     call_count = {"n": 0}
 
     async def flaky_embeddings_by_order(texts):
@@ -380,41 +380,41 @@ def test_sync_database_continues_after_one_page_fails(test_client, monkeypatch):
     assert results_by_id["notion_a"]["success"] is True
     assert results_by_id["notion_b"]["success"] is False
     assert "embedding backend timed out" in results_by_id["notion_b"]["message"]
-    # La clave del test: la página 3 (después de la que falló) SÍ se procesó
+    # The key thing this test checks: page 3 (after the one that failed) WAS processed
     assert results_by_id["notion_c"]["success"] is True
 
 
 # ============================================================================
-# TESTS DE _extract_title() — descubrimiento por type=="title", no por nombre
+# _extract_title() TESTS — discovery by type=="title", not by name
 # ============================================================================
-# NotionProcessorAdapter() no necesita API key real para estos tests: la key
-# solo se usa al crear el cliente HTTP (_get_client), lazy y no invocado aquí.
-# _extract_title() es una función pura sobre un dict, así que se instancia
-# el adapter real (sin mocks) y se le pasan payloads de página construidos
-# a mano, igual de shape que los que devuelve la API de Notion.
+# NotionProcessorAdapter() doesn't need a real API key for these tests:
+# the key is only used when creating the HTTP client (_get_client), lazy
+# and not invoked here. _extract_title() is a pure function over a
+# dict, so the real adapter is instantiated (no mocks) and given
+# hand-built page payloads, shaped the same way as what Notion's API returns.
 
 def _fake_page(properties: dict) -> dict:
-    """Construye un payload de página de Notion mínimo para los tests."""
+    """Builds a minimal Notion page payload for the tests."""
     return {"properties": properties}
 
 
 def _title_property(text: str) -> dict:
-    """Construye una propiedad type=="title" con el texto dado."""
+    """Builds a type=="title" property with the given text."""
     return {"type": "title", "title": [{"plain_text": text}] if text else []}
 
 
 @pytest.mark.unit
 def test_extract_title_finds_title_by_type_regardless_of_property_name():
     """
-    Caso que reproduce el bug original: la columna título de la BD de
-    Notion no se llama "title"/"Name"/"Nombre" (ninguno de los nombres que
-    probaba la versión antigua), sino algo arbitrario como "Película".
-    Debe encontrarse igualmente porque se busca por type, no por nombre.
+    Case reproducing the original bug: the Notion database's title
+    column isn't called "title"/"Name" (none of the names the old
+    version tried), but something arbitrary like "Movie". It must still
+    be found because it's looked up by type, not by name.
     """
     adapter = NotionProcessorAdapter(notion_api_key="fake-key")
     page = _fake_page({
-        "Película": _title_property("Blade Runner 2049"),
-        "Año": {"type": "number", "number": 2017},
+        "Movie": _title_property("Blade Runner 2049"),
+        "Year": {"type": "number", "number": 2017},
     })
 
     assert adapter._extract_title(page) == "Blade Runner 2049"
@@ -422,7 +422,7 @@ def test_extract_title_finds_title_by_type_regardless_of_property_name():
 
 @pytest.mark.unit
 def test_extract_title_still_works_with_common_names():
-    """Regresión: los nombres de columna típicos siguen funcionando."""
+    """Regression: the typical column names still work."""
     adapter = NotionProcessorAdapter(notion_api_key="fake-key")
     page = _fake_page({
         "Name": _title_property("Deep Learning"),
@@ -433,10 +433,10 @@ def test_extract_title_still_works_with_common_names():
 
 @pytest.mark.unit
 def test_extract_title_returns_untitled_when_title_property_is_empty():
-    """Si la celda título existe pero está vacía, cae al fallback "Untitled"."""
+    """If the title cell exists but is empty, falls back to "Untitled"."""
     adapter = NotionProcessorAdapter(notion_api_key="fake-key")
     page = _fake_page({
-        "Nombre": _title_property(""),
+        "Name": _title_property(""),
     })
 
     assert adapter._extract_title(page) == "Untitled"
@@ -444,10 +444,10 @@ def test_extract_title_returns_untitled_when_title_property_is_empty():
 
 @pytest.mark.unit
 def test_extract_title_returns_untitled_when_no_title_property_exists():
-    """Si no hay ninguna propiedad type=="title" (payload degenerado), fallback."""
+    """If there's no type=="title" property at all (degenerate payload), falls back."""
     adapter = NotionProcessorAdapter(notion_api_key="fake-key")
     page = _fake_page({
-        "Año": {"type": "number", "number": 2017},
+        "Year": {"type": "number", "number": 2017},
     })
 
     assert adapter._extract_title(page) == "Untitled"
