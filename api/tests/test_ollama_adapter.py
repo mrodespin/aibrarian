@@ -1,14 +1,15 @@
 # /api/tests/test_ollama_adapter.py
 """
-Tests del OllamaAdapter - verifica que los parámetros de generación
-(temperature, max_tokens) realmente llegan a Ollama.
+OllamaAdapter tests - verify the generation parameters (temperature,
+max_tokens) actually reach Ollama.
 
-Contexto del bug que estos tests cubren:
-OllamaLLM._default_params solo expone 4 keys de nivel superior (model, format,
-options, keep_alive). ainvoke() únicamente reenvía a Ollama los kwargs que
-coincidan con esos nombres — pasar temperature/num_predict sueltos como kwargs
-no lanza ningún error, simplemente Ollama los ignora. El fix real es anidarlos
-dentro de un dict "options". Estos tests aseguran que no vuelva a pasar.
+Context for the bug these tests cover:
+OllamaLLM._default_params only exposes 4 top-level keys (model, format,
+options, keep_alive). ainvoke() only forwards to Ollama the kwargs that
+match those names — passing temperature/num_predict loose as kwargs
+doesn't raise any error, Ollama just ignores them. The real fix is
+nesting them inside an "options" dict. These tests make sure this
+doesn't happen again.
 """
 
 import pytest
@@ -20,16 +21,16 @@ from app.adapters.outbound.ollama_adapter import OllamaAdapter
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_response_passes_temperature_via_options():
-    """generate_response() debe anidar temperature dentro de options={...}."""
+    """generate_response() must nest temperature inside options={...}."""
     adapter = OllamaAdapter()
 
     mock_llm = MagicMock()
-    mock_llm.ainvoke = AsyncMock(return_value="respuesta de prueba")
+    mock_llm.ainvoke = AsyncMock(return_value="test response")
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
         await adapter.generate_response(
-            prompt="¿Qué es RAG?",
-            context="RAG es Retrieval-Augmented Generation.",
+            prompt="What is RAG?",
+            context="RAG is Retrieval-Augmented Generation.",
             temperature=0.42
         )
 
@@ -37,22 +38,22 @@ async def test_generate_response_passes_temperature_via_options():
     _, kwargs = mock_llm.ainvoke.call_args
     assert "options" in kwargs
     assert kwargs["options"]["temperature"] == 0.42
-    # temperature NO debe ir como kwarg suelto (ese es justo el bug original)
+    # temperature must NOT go as a loose kwarg (that's exactly the original bug)
     assert "temperature" not in kwargs
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_response_forwards_max_tokens_as_num_predict():
-    """max_tokens debe traducirse a options['num_predict'] (nombre real en Ollama)."""
+    """max_tokens must be translated to options['num_predict'] (Ollama's real name for it)."""
     adapter = OllamaAdapter()
 
     mock_llm = MagicMock()
-    mock_llm.ainvoke = AsyncMock(return_value="respuesta de prueba")
+    mock_llm.ainvoke = AsyncMock(return_value="test response")
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
         await adapter.generate_response(
-            prompt="¿Qué es RAG?",
+            prompt="What is RAG?",
             max_tokens=256
         )
 
@@ -63,14 +64,14 @@ async def test_generate_response_forwards_max_tokens_as_num_predict():
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_response_omits_num_predict_when_max_tokens_none():
-    """Si max_tokens es None, no debe forzarse num_predict (deja el default de Ollama)."""
+    """If max_tokens is None, num_predict shouldn't be forced (leaves Ollama's default)."""
     adapter = OllamaAdapter()
 
     mock_llm = MagicMock()
-    mock_llm.ainvoke = AsyncMock(return_value="respuesta de prueba")
+    mock_llm.ainvoke = AsyncMock(return_value="test response")
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
-        await adapter.generate_response(prompt="¿Qué es RAG?")
+        await adapter.generate_response(prompt="What is RAG?")
 
     _, kwargs = mock_llm.ainvoke.call_args
     assert "num_predict" not in kwargs["options"]
@@ -79,14 +80,14 @@ async def test_generate_response_omits_num_predict_when_max_tokens_none():
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_extract_keywords_passes_temperature_via_options():
-    """extract_keywords() debe anidar temperature=0.1 dentro de options={...}."""
+    """extract_keywords() must nest temperature=0.1 inside options={...}."""
     adapter = OllamaAdapter()
 
     mock_llm = MagicMock()
     mock_llm.ainvoke = AsyncMock(return_value="Blade Runner\ndirector")
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
-        keywords = await adapter.extract_keywords("¿Quién dirigió Blade Runner?")
+        keywords = await adapter.extract_keywords("Who directed Blade Runner?")
 
     _, kwargs = mock_llm.ainvoke.call_args
     assert kwargs["options"] == {"temperature": 0.1}
@@ -102,7 +103,7 @@ async def test_is_catalog_question_true_when_llm_answers_catalog():
     mock_llm.ainvoke = AsyncMock(return_value="CATALOG")
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
-        result = await adapter.is_catalog_question("¿Cuántos libros conoces?")
+        result = await adapter.is_catalog_question("How many books do you know?")
 
     assert result is True
     _, kwargs = mock_llm.ainvoke.call_args
@@ -118,7 +119,7 @@ async def test_is_catalog_question_false_when_llm_answers_content():
     mock_llm.ainvoke = AsyncMock(return_value="CONTENT")
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
-        result = await adapter.is_catalog_question("¿Quién escribió 1984?")
+        result = await adapter.is_catalog_question("Who wrote 1984?")
 
     assert result is False
 
@@ -126,14 +127,14 @@ async def test_is_catalog_question_false_when_llm_answers_content():
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_is_catalog_question_returns_false_on_error():
-    """Fallback seguro documentado en LLMPort: error → False, no excepción."""
+    """Safe fallback documented in LLMPort: error → False, no exception."""
     adapter = OllamaAdapter()
 
     mock_llm = MagicMock()
     mock_llm.ainvoke = AsyncMock(side_effect=RuntimeError("connection refused"))
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
-        result = await adapter.is_catalog_question("¿Cuántos libros conoces?")
+        result = await adapter.is_catalog_question("How many books do you know?")
 
     assert result is False
 
@@ -144,62 +145,62 @@ async def test_condense_question_rewrites_using_history():
     adapter = OllamaAdapter()
 
     mock_llm = MagicMock()
-    mock_llm.ainvoke = AsyncMock(return_value="¿En qué año se publicó 1984?")
+    mock_llm.ainvoke = AsyncMock(return_value="What year was 1984 published?")
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
         result = await adapter.condense_question(
-            "¿En qué año se publicó?",
-            history="Usuario: háblame de 1984\nAsistente: ...publicado en 1949...",
+            "What year was it published?",
+            history="User: tell me about 1984\nAssistant: ...published in 1949...",
         )
 
-    assert result == "¿En qué año se publicó 1984?"
+    assert result == "What year was 1984 published?"
     _, kwargs = mock_llm.ainvoke.call_args
     assert kwargs["options"] == {"temperature": 0.0}
-    # El history se interpola dentro del prompt enviado a ainvoke
+    # The history gets interpolated into the prompt sent to ainvoke
     prompt_arg = mock_llm.ainvoke.call_args.args[0]
-    assert "publicado en 1949" in prompt_arg
+    assert "published in 1949" in prompt_arg
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_condense_question_returns_original_on_empty_response():
-    """Si el LLM devuelve algo vacío/degenerado, mejor la original que perderla."""
+    """If the LLM returns something empty/degenerate, better the original than losing it."""
     adapter = OllamaAdapter()
 
     mock_llm = MagicMock()
     mock_llm.ainvoke = AsyncMock(return_value="   ")
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
-        result = await adapter.condense_question("¿Cuántas páginas tiene?", history="algo")
+        result = await adapter.condense_question("How many pages does it have?", history="something")
 
-    assert result == "¿Cuántas páginas tiene?"
+    assert result == "How many pages does it have?"
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_condense_question_returns_original_on_error():
-    """Fallback seguro documentado en LLMPort: error → pregunta original, no excepción."""
+    """Safe fallback documented in LLMPort: error → original question, no exception."""
     adapter = OllamaAdapter()
 
     mock_llm = MagicMock()
     mock_llm.ainvoke = AsyncMock(side_effect=RuntimeError("connection refused"))
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
-        result = await adapter.condense_question("¿Cuántas páginas tiene?", history="algo")
+        result = await adapter.condense_question("How many pages does it have?", history="something")
 
-    assert result == "¿Cuántas páginas tiene?"
+    assert result == "How many pages does it have?"
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_stream_response_yields_chunks_via_astream():
-    """stream_response() usa llm.astream() (no ainvoke) y reenvía cada trozo."""
+    """stream_response() uses llm.astream() (not ainvoke) and forwards each chunk."""
     adapter = OllamaAdapter()
 
     mock_llm = MagicMock()
 
     async def mock_astream(prompt, options=None):
-        for chunk in ["Do", "cker", " es genial"]:
+        for chunk in ["Do", "cker", " is great"]:
             yield chunk
 
     mock_llm.astream = mock_astream
@@ -207,19 +208,19 @@ async def test_stream_response_yields_chunks_via_astream():
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
         chunks = [
             chunk async for chunk in adapter.stream_response(
-                prompt="¿Qué es Docker?",
-                context="Docker es una plataforma de contenedores.",
+                prompt="What is Docker?",
+                context="Docker is a container platform.",
                 temperature=0.3
             )
         ]
 
-    assert chunks == ["Do", "cker", " es genial"]
+    assert chunks == ["Do", "cker", " is great"]
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_stream_response_passes_temperature_and_max_tokens_via_options():
-    """stream_response() debe anidar temperature/num_predict igual que generate_response()."""
+    """stream_response() must nest temperature/num_predict the same way generate_response() does."""
     adapter = OllamaAdapter()
 
     mock_llm = MagicMock()
@@ -232,7 +233,7 @@ async def test_stream_response_passes_temperature_and_max_tokens_via_options():
     mock_llm.astream = mock_astream
 
     with patch.object(adapter, "_get_llm", return_value=mock_llm):
-        async for _ in adapter.stream_response(prompt="¿Qué es RAG?", temperature=0.55, max_tokens=100):
+        async for _ in adapter.stream_response(prompt="What is RAG?", temperature=0.55, max_tokens=100):
             pass
 
     assert captured_options["temperature"] == 0.55
