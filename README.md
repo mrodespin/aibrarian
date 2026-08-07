@@ -5,13 +5,13 @@
 ![Coverage](https://img.shields.io/badge/Coverage-68%25-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)
 
-A multi-user RAG assistant ("Bibliotecario IA") for querying private documents (PDFs and Notion), with a local (Ollama) or cloud (Groq) LLM, JWT authentication, and hexagonal architecture.
+A multi-user RAG assistant ("AIbrarian") for querying private documents (PDFs and Notion), with a local (Ollama) or cloud (Groq) LLM, JWT authentication, and hexagonal architecture.
 
 ---
 
 ## 📖 Project Description
 
-**`bibliotecario-ia`** is a full end-to-end RAG (Retrieval-Augmented Generation) system, built with a focus on privacy and a decoupled software architecture.
+**AIbrarian** is a full end-to-end RAG (Retrieval-Augmented Generation) system, built with a focus on privacy and a decoupled software architecture.
 
 The goal is a *chatbot* able to answer questions over a private knowledge base (local PDFs and **Notion** pages). Thanks to the **Hexagonal Architecture**, the LLM and the vector store are swappable without touching business logic: a 100% local mode (**Ollama** + ChromaDB) where sensitive data never leaves the machine, and an optional cloud mode (**Groq** + Chroma Cloud) for deploying on Render without depending on local hardware.
 

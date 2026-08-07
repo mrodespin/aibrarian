@@ -1,4 +1,4 @@
-# 🧪 Testing Guide - Bibliotecario-IA
+# 🧪 Testing Guide - AIbrarian
 
 Full documentation of the backend test suite.
 

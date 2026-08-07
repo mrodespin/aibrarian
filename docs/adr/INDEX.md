@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADRs)
 
-> Record of the Bibliotecario-IA project's architectural decisions.
+> Record of AIbrarian's architectural decisions.
 >
 > Each ADR documents a significant technical decision: the context,
 > the alternatives evaluated, the decision made, and its consequences.

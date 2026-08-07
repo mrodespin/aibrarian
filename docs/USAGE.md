@@ -1,6 +1,6 @@
 # 📚 API & Services Documentation (tfm-bibliotecario-ia)
 
-This documentation covers every service, port, and endpoint of the Bibliotecario-IA project's API.
+This documentation covers every service, port, and endpoint of AIbrarian's API.
 
 > **Authentication:** since login was added, every endpoint except `/`, `/health` and `/metrics` requires a valid session (a JWT issued by `POST /auth/login`, sent as `Authorization: Bearer <token>` on the rest of the requests — not as a cookie, to avoid Safari ITP blocking cross-site cookies when the frontend and API are on different domains). The cURL examples in this guide assume you've already logged in and are reusing the token. See the [Authentication](#-authentication) section below.
 
@@ -131,7 +131,7 @@ Verifies the status of every service and the configuration. **No authentication.
     "vector_db_provider": "chromadb_local",
     "ollama_model": "llama3.2",
     "embedding_model": "nomic-embed-text",
-    "collection": "bibliotecario_docs",
+    "collection": "aibrarian_docs",
     "data_directory": "./data"
   }
 }
@@ -148,11 +148,11 @@ Retrieves information about the knowledge base. **Requires a session.**
 **Response (200 OK):**
 ```json
 {
-  "collection": "bibliotecario_docs",
+  "collection": "aibrarian_docs",
   "stats": {
     "count": 42,
     "dimensions": 768,
-    "collection_name": "bibliotecario_docs"
+    "collection_name": "aibrarian_docs"
   },
   "model_info": {
     "llm_model": "llama3.2",
@@ -173,7 +173,7 @@ Processes a PDF file and indexes it in the vector database.
 ```json
 {
   "file_path": "./data/document.pdf",
-  "collection_name": "bibliotecario_docs"  // Optional
+  "collection_name": "aibrarian_docs"  // Optional
 }
 ```
 
@@ -183,7 +183,7 @@ Processes a PDF file and indexes it in the vector database.
   "document_id": "pdf_a1b2c3d4",
   "chunks_created": 15,
   "success": true,
-  "message": "Document synced successfully to collection 'bibliotecario_docs'",
+  "message": "Document synced successfully to collection 'aibrarian_docs'",
   "processing_time": 8.42
 }
 ```
@@ -261,7 +261,7 @@ Processes a Notion page and indexes it in the vector database.
 ```json
 {
   "page_id": "a1b2c3d4e5f6",  // Page ID or URL
-  "collection_name": "bibliotecario_docs"  // Optional
+  "collection_name": "aibrarian_docs"  // Optional
 }
 ```
 
@@ -271,7 +271,7 @@ Processes a Notion page and indexes it in the vector database.
   "document_id": "notion_a1b2c3d4e5f6",
   "chunks_created": 12,
   "success": true,
-  "message": "Document synced successfully to collection 'bibliotecario_docs'",
+  "message": "Document synced successfully to collection 'aibrarian_docs'",
   "processing_time": 6.18
 }
 ```
@@ -296,7 +296,7 @@ Processes every page in a Notion database.
 {
   "database_id": "a1b2c3d4e5f6",  // Optional, uses the env var if not provided
   "max_pages": 10,  // Optional, caps the number of pages
-  "collection_name": "bibliotecario_docs"  // Optional
+  "collection_name": "aibrarian_docs"  // Optional
 }
 ```
 
