@@ -61,6 +61,26 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
+# SELECCIÓN DE ADAPTADORES (misma lógica que api/app/main.py, ver ADR-007)
+# ============================================================================
+# Mismo motivo que en ingest_pdfs.py: este script debe respetar
+# LLM_PROVIDER/VECTOR_DB_PROVIDER en vez de forzar siempre Ollama/ChromaDB,
+# o ignoraría en silencio la config de quien use Groq/Chroma Cloud en local.
+def _build_llm_adapter():
+    if settings.llm_provider == "groq":
+        from app.adapters.outbound.groq_adapter import GroqAdapter
+        return GroqAdapter()
+    return OllamaAdapter()
+
+
+def _build_vector_db_adapter():
+    if settings.vector_db_provider == "chroma_cloud":
+        from app.adapters.outbound.chromadb_cloud_adapter import ChromaCloudAdapter
+        return ChromaCloudAdapter()
+    return ChromaDBAdapter()
+
+
+# ============================================================================
 # VERIFICACIÓN DE SERVICIOS
 # ============================================================================
 async def check_services():
@@ -85,26 +105,30 @@ async def check_services():
 
     logger.info("✅ Notion API key configured")
 
-    # Verificar Ollama
-    ollama = OllamaAdapter()
-    ollama_ok = await ollama.is_available()
+    # Verificar el LLM configurado (Ollama por defecto, o Groq)
+    llm_adapter = _build_llm_adapter()
+    llm_ok = await llm_adapter.is_available()
 
-    if not ollama_ok:
-        logger.error("❌ Ollama is not available!")
-        logger.error(f"   Make sure Ollama is running at {settings.ollama_base_url}")
-        logger.error("   Run: ollama serve")
+    if not llm_ok:
+        logger.error(f"❌ LLM ({settings.llm_provider}) is not available!")
+        if settings.llm_provider == "groq":
+            logger.error("   Check GROQ_API_KEY in .env")
+        else:
+            logger.error(f"   Make sure Ollama is running at {settings.ollama_base_url}")
+            logger.error("   Run: ollama serve")
         return False
 
-    logger.info(f"✅ Ollama is available ({settings.ollama_model})")
+    logger.info(f"✅ LLM is available (provider={settings.llm_provider})")
 
-    # Verificar ChromaDB
-    chromadb = ChromaDBAdapter()
+    # Verificar el vector DB configurado (ChromaDB local por defecto, o Chroma Cloud)
+    vector_db_adapter = _build_vector_db_adapter()
     try:
-        exists = await chromadb.collection_exists("test")
-        logger.info(f"✅ ChromaDB is available ({settings.chromadb_url})")
+        exists = await vector_db_adapter.collection_exists("test")
+        logger.info(f"✅ Vector DB is available (provider={settings.vector_db_provider})")
     except Exception as e:
-        logger.error(f"❌ ChromaDB is not available: {e}")
-        logger.error("   Make sure ChromaDB is running")
+        logger.error(f"❌ Vector DB ({settings.vector_db_provider}) is not available: {e}")
+        if settings.vector_db_provider != "chroma_cloud":
+            logger.error("   Make sure ChromaDB is running")
         return False
 
     return True
@@ -205,13 +229,15 @@ async def ingest_database(
         logger.info(f"Found {len(documents)} pages")
 
         # NOTE: Las siguientes líneas crean instancias nuevas de los adaptadores
-        # en cada iteración del bucle. Esto es redundante porque OllamaAdapter
-        # y ChromaDBAdapter ya están importados arriba y podrían instanciarse
-        # una sola vez fuera del bucle. Funciona gracias a la lazy initialization
-        # de los adaptadores (la conexión real se crea una sola vez internamente),
-        # pero es un patrón que podría limpiarse.
+        # en cada iteración del bucle. Esto es redundante porque podrían
+        # instanciarse una sola vez fuera del bucle. Funciona gracias a la
+        # lazy initialization de los adaptadores (la conexión real se crea
+        # una sola vez internamente), pero es un patrón que podría limpiarse.
         # También, la importación de SyncResult dentro del bucle podría
         # moverse al bloque de imports del fichero.
+        # Sí se corrigió aquí: antes esto forzaba OllamaAdapter/ChromaDBAdapter
+        # a pelo, ignorando LLM_PROVIDER/VECTOR_DB_PROVIDER (ver
+        # _build_llm_adapter/_build_vector_db_adapter arriba).
         results = []
         for i, doc in enumerate(documents, 1):
             logger.info(f"\n[{i}/{len(documents)}] Processing: {doc.metadata.get('title', 'Untitled')}")
@@ -221,22 +247,19 @@ async def ingest_database(
                 chunks = await notion_processor.split_into_chunks(doc)
 
                 # Instancias de adaptadores (ver nota de arriba)
-                from app.adapters.outbound.ollama_adapter import OllamaAdapter
-                from app.adapters.outbound.chromadb_adapter import ChromaDBAdapter
-
-                ollama = OllamaAdapter()
-                chromadb = ChromaDBAdapter()
+                llm_adapter = _build_llm_adapter()
+                vector_db_adapter = _build_vector_db_adapter()
 
                 # Generar embeddings en batch para todos los chunks
                 chunk_texts = [chunk.content for chunk in chunks]
-                embeddings = await ollama.generate_embeddings_batch(chunk_texts)
+                embeddings = await llm_adapter.generate_embeddings_batch(chunk_texts)
 
                 # Asignar embeddings a los chunks
                 for chunk, embedding in zip(chunks, embeddings):
                     chunk.embedding = embedding
 
-                # Almacenar en ChromaDB
-                success = await chromadb.store_chunks(chunks)
+                # Almacenar en el vector DB
+                success = await vector_db_adapter.store_chunks(chunks)
 
                 from app.core.domain.models import SyncResult
                 result = SyncResult(
@@ -333,14 +356,14 @@ async def main():
     # Misma wiring que notion_sync_service en main.py:
     # SyncService con NotionProcessorAdapter como DocumentProcessor.
     logger.info("\nInitializing services...")
-    chromadb_adapter = ChromaDBAdapter()
-    ollama_adapter = OllamaAdapter()
+    vector_db_adapter = _build_vector_db_adapter()
+    llm_adapter = _build_llm_adapter()
     notion_processor = NotionProcessorAdapter()
 
     sync_service = SyncService(
         document_processor=notion_processor,
-        llm=ollama_adapter,
-        vector_db=chromadb_adapter
+        llm=llm_adapter,
+        vector_db=vector_db_adapter
     )
 
     # ================================================================

@@ -73,11 +73,37 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
+# SELECCIÓN DE ADAPTADORES (misma lógica que api/app/main.py, ver ADR-007)
+# ============================================================================
+# Este script es una vía alternativa a la API, no un sistema aparte: debe
+# respetar LLM_PROVIDER/VECTOR_DB_PROVIDER igual que main.py, o si alguien
+# configura .env para usar Groq/Chroma Cloud (p.ej. para no tener que
+# levantar Ollama/ChromaDB en local), la ingesta por CLI ignoraría esa
+# configuración en silencio y se iría contra Ollama/ChromaDB de todas
+# formas. GroqAdapter/ChromaCloudAdapter se importan de forma perezosa,
+# dentro de la función, para no cargar sus dependencias pesadas (groq,
+# sentence-transformers → torch) cuando no se usan.
+def _build_llm_adapter():
+    if settings.llm_provider == "groq":
+        from app.adapters.outbound.groq_adapter import GroqAdapter
+        return GroqAdapter()
+    return OllamaAdapter()
+
+
+def _build_vector_db_adapter():
+    if settings.vector_db_provider == "chroma_cloud":
+        from app.adapters.outbound.chromadb_cloud_adapter import ChromaCloudAdapter
+        return ChromaCloudAdapter()
+    return ChromaDBAdapter()
+
+
+# ============================================================================
 # VERIFICACIÓN DE SERVICIOS
 # ============================================================================
 async def check_services():
     """
-    Verifica que Ollama y ChromaDB están activos antes de proceder.
+    Verifica que el LLM y el vector DB configurados están activos antes de
+    proceder (según settings.llm_provider / settings.vector_db_provider).
 
     Se ejecuta al inicio del script para fallar rápido con mensajes
     claros si algún servicio no está disponible, en lugar de fallar
@@ -91,28 +117,32 @@ async def check_services():
     """
     logger.info("Checking service availability...")
 
-    # Verificar Ollama (necesario para embeddings y generación de texto)
-    ollama = OllamaAdapter()
-    ollama_ok = await ollama.is_available()
+    # Verificar el LLM (necesario para embeddings y generación de texto)
+    llm_adapter = _build_llm_adapter()
+    llm_ok = await llm_adapter.is_available()
 
-    if not ollama_ok:
-        logger.error("❌ Ollama is not available!")
-        logger.error(f"   Make sure Ollama is running at {settings.ollama_base_url}")
-        logger.error("   Run: ollama serve")
+    if not llm_ok:
+        logger.error(f"❌ LLM ({settings.llm_provider}) is not available!")
+        if settings.llm_provider == "groq":
+            logger.error("   Check GROQ_API_KEY in .env")
+        else:
+            logger.error(f"   Make sure Ollama is running at {settings.ollama_base_url}")
+            logger.error("   Run: ollama serve")
         return False
 
-    logger.info(f"✅ Ollama is available ({settings.ollama_model})")
+    logger.info(f"✅ LLM is available (provider={settings.llm_provider})")
 
-    # Verificar ChromaDB (necesario para almacenar los embeddings)
+    # Verificar el vector DB (necesario para almacenar los embeddings)
     # collection_exists("test") es una llamada ligera que comprueba
     # la conectividad sin crear ni modificar datos reales.
-    chromadb = ChromaDBAdapter()
+    vector_db_adapter = _build_vector_db_adapter()
     try:
-        exists = await chromadb.collection_exists("test")
-        logger.info(f"✅ ChromaDB is available ({settings.chromadb_url})")
+        exists = await vector_db_adapter.collection_exists("test")
+        logger.info(f"✅ Vector DB is available (provider={settings.vector_db_provider})")
     except Exception as e:
-        logger.error(f"❌ ChromaDB is not available: {e}")
-        logger.error("   Make sure ChromaDB is running")
+        logger.error(f"❌ Vector DB ({settings.vector_db_provider}) is not available: {e}")
+        if settings.vector_db_provider != "chroma_cloud":
+            logger.error("   Make sure ChromaDB is running")
         return False
 
     return True
@@ -264,14 +294,14 @@ async def main():
     # Misma wiring que en main.py: adaptadores → servicio.
     # Se repite aquí porque este script es independiente de la API.
     logger.info("\nInitializing services...")
-    chromadb_adapter = ChromaDBAdapter()
-    ollama_adapter = OllamaAdapter()
+    vector_db_adapter = _build_vector_db_adapter()
+    llm_adapter = _build_llm_adapter()
     pdf_processor = PDFProcessorAdapter()
 
     sync_service = SyncService(
         document_processor=pdf_processor,
-        llm=ollama_adapter,
-        vector_db=chromadb_adapter
+        llm=llm_adapter,
+        vector_db=vector_db_adapter
     )
 
     # ================================================================
