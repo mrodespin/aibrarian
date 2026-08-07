@@ -35,7 +35,7 @@ export function AppProvider({ children }) {
       const data = await healthApi.getHealth();
       setHealth({
         status: data.status || 'healthy',
-        api: true, // Si llegamos aquí, la API responde
+        api: true, // If we got here, the API is responding
         llm: data.services?.ollama ?? false,
         vectorDb: data.services?.chromadb ?? false,
         llmProvider: data.config?.llm_provider ?? null,
@@ -43,7 +43,7 @@ export function AppProvider({ children }) {
         lastChecked: new Date(),
       });
     } catch {
-      // La API no responde
+      // The API isn't responding
       setHealth(prev => ({
         ...prev,
         status: 'error',
@@ -77,16 +77,16 @@ export function AppProvider({ children }) {
 
   // Initial fetch and polling
   useEffect(() => {
-    // Carga inicial
+    // Initial load
     const initialLoad = async () => {
       setIsLoading(true);
       await Promise.all([checkHealth(), fetchStats()]);
       setIsLoading(false);
     };
-    
+
     initialLoad();
-    
-    // Polling silencioso (sin cambiar isLoading)
+
+    // Silent polling (doesn't touch isLoading)
     const interval = setInterval(() => {
       checkHealth();
       fetchStats();

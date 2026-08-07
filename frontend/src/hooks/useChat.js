@@ -7,10 +7,10 @@ import { chatApi } from '../api';
 
 const SESSION_ID_STORAGE_KEY = 'bibliotecario_session_id';
 
-// Genera o recupera el session_id de la conversación actual. Persistido en
-// localStorage para que sobreviva a refrescos de página; se rota cuando el
-// usuario pulsa "Limpiar chat" (clearHistory) para no arrastrar contexto de
-// una conversación que el usuario ya dio por cerrada.
+// Generates or retrieves the current conversation's session_id.
+// Persisted in localStorage so it survives page refreshes; rotated
+// when the user hits "Clear chat" (clearHistory) so we don't drag
+// along context from a conversation the user already considered closed.
 function getOrCreateSessionId() {
   let sessionId = localStorage.getItem(SESSION_ID_STORAGE_KEY);
   if (!sessionId) {
@@ -41,11 +41,11 @@ export function useChat() {
     };
     setMessages(prev => [...prev, userMessage]);
 
-    // La burbuja del asistente se crea de forma perezosa, en el primer
-    // evento que llega (onSources), no aquí: así evitamos que conviva con
-    // el SkeletonMessage de MessageList (que se muestra mientras
-    // isLoading=true) — en cuanto llegan las fuentes, apagamos isLoading
-    // y la burbuja real (creciendo token a token) toma el relevo.
+    // The assistant's bubble is created lazily, on the first event that
+    // arrives (onSources), not here: this avoids it coexisting with
+    // MessageList's SkeletonMessage (shown while isLoading=true) — as
+    // soon as the sources arrive, we turn off isLoading and the real
+    // bubble (growing token by token) takes over.
     const assistantMessageId = Date.now() + 1;
     let placeholderCreated = false;
 
@@ -84,27 +84,27 @@ export function useChat() {
         },
         onError: (detail) => {
           ensurePlaceholder();
-          setError(detail || 'Error al procesar la pregunta');
+          setError(detail || 'Failed to process the question');
           updateAssistantMessage((m) => ({
             ...m,
-            content: `Error: ${detail || 'No se pudo obtener respuesta'}`,
+            content: `Error: ${detail || 'Could not get a response'}`,
             isError: true,
           }));
         },
       });
     } catch (err) {
-      setError(err.message || 'Error al procesar la pregunta');
+      setError(err.message || 'Failed to process the question');
       if (placeholderCreated) {
         updateAssistantMessage((m) => ({
           ...m,
-          content: `Error: ${err.message || 'No se pudo obtener respuesta'}`,
+          content: `Error: ${err.message || 'Could not get a response'}`,
           isError: true,
         }));
       } else {
         setMessages(prev => [...prev, {
           id: assistantMessageId,
           role: 'assistant',
-          content: `Error: ${err.message || 'No se pudo obtener respuesta'}`,
+          content: `Error: ${err.message || 'Could not get a response'}`,
           isError: true,
           timestamp: new Date(),
         }]);
@@ -114,9 +114,9 @@ export function useChat() {
     }
   }, [sessionId]);
 
-  // Rota el session_id además de limpiar los mensajes visibles: si no lo
-  // hiciéramos, el backend seguiría teniendo el historial de la
-  // conversación "limpiada" y lo resucitaría en la siguiente pregunta.
+  // Rotates the session_id in addition to clearing the visible
+  // messages: if we didn't, the backend would still have the "cleared"
+  // conversation's history and would resurrect it on the next question.
   const clearHistory = useCallback(() => {
     setMessages([]);
     setError(null);

@@ -25,19 +25,19 @@ export const chatApi = {
   /**
    * Send a question to the RAG system with streaming (Server-Sent Events).
    *
-   * No usa el helper compartido `api.post()` (que siempre espera y
-   * devuelve `response.json()`) ni `EventSource` nativo (que no permite
-   * mandar el header Authorization) — hace su propio fetch() y parsea el
-   * stream a mano, leyendo el body como texto trozo a trozo.
+   * Doesn't use the shared `api.post()` helper (which always awaits and
+   * returns `response.json()`) or native `EventSource` (which doesn't
+   * allow sending the Authorization header) — it does its own fetch()
+   * and parses the stream by hand, reading the body as text chunk by chunk.
    *
    * @param {Object} params
    * @param {string} params.question - The user's question
    * @param {string} [params.sessionId] - Optional session ID
    * @param {number} [params.maxResults=4] - Max context chunks (1-10)
-   * @param {(sources: object[]) => void} [params.onSources] - Llamado una vez, con las fuentes recuperadas
-   * @param {(text: string) => void} [params.onToken] - Llamado por cada fragmento de texto generado
-   * @param {(info: {processing_time: number, session_id: string|null}) => void} [params.onDone] - Llamado una vez, al terminar
-   * @param {(detail: string) => void} [params.onError] - Llamado si el servidor manda un evento de error a mitad de stream
+   * @param {(sources: object[]) => void} [params.onSources] - Called once, with the retrieved sources
+   * @param {(text: string) => void} [params.onToken] - Called for each generated text fragment
+   * @param {(info: {processing_time: number, session_id: string|null}) => void} [params.onDone] - Called once, when finished
+   * @param {(detail: string) => void} [params.onError] - Called if the server sends an error event mid-stream
    * @returns {Promise<void>}
    */
   askStream: async ({ question, sessionId, maxResults = 4, onSources, onToken, onDone, onError }) => {
@@ -76,9 +76,9 @@ export const chatApi = {
 
       buffer += decoder.decode(value, { stream: true });
 
-      // Cada evento SSE termina en línea en blanco ("\n\n"). Puede llegar
-      // más de uno por chunk de red, o uno partido a medias — de ahí el
-      // buffer acumulado y el bucle interno.
+      // Each SSE event ends with a blank line ("\n\n"). More than one
+      // can arrive per network chunk, or one can arrive split in half —
+      // hence the accumulated buffer and inner loop.
       let separatorIndex;
       while ((separatorIndex = buffer.indexOf('\n\n')) !== -1) {
         const rawEvent = buffer.slice(0, separatorIndex);

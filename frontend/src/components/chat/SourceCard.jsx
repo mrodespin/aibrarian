@@ -18,7 +18,7 @@ export function SourceCard({ source, index }) {
     source.metadata?.title ||
     source.metadata?.source_file ||
     source.document_id ||
-    'Documento';
+    'Document';
 
   // Determine file type icon
   const isPdf = fileName.toLowerCase().includes('.pdf') || source.metadata?.source === 'pdf';
@@ -60,7 +60,7 @@ export function SourceCard({ source, index }) {
               </div>
               {source.metadata?.page && (
                 <p className="text-xs text-text-300 mt-0.5">
-                  Página {source.metadata.page}
+                  Page {source.metadata.page}
                 </p>
               )}
             </div>
@@ -88,14 +88,14 @@ export function SourceCard({ source, index }) {
           <svg className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
-          {expanded ? 'Ocultar contenido' : 'Ver contenido'}
+          {expanded ? 'Hide content' : 'View content'}
         </button>
 
         {/* Expanded content */}
         {expanded && (
           <div className="mt-3 pt-3 border-t border-bg-700 animate-fade-in">
             <p className="text-sm text-text-200 whitespace-pre-wrap leading-relaxed">
-              {source.chunk_content || source.content || 'Sin contenido disponible'}
+              {source.chunk_content || source.content || 'No content available'}
             </p>
           </div>
         )}

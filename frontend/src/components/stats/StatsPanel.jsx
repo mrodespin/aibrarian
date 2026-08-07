@@ -10,7 +10,7 @@ export function StatsPanel() {
   const { stats, health, isLoading, isRefreshing, refreshAll } = useApp();
 
   return (
-    <Card title="Estado del Sistema">
+    <Card title="System Status">
       {isLoading ? (
         <div className="flex justify-center py-4">
           <Spinner />
@@ -19,24 +19,24 @@ export function StatsPanel() {
         <div className="space-y-4">
           {/* Services status */}
           <div>
-            <h4 className="text-sm font-medium text-text-300 mb-2">Servicios</h4>
+            <h4 className="text-sm font-medium text-text-300 mb-2">Services</h4>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-text-200">API FastAPI</span>
+                <span className="text-sm text-text-200">FastAPI API</span>
                 <Badge variant={health.api ? 'success' : 'error'}>
-                  {health.api ? 'Conectado' : 'Desconectado'}
+                  {health.api ? 'Connected' : 'Disconnected'}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-text-200">{llmProviderLabel(health.llmProvider)} (LLM)</span>
                 <Badge variant={health.llm ? 'success' : 'error'}>
-                  {health.llm ? 'Conectado' : 'Desconectado'}
+                  {health.llm ? 'Connected' : 'Disconnected'}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-text-200">{vectorDbProviderLabel(health.vectorDbProvider)}</span>
                 <Badge variant={health.vectorDb ? 'success' : 'error'}>
-                  {health.vectorDb ? 'Conectado' : 'Desconectado'}
+                  {health.vectorDb ? 'Connected' : 'Disconnected'}
                 </Badge>
               </div>
             </div>
@@ -44,17 +44,17 @@ export function StatsPanel() {
 
           {/* Collection stats */}
           <div>
-            <h4 className="text-sm font-medium text-text-300 mb-2">Colección</h4>
+            <h4 className="text-sm font-medium text-text-300 mb-2">Collection</h4>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-text-200">Documentos</span>
+                <span className="text-sm text-text-200">Documents</span>
                 <span className="font-mono text-sm font-semibold text-text-50">
                   {stats.documentCount}
                 </span>
               </div>
               {stats.collectionName && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-text-200">Nombre</span>
+                  <span className="text-sm text-text-200">Name</span>
                   <span className="font-mono text-xs text-text-200 truncate max-w-32" title={stats.collectionName}>
                     {stats.collectionName}
                   </span>
@@ -66,7 +66,7 @@ export function StatsPanel() {
           {/* Model info */}
           {stats.modelInfo && (
             <div>
-              <h4 className="text-sm font-medium text-text-300 mb-2">Modelo</h4>
+              <h4 className="text-sm font-medium text-text-300 mb-2">Model</h4>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-text-200">LLM</span>
@@ -90,7 +90,7 @@ export function StatsPanel() {
             disabled={isRefreshing}
             className="w-full"
           >
-            Actualizar estado
+            Refresh status
           </Button>
         </div>
       )}
