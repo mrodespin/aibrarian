@@ -1,28 +1,29 @@
 # /api/app/adapters/outbound/chromadb_cloud_adapter.py
 """
-Adaptador ChromaDB Cloud - Implementación concreta de VectorDBPort - TFM Bibliotecario-IA
+ChromaDB Cloud Adapter - Concrete implementation of VectorDBPort - Bibliotecario-IA
 
-Variante de ChromaDBAdapter para el despliegue en Render (free tier).
+Variant of ChromaDBAdapter for the Render (free tier) deployment.
 
-¿Por qué no self-hostear ChromaDB en Render?
-Los servicios gratuitos de Render no tienen disco persistente: cualquier
-contenedor pierde su filesystem en cada redeploy o cuando el servicio
-"duerme" por inactividad. Un ChromaDB self-hosted ahí perdería todos los
-documentos indexados constantemente. Chroma Cloud es el mismo motor
-ChromaDB pero como servicio gestionado con persistencia real.
+Why not self-host ChromaDB on Render?
+Render's free services don't have persistent disk: any container loses
+its filesystem on every redeploy or whenever the service "sleeps" from
+inactivity. A self-hosted ChromaDB there would constantly lose all
+indexed documents. Chroma Cloud is the same ChromaDB engine but as a
+managed service with real persistence.
 
-¿Por qué heredar de ChromaDBAdapter en vez de reescribir todo?
-Toda la lógica de negocio (formato columnar, query expansion, cálculo de
-similarity_score, etc.) es idéntica: sigue siendo la librería `chromadb`,
-solo cambia CÓMO se conecta al servidor. Se hereda todo y se sobreescribe
-únicamente _get_client(). Si mañana se abandona el free tier de Render,
-basta con seguir usando ChromaDBAdapter sin tocar nada de este archivo.
+Why inherit from ChromaDBAdapter instead of rewriting everything?
+All the business logic (columnar format, query expansion, similarity
+score calculation, etc.) is identical: it's still the `chromadb`
+library, only HOW it connects to the server changes. Everything is
+inherited and only _get_client() is overridden. If the Render free tier
+gets dropped someday, you can just go back to using ChromaDBAdapter
+without touching anything in this file.
 
-Nota (ver ADR-003 y ADR-007): la decisión original de ChromaDB self-hosted
-fue explícitamente para que los datos NO salieran de la máquina. Usar
-Chroma Cloud reintroduce ese trade-off, pero solo para la instancia
-pública de demo — el modo de desarrollo local (docker-compose) sigue
-usando ChromaDBAdapter sin cambios.
+Note (see ADR-003 and ADR-007): the original decision to self-host
+ChromaDB was explicitly so data would NOT leave the machine. Using
+Chroma Cloud reintroduces that trade-off, but only for the public demo
+instance — the local development mode (docker-compose) still uses
+ChromaDBAdapter unchanged.
 """
 
 import chromadb
@@ -37,9 +38,9 @@ logger = get_logger(__name__)
 
 class ChromaCloudAdapter(ChromaDBAdapter):
     """
-    Misma interfaz y misma lógica que ChromaDBAdapter; solo cambia la
-    forma de obtener el cliente (CloudClient autenticado en vez de
-    HttpClient anónimo a un contenedor local).
+    Same interface and same logic as ChromaDBAdapter; only how the
+    client is obtained changes (an authenticated CloudClient instead of
+    an anonymous HttpClient to a local container).
     """
 
     def _get_client(self) -> chromadb.CloudClient:
@@ -52,14 +53,14 @@ class ChromaCloudAdapter(ChromaDBAdapter):
                 ) if not value
             ]
             if missing:
-                # Sin esta validación, chromadb.CloudClient() falla con un
-                # error genérico ("Could not connect to tenant None") que no
-                # deja claro cuál de las tres variables falta configurar
-                # (p.ej. en Render: Dashboard → servicio → Environment).
+                # Without this validation, chromadb.CloudClient() fails with
+                # a generic error ("Could not connect to tenant None") that
+                # doesn't make clear which of the three variables is missing
+                # (e.g. on Render: Dashboard → service → Environment).
                 raise RuntimeError(
-                    f"Faltan variables de Chroma Cloud: {', '.join(missing)}. "
-                    "Añádelas a api/.env (o al Environment del servicio en Render); "
-                    "consíguelas en https://www.trychroma.com tras crear tu base de datos."
+                    f"Missing Chroma Cloud variables: {', '.join(missing)}. "
+                    "Add them to api/.env (or the service's Environment on Render); "
+                    "get them at https://www.trychroma.com after creating your database."
                 )
             try:
                 self._client = chromadb.CloudClient(

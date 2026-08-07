@@ -1,32 +1,29 @@
 # /api/app/adapters/outbound/postgres_user_adapter.py
 """
-Adaptador Postgres - Implementación concreta de UserRepositoryPort - TFM Bibliotecario-IA
+Postgres Adapter - Concrete implementation of UserRepositoryPort - Bibliotecario-IA
 
-Guarda usuarios de autenticación en Postgres (Neon en producción, un
-contenedor local en desarrollo vía docker-compose).
+Stores authentication users in Postgres (Neon in production, a local
+container in development via docker-compose).
 
-¿Por qué Postgres y no reutilizar ChromaDB?
-- ChromaDB es una base de datos vectorial: guardar aquí filas de
-  usuario/contraseña sería forzar un dato relacional dentro de una
-  colección pensada para embeddings.
-- El contenedor de la API en Render (free tier) no tiene disco
-  persistente, así que necesita un servicio externo hosteado — igual
-  que Groq/Chroma Cloud (ver ADR-007). Neon es la versión "Postgres" de
-  esa misma idea.
+Why Postgres and not reuse ChromaDB?
+- ChromaDB is a vector database: storing user/password rows here would
+  force relational data into a collection meant for embeddings.
+- The API container on Render (free tier) has no persistent disk, so it
+  needs an external hosted service — same reasoning as Groq/Chroma
+  Cloud (see ADR-007). Neon is the "Postgres" version of that same idea.
 
-Sin ORM ni framework de migraciones (SQLAlchemy/Alembic): una sola tabla
-no lo justifica. Se usa asyncpg directamente (driver async puro), y el
-esquema se crea de forma idempotente (`CREATE TABLE IF NOT EXISTS`) en
-connect(), igual que ChromaDBAdapter crea/obtiene colecciones al vuelo.
+No ORM or migration framework (SQLAlchemy/Alembic): a single table
+doesn't justify it. asyncpg is used directly (pure async driver), and
+the schema is created idempotently (`CREATE TABLE IF NOT EXISTS`) in
+connect(), the same way ChromaDBAdapter creates/gets collections on the fly.
 
-Desviación deliberada respecto a ChromaDBAdapter: los métodos de este
-adaptador NO atrapan excepciones de conexión/consulta para devolver un
-valor por defecto. Un fallo de Neon durante el login debe propagarse
-como error 500, no disfrazarse de "usuario no encontrado" (eso sería un
-bug de seguridad, no solo de estilo). Ver también el docstring de
-UserRepositoryPort.
+Deliberate deviation from ChromaDBAdapter: this adapter's methods do
+NOT catch connection/query exceptions to return a default value. A Neon
+outage during login must propagate as a 500 error, not disguise itself
+as "user not found" (that would be a security bug, not just a style
+one). See also UserRepositoryPort's docstring.
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     class PostgresUserAdapter implements UserRepositoryPort {
         private pool: Pool | null = null;
         async connect(): Promise<void> { ... }
@@ -51,22 +48,22 @@ logger = get_logger(__name__)
 
 def _prepare_dsn(dsn: str) -> tuple[str, "bool | str"]:
     """
-    Separa la DSN de Postgres en (dsn_sin_query, modo_ssl) listos para
-    asyncpg.create_pool().
+    Splits the Postgres DSN into (dsn_without_query, ssl_mode), ready
+    for asyncpg.create_pool().
 
-    Por qué: según desde qué pestaña/herramienta se copie la connection
-    string en el dashboard de Neon, el parámetro SSL en la query puede
-    venir como sslmode=require, ssl=true, o ir acompañado de
-    channel_binding=require, etc. asyncpg solo reconoce 'sslmode' como
-    campo de query válido y lanza "bad query field" ante cualquier otro
-    (visto en producción con 'ssl'). En vez de intentar enumerar todas
-    las variantes posibles, se quita la query entera y se decide el SSL
-    explícitamente vía el kwarg `ssl` de create_pool(), que sí es fiable
-    y no depende del formato de la URL.
+    Why: depending on which tab/tool the connection string was copied
+    from in Neon's dashboard, the SSL query parameter can show up as
+    sslmode=require, ssl=true, or come with channel_binding=require,
+    etc. asyncpg only recognizes 'sslmode' as a valid query field and
+    raises "bad query field" for any other one (seen in production with
+    'ssl'). Instead of trying to enumerate every possible variant, the
+    whole query string is stripped and SSL is decided explicitly via
+    create_pool()'s `ssl` kwarg, which is reliable and doesn't depend on
+    the URL's format.
 
-    Heurística: host local (docker-compose/localhost) → sin SSL (el
-    Postgres local no tiene certificados configurados). Cualquier otro
-    host (Neon u otro Postgres gestionado) → SSL obligatorio.
+    Heuristic: local host (docker-compose/localhost) → no SSL (the
+    local Postgres has no certificates configured). Any other host
+    (Neon or another managed Postgres) → SSL required.
     """
     parts = urlsplit(dsn)
     clean_dsn = urlunsplit((parts.scheme, parts.netloc, parts.path, "", parts.fragment))
@@ -87,16 +84,16 @@ CREATE TABLE IF NOT EXISTS users (
 
 class PostgresUserAdapter(UserRepositoryPort):
     """
-    Implementación concreta de UserRepositoryPort usando Postgres.
+    Concrete implementation of UserRepositoryPort using Postgres.
 
-    Estado interno:
-    - _pool: pool de conexiones asyncpg (lazy, se crea en connect())
+    Internal state:
+    - _pool: asyncpg connection pool (lazy, created in connect())
 
-    connect()/close() se llaman explícitamente desde el lifespan de
-    main.py (startup/shutdown) y desde scripts/create_user.py — a
-    diferencia de ChromaDBAdapter, aquí el ciclo de vida de la conexión
-    es explícito porque un pool de Postgres conviene cerrarlo
-    ordenadamente (ChromaDB habla HTTP sin estado de conexión que cerrar).
+    connect()/close() are called explicitly from main.py's lifespan
+    (startup/shutdown) and from scripts/create_user.py — unlike
+    ChromaDBAdapter, here the connection lifecycle is explicit because a
+    Postgres pool should be closed in an orderly way (ChromaDB speaks
+    stateless HTTP, with no connection to close).
     """
 
     def __init__(self):
@@ -104,18 +101,18 @@ class PostgresUserAdapter(UserRepositoryPort):
 
     async def connect(self) -> None:
         """
-        Crea el pool de conexiones y asegura que la tabla `users` existe.
+        Creates the connection pool and ensures the `users` table exists.
 
-        Idempotente: si ya hay un pool, no hace nada. Se puede llamar
-        varias veces sin problema (p.ej. en tests).
+        Idempotent: if there's already a pool, does nothing. Can be
+        called multiple times safely (e.g. in tests).
         """
         if self._pool is not None:
             return
 
         if not settings.database_url:
             raise RuntimeError(
-                "DATABASE_URL no configurada. Necesaria para autenticación "
-                "(ver api/.env o las variables de entorno del servicio)."
+                "DATABASE_URL not configured. Required for authentication "
+                "(see api/.env or the service's environment variables)."
             )
 
         try:
@@ -129,23 +126,23 @@ class PostgresUserAdapter(UserRepositoryPort):
             raise
 
     async def close(self) -> None:
-        """Cierra el pool de conexiones (llamado en el shutdown de la app)."""
+        """Closes the connection pool (called on the app's shutdown)."""
         if self._pool is not None:
             await self._pool.close()
             self._pool = None
 
     def _get_pool(self) -> asyncpg.Pool:
         if self._pool is None:
-            raise RuntimeError("PostgresUserAdapter no conectado. Llama a connect() primero.")
+            raise RuntimeError("PostgresUserAdapter not connected. Call connect() first.")
         return self._pool
 
     async def get_by_email(self, email: str) -> Optional[User]:
         """
-        Busca un usuario por email.
+        Looks up a user by email.
 
-        No atrapa excepciones de conexión/consulta: se propagan tal
-        cual, para que un fallo de la base de datos no se confunda con
-        "usuario no encontrado" (ver docstring del módulo).
+        Doesn't catch connection/query exceptions: they propagate
+        as-is, so a database outage isn't confused with "user not
+        found" (see the module's docstring).
         """
         pool = self._get_pool()
         row = await pool.fetchrow(
@@ -158,8 +155,8 @@ class PostgresUserAdapter(UserRepositoryPort):
 
     async def create_user(self, email: str, password_hash: str) -> User:
         """
-        Inserta un usuario nuevo. Lanza UserAlreadyExistsError si el
-        email ya existe (violación de la restricción UNIQUE).
+        Inserts a new user. Raises UserAlreadyExistsError if the email
+        already exists (UNIQUE constraint violation).
         """
         pool = self._get_pool()
         try:

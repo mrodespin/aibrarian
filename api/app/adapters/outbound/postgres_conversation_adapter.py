@@ -1,23 +1,23 @@
 # /api/app/adapters/outbound/postgres_conversation_adapter.py
 """
-Adaptador Postgres - Implementación concreta de ConversationRepositoryPort - TFM Bibliotecario-IA
+Postgres Adapter - Concrete implementation of ConversationRepositoryPort - Bibliotecario-IA
 
-Guarda el historial de conversación (turnos usuario/asistente) en Postgres,
-mismo servicio (Neon en producción, contenedor local en desarrollo) que ya
-usa PostgresUserAdapter para autenticación.
+Stores conversation history (user/assistant turns) in Postgres, the
+same service (Neon in production, local container in development)
+already used by PostgresUserAdapter for authentication.
 
-Mismo patrón que postgres_user_adapter.py: sin ORM ni migraciones
-(SQLAlchemy/Alembic), pool asyncpg propio (independiente del de
-PostgresUserAdapter — mantiene ambos adaptadores desacoplados y testeables
-por separado), esquema creado de forma idempotente (`CREATE TABLE IF NOT
-EXISTS`) en connect().
+Same pattern as postgres_user_adapter.py: no ORM or migrations
+(SQLAlchemy/Alembic), its own asyncpg pool (separate from
+PostgresUserAdapter's — keeps both adapters decoupled and independently
+testable), schema created idempotently (`CREATE TABLE IF NOT EXISTS`)
+in connect().
 
-A diferencia de PostgresUserAdapter, aquí SÍ tiene sentido degradar en
-caso de fallo (ver ConversationService): el historial es una mejora de
-UX, no una decisión de seguridad binaria como el login. Por eso este
-adaptador tampoco atrapa excepciones — deja que se propaguen tal cual —
-pero es quien LLAMA (el endpoint /ask) el que decide loguear y continuar
-sin historial en vez de fallar la petición completa.
+Unlike PostgresUserAdapter, degrading gracefully on failure DOES make
+sense here (see ConversationService): history is a UX enhancement, not
+a binary security decision like login. That's why this adapter also
+doesn't catch exceptions — it lets them propagate as-is — but it's the
+CALLER (the /ask endpoint) that decides to log and continue without
+history instead of failing the whole request.
 """
 
 from typing import List, Optional
@@ -29,7 +29,7 @@ from app.core.domain.models import ConversationMessage
 from app.config.settings import settings
 from app.core.observability import get_logger
 
-# Reutiliza la misma heurística de DSN/SSL que postgres_user_adapter.py
+# Reuses the same DSN/SSL heuristic as postgres_user_adapter.py
 from app.adapters.outbound.postgres_user_adapter import _prepare_dsn
 
 logger = get_logger(__name__)
@@ -54,10 +54,10 @@ CREATE INDEX IF NOT EXISTS idx_conversation_messages_session
 
 class PostgresConversationAdapter(ConversationRepositoryPort):
     """
-    Implementación concreta de ConversationRepositoryPort usando Postgres.
+    Concrete implementation of ConversationRepositoryPort using Postgres.
 
-    Estado interno:
-    - _pool: pool de conexiones asyncpg propio (lazy, se crea en connect())
+    Internal state:
+    - _pool: its own asyncpg connection pool (lazy, created in connect())
     """
 
     def __init__(self):
@@ -65,23 +65,23 @@ class PostgresConversationAdapter(ConversationRepositoryPort):
 
     async def connect(self) -> None:
         """
-        Crea el pool de conexiones y asegura que la tabla
-        `conversation_messages` (y su índice) existen.
+        Creates the connection pool and ensures the
+        `conversation_messages` table (and its index) exist.
 
-        Idempotente: si ya hay un pool, no hace nada.
+        Idempotent: if there's already a pool, does nothing.
 
-        Nota: conversation_messages tiene una FK a users(id), así que la
-        tabla `users` debe existir antes — en la práctica siempre es así
-        porque PostgresUserAdapter.connect() se llama primero en el
-        lifespan de main.py.
+        Note: conversation_messages has an FK to users(id), so the
+        `users` table must exist first — in practice this is always the
+        case because PostgresUserAdapter.connect() is called first in
+        main.py's lifespan.
         """
         if self._pool is not None:
             return
 
         if not settings.database_url:
             raise RuntimeError(
-                "DATABASE_URL no configurada. Necesaria para el historial "
-                "de conversación (ver api/.env o las variables de entorno del servicio)."
+                "DATABASE_URL not configured. Required for conversation "
+                "history (see api/.env or the service's environment variables)."
             )
 
         try:
@@ -96,14 +96,14 @@ class PostgresConversationAdapter(ConversationRepositoryPort):
             raise
 
     async def close(self) -> None:
-        """Cierra el pool de conexiones (llamado en el shutdown de la app)."""
+        """Closes the connection pool (called on the app's shutdown)."""
         if self._pool is not None:
             await self._pool.close()
             self._pool = None
 
     def _get_pool(self) -> asyncpg.Pool:
         if self._pool is None:
-            raise RuntimeError("PostgresConversationAdapter no conectado. Llama a connect() primero.")
+            raise RuntimeError("PostgresConversationAdapter not connected. Call connect() first.")
         return self._pool
 
     async def append_message(
@@ -132,9 +132,9 @@ class PostgresConversationAdapter(ConversationRepositoryPort):
         limit: int
     ) -> List[ConversationMessage]:
         pool = self._get_pool()
-        # Traemos los `limit` más recientes en orden DESC y los invertimos
-        # en Python, para devolver orden cronológico ascendente (el que
-        # espera ConversationService al formatear el bloque de historial).
+        # We fetch the `limit` most recent rows in DESC order and reverse
+        # them in Python, to return ascending chronological order (what
+        # ConversationService expects when formatting the history block).
         rows = await pool.fetch(
             """
             SELECT role, content, created_at
