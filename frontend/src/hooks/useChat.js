@@ -5,7 +5,7 @@
 import { useState, useCallback } from 'react';
 import { chatApi } from '../api';
 
-const SESSION_ID_STORAGE_KEY = 'bibliotecario_session_id';
+const SESSION_ID_STORAGE_KEY = 'aibrarian_session_id';
 
 // Generates or retrieves the current conversation's session_id.
 // Persisted in localStorage so it survives page refreshes; rotated

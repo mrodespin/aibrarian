@@ -15,7 +15,7 @@ function EmptyState() {
       <div className="text-center max-w-md">
         <div className="text-6xl mb-4">📚</div>
         <h2 className="text-xl font-bold text-text-50 mb-2">
-          Welcome to Bibliotecario-IA
+          Welcome to AIbrarian
         </h2>
         <p className="text-text-200 leading-relaxed">
           Ask me questions about the documents you've synced.

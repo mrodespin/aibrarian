@@ -30,7 +30,7 @@ export function Header({ onMenuClick }) {
           <div className="flex items-center gap-2">
             <span className="text-2xl">📚</span>
             <h1 className="text-xl font-bold bg-gradient-to-r from-accent-400 to-violet-500 bg-clip-text text-transparent">
-              Bibliotecario-IA
+              AIbrarian
             </h1>
           </div>
         </div>

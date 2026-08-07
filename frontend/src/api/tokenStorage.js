@@ -12,7 +12,7 @@
  * given the project's scope.
  */
 
-const TOKEN_KEY = 'bibliotecario_token';
+const TOKEN_KEY = 'aibrarian_token';
 
 export const tokenStorage = {
   get: () => localStorage.getItem(TOKEN_KEY),
