@@ -1,18 +1,18 @@
 # /docker-compose.yml
-# Servicios Docker para Bibliotecario-IA
+# Docker services for AIbrarian
 #
-# Uso:
+# Usage:
 #   docker-compose up -d
 #
-# Servicios:
-#   - chromadb: Base de datos vectorial (puerto 8001)
-#   - postgres: Usuarios/autenticación (puerto 5432) — solo desarrollo local;
-#     en producción (Render) se usa Neon (Postgres hosteado, sin disco
-#     persistente en el contenedor de la API, ver ADR-007/render.yaml)
-#   - api: Backend FastAPI (puerto 8000)
+# Services:
+#   - chromadb: vector database (port 8001)
+#   - postgres: users/authentication (port 5432) — local development only;
+#     production (Render) uses Neon (hosted Postgres, no persistent disk
+#     in the API container, see ADR-007/render.yaml)
+#   - api: FastAPI backend (port 8000)
 #
-# Nota: Ollama corre de forma NATIVA en macOS para aprovechar GPU Metal (~10x más rápido)
-#   Instalación: brew install ollama && ollama serve
+# Note: Ollama runs NATIVELY on macOS to take advantage of the Metal GPU (~10x faster)
+#   Installation: brew install ollama && ollama serve
 
 services:
   postgres:
@@ -22,10 +22,10 @@ services:
       - POSTGRES_PASSWORD=bibliotecario
       - POSTGRES_DB=bibliotecario
     ports:
-      # 127.0.0.1, no 0.0.0.0: estas credenciales son fijas y triviales
-      # (solo valen para dev local). Sin este bind explícito, Docker publica
-      # el puerto en todas las interfaces — en una máquina con IP pública y
-      # sin firewall, cualquiera en internet podría conectarse.
+      # 127.0.0.1, not 0.0.0.0: these credentials are fixed and trivial
+      # (local dev only). Without this explicit bind, Docker publishes
+      # the port on every interface — on a machine with a public IP and
+      # no firewall, anyone on the internet could connect.
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -38,27 +38,26 @@ services:
   chromadb:
     image: chromadb/chroma:1.5.9
     ports:
-      # 127.0.0.1, no 0.0.0.0: ChromaDB no tiene auth propia en este setup,
-      # y hay una RCE pre-auth conocida (PYSEC-2026-311, sin versión
-      # parcheada todavía) si su API queda expuesta en red. El contenedor
-      # `api` sigue llegando a este servicio por la red interna de Docker
-      # (`chromadb:8000`) sin que esto le afecte — este bind solo limita el
-      # acceso desde el host.
+      # 127.0.0.1, not 0.0.0.0: ChromaDB has no auth of its own in this
+      # setup, and there's a known pre-auth RCE (PYSEC-2026-311, no patched
+      # version yet) if its API is exposed on the network. The `api`
+      # container still reaches this service over Docker's internal network
+      # (`chromadb:8000`) unaffected — this bind only restricts access from
+      # the host.
       - "127.0.0.1:8001:8000"
     volumes:
       - chroma_data:/chroma/chroma
     healthcheck:
-      # La imagen chromadb/chroma:1.5.9 no trae curl ni wget ni python (es
-      # una imagen mínima con el binario `chroma` y poco más — confirmado
-      # con `docker exec ... ls /bin /usr/bin`), así que un healthcheck
-      # basado en curl se queda siempre en "unhealthy" aunque el servidor
-      # esté perfectamente arriba (probado: exec falla con "curl: executable
-      # file not found in $PATH", no es que el heartbeat responda mal).
-      # Usamos el truco de /dev/tcp de bash (sí está disponible) para
-      # comprobar que el puerto acepta conexiones — más débil que un check
-      # HTTP real (no valida el body del heartbeat), pero suficiente para
-      # saber que el proceso está escuchando, y no depende de ningún
-      # binario extra en la imagen.
+      # The chromadb/chroma:1.5.9 image ships with no curl, wget or python
+      # (it's a minimal image with the `chroma` binary and little else —
+      # confirmed with `docker exec ... ls /bin /usr/bin`), so a curl-based
+      # healthcheck stays stuck on "unhealthy" forever even when the server
+      # is perfectly up (verified: exec fails with "curl: executable file
+      # not found in $PATH", it's not that the heartbeat responds badly).
+      # We use bash's /dev/tcp trick (which IS available) to check that the
+      # port accepts connections — weaker than a real HTTP check (it doesn't
+      # validate the heartbeat's body), but enough to know the process is
+      # listening, and it doesn't depend on any extra binary in the image.
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8000"]
       interval: 10s
       timeout: 5s
@@ -71,19 +70,19 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./api/app:/app/app      # Hot-reload para desarrollo
-      - ./data:/app/data:ro     # PDFs locales (solo lectura)
+      - ./api/app:/app/app      # Hot-reload for development
+      - ./data:/app/data:ro     # Local PDFs (read-only)
     env_file:
-      - ./api/.env              # Variables de usuario (NOTION_API_KEY, etc.)
+      - ./api/.env              # User variables (NOTION_API_KEY, etc.)
     environment:
-      # Overrides de networking para Docker
-      # Ollama corre en el host (macOS nativo para GPU Metal)
+      # Networking overrides for Docker
+      # Ollama runs on the host (native macOS for the Metal GPU)
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      # ChromaDB corre en Docker (puerto interno)
+      # ChromaDB runs in Docker (internal port)
       - CHROMADB_HOST=chromadb
       - CHROMADB_PORT=8000
       - DATA_DIRECTORY=/app/data
-      # Postgres corre en Docker (nombre de servicio, no localhost)
+      # Postgres runs in Docker (service name, not localhost)
       - DATABASE_URL=postgresql://bibliotecario:bibliotecario@postgres:5432/bibliotecario
     depends_on:
       chromadb:
@@ -91,11 +90,10 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      # python:3.11-slim tampoco trae curl instalado por defecto (mismo
-      # problema que el healthcheck de chromadb, ver más arriba) — pero
-      # este contenedor SÍ tiene python3 siempre disponible (es la propia
-      # app), así que usamos urllib de la stdlib en vez de añadir curl a
-      # la imagen solo para esto.
+      # python:3.11-slim doesn't ship curl by default either (same problem
+      # as the chromadb healthcheck above) — but this container DOES always
+      # have python3 available (it's the app itself), so we use the
+      # stdlib's urllib instead of adding curl to the image just for this.
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=5)"]
       interval: 30s
       timeout: 10s

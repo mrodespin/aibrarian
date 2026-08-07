@@ -94,7 +94,7 @@ def ask_yes_no(question, default=True):
     choice = input(f"{Colors.CYAN}{question}{choices}{Colors.ENDC}").lower().strip()
     if choice == '':
         return default
-    return choice in ['y', 'yes', 's', 'si', 'sí']
+    return choice in ['y', 'yes']
 
 
 # ============================================================================

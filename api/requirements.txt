@@ -1,45 +1,46 @@
 # /api/requirements.txt
 
 # ===================================
-# LEAN MVP + FASE 1 DEPENDENCIES
+# LEAN MVP + PHASE 1 DEPENDENCIES
 # ===================================
 
 # --- Core API Framework ---
-# fastapi bumped 0.115.0 -> 0.141.1: no era compatible con starlette
-# parcheado (pinback a starlette<0.39.0, y las CVEs de starlette — DoS en
-# multipart, Host header sin validar en request.url — solo se arreglan del
-# todo en starlette>=1.0.1/1.1.0/1.3.0/1.3.1). 0.141.1 exige
-# starlette>=0.46.0 sin techo, así que pip resuelve el 1.3.1 más reciente
-# automáticamente sin pin explícito aquí.
+# fastapi bumped 0.115.0 -> 0.141.1: it wasn't compatible with a patched
+# starlette (was pinned back to starlette<0.39.0, and starlette's CVEs —
+# multipart DoS, unvalidated Host header in request.url — are only fully
+# fixed in starlette>=1.0.1/1.1.0/1.3.0/1.3.1). 0.141.1 requires
+# starlette>=0.46.0 with no ceiling, so pip resolves the latest 1.3.1
+# automatically with no explicit pin needed here.
 fastapi==0.141.1
-# Pin explícito: fastapi solo exige starlette>=0.46.0 (sin techo), y pip no
-# sube más allá del mínimo que satisface esa cota si no se lo pedimos —
-# sin este pin, un install limpio se habría quedado en 0.50.0 (todavía
-# vulnerable) en vez de la 1.3.1 que arregla el resto de CVEs de starlette.
+# Explicit pin: fastapi only requires starlette>=0.46.0 (no ceiling), and
+# pip won't go past the minimum that satisfies that bound unless we ask it
+# to — without this pin, a clean install would have landed on 0.50.0 (still
+# vulnerable) instead of the 1.3.1 that fixes the rest of starlette's CVEs.
 starlette==1.3.1
 uvicorn[standard]==0.32.0
-python-dotenv==1.2.2           # CVE fix, sin cambios de API relevantes para nosotros
+python-dotenv==1.2.2           # CVE fix, no API changes relevant to us
 pydantic==2.9.2
-pydantic-settings==2.14.2      # langchain-community 0.3.31 exige >=2.10.1
-python-multipart==0.0.32      # File upload support for FastAPI — varias CVEs de DoS en parsing multipart
+pydantic-settings==2.14.2      # langchain-community 0.3.31 requires >=2.10.1
+python-multipart==0.0.32      # File upload support for FastAPI — several multipart-parsing DoS CVEs
 
 # --- LangChain Core & RAG ---
-# Bumps dentro de la misma rama 0.3.x (no 1.x): 1.0 reescribió la API de
-# chains/agents y no lo necesitamos — estos son solo backports de seguridad.
+# Bumps within the same 0.3.x branch (not 1.x): 1.0 rewrote the
+# chains/agents API and we don't need that — these are just security
+# backports.
 #
-# Quedan 4 CVEs sin arreglar en esta rama (solo tienen fix en la 1.x, ver
-# `pip-audit -r requirements.txt`) — ninguno aplica a este código, no usamos
-# esas APIs (confirmado con grep, cero resultados):
-#   - langchain: path traversal en el middleware de file-search de agentes
-#     (no usamos langchain.agents)
-#   - langchain-core: path traversal en load_prompt()/load_prompt_from_config()
-#     (no usamos load_prompt en ningún sitio, los prompts se construyen como
-#     strings directamente en ollama_adapter.py)
-#   - langchain-core: SSRF en ChatOpenAI.get_num_tokens_from_messages()
-#     (no usamos ChatOpenAI — Ollama vía langchain_ollama, Groq vía el
-#     cliente oficial `groq`, ninguno pasa por langchain_openai)
-#   - langchain-text-splitters: SSRF en HTMLHeaderTextSplitter.split_text_from_url()
-#     (usamos RecursiveCharacterTextSplitter, no HTMLHeaderTextSplitter)
+# 4 CVEs remain unfixed on this branch (only fixed on 1.x, see
+# `pip-audit -r requirements.txt`) — none of them apply to this code, we
+# don't use those APIs (confirmed with grep, zero hits):
+#   - langchain: path traversal in the agents' file-search middleware
+#     (we don't use langchain.agents)
+#   - langchain-core: path traversal in load_prompt()/load_prompt_from_config()
+#     (we never use load_prompt anywhere, prompts are built as plain
+#     strings directly in ollama_adapter.py)
+#   - langchain-core: SSRF in ChatOpenAI.get_num_tokens_from_messages()
+#     (we don't use ChatOpenAI — Ollama via langchain_ollama, Groq via the
+#     official `groq` client, neither goes through langchain_openai)
+#   - langchain-text-splitters: SSRF in HTMLHeaderTextSplitter.split_text_from_url()
+#     (we use RecursiveCharacterTextSplitter, not HTMLHeaderTextSplitter)
 langchain==0.3.30
 langchain-community==0.3.31
 langchain-core==0.3.85
@@ -47,52 +48,51 @@ langchain-text-splitters==0.3.11
 
 # --- LangChain Integrations ---
 langchain-ollama==0.2.0      # Ollama LLM & Embeddings
-# (langchain-chroma NO se usa en el código — chromadb_adapter.py habla con
-# `chromadb` directamente — y además fijaba chromadb<0.6.0, bloqueando el
-# upgrade de abajo. Se quitó por eso, no por descuido.)
+# (langchain-chroma is NOT used in the code — chromadb_adapter.py talks to
+# `chromadb` directly — and it also pinned chromadb<0.6.0, blocking the
+# upgrade below. Removed for that reason, not by oversight.)
 
 # --- Vector Database ---
-# 0.5.20 -> 1.5.9: Chroma Cloud corre una versión de servidor más nueva que
-# ya no es compatible con el formato de respuesta que este cliente antiguo
-# esperaba al listar colecciones (KeyError: '_type' en list_collections(),
-# reproducido y confirmado contra la instancia real). La imagen Docker de
-# ChromaDB local (docker-compose.yml) se subió a la misma versión por lo
-# mismo — y su endpoint de healthcheck cambió de /api/v1/heartbeat (410
-# Gone en 1.5.9) a /api/v2/heartbeat, actualizado en docker-compose.yml y
+# 0.5.20 -> 1.5.9: Chroma Cloud runs a newer server version that's no longer
+# compatible with the response format this old client expected when listing
+# collections (KeyError: '_type' in list_collections(), reproduced and
+# confirmed against the real instance). The local ChromaDB Docker image
+# (docker-compose.yml) was bumped to the same version for the same reason —
+# and its healthcheck endpoint changed from /api/v1/heartbeat (410 Gone on
+# 1.5.9) to /api/v2/heartbeat, updated in docker-compose.yml and
 # scripts/verify_setup.py.
-chromadb==1.5.9              # ChromaDB client (local Docker + Chroma Cloud, mismo cliente)
-# PYSEC-2026-311: RCE pre-auth en el SERVIDOR de ChromaDB (no en este
-# cliente pip) vía trust_remote_code=true al crear una colección con una
-# función de embedding basada en modelo remoto — sin versión parcheada
-# todavía. Nuestro código nunca pasa trust_remote_code (ver
-# chromadb_adapter.py), pero la mitigación real es de red, no de código:
-# el servidor de ChromaDB local no tiene auth propia, así que no debe
-# quedar expuesto — ver el bind a 127.0.0.1 en docker-compose.yml. En
-# prod usamos Chroma Cloud (gestionado por Chroma, fuera de nuestro
-# control directo), no esta imagen.
+chromadb==1.5.9              # ChromaDB client (local Docker + Chroma Cloud, same client)
+# PYSEC-2026-311: pre-auth RCE in the ChromaDB SERVER (not in this pip
+# client) via trust_remote_code=true when creating a collection with a
+# remote-model-based embedding function — no patched version yet. Our code
+# never passes trust_remote_code (see chromadb_adapter.py), but the real
+# mitigation is network-level, not code-level: the local ChromaDB server has
+# no auth of its own, so it must not be exposed — see the 127.0.0.1 bind in
+# docker-compose.yml. In production we use Chroma Cloud (managed by Chroma,
+# outside our direct control), not this image.
 
 # --- Cloud LLM provider (llm_provider="groq") ---
-# Versión mínima, no fijada exacta: verificar `pip install groq` en el momento
-# del deploy, la API de chat.completions es estable entre versiones recientes.
-groq>=1.1.0                  # Cliente oficial de Groq (OpenAI-compatible chat API)
+# Minimum version, not pinned exactly: verify `pip install groq` at deploy
+# time, the chat.completions API is stable across recent versions.
+groq>=1.1.0                  # Official Groq client (OpenAI-compatible chat API)
 
-# Embeddings locales (usado junto a Groq, que no ofrece embeddings).
-# Backend por defecto (EMBEDDING_BACKEND=onnx, ver settings.py): usa
-# chromadb.utils.embedding_functions.ONNXMiniLM_L6_V2 vía onnxruntime, que
-# ya es dependencia transitiva de chromadb (línea de arriba) — no añade nada.
+# Local embeddings (used alongside Groq, which doesn't offer embeddings).
+# Default backend (EMBEDDING_BACKEND=onnx, see settings.py): uses
+# chromadb.utils.embedding_functions.ONNXMiniLM_L6_V2 via onnxruntime, which
+# is already a transitive dependency of chromadb (line above) — adds nothing.
 #
-# Backend alternativo (EMBEDDING_BACKEND=sentence_transformers, ver
-# groq_adapter.py): deliberadamente NO instalado por defecto. Arrastra
-# torch+transformers (~650MB en disco) y suficiente RAM en el import como
-# para tumbar el límite de 512MB del free tier de Render — solo instálalo
-# si vas a correr este backend en un entorno con más memoria disponible:
+# Alternative backend (EMBEDDING_BACKEND=sentence_transformers, see
+# groq_adapter.py): deliberately NOT installed by default. It drags in
+# torch+transformers (~650MB on disk) and enough RAM at import time to blow
+# past Render's free tier's 512MB limit — only install it if you're going to
+# run this backend in an environment with more memory available:
 #   pip install sentence-transformers>=3.0.0
 
 # --- Document Processing ---
-# 5.1.0 -> 6.14.2: 35 CVEs acumuladas (mayormente DoS con PDFs malformados).
-# Salto de major, pero no nos afecta: no llamamos a pypdf directamente, solo
-# vía langchain_community.PyPDFLoader (verificado con
-# scripts/generate_test_pdf.py + extracción real tras el bump).
+# 5.1.0 -> 6.14.2: 35 accumulated CVEs (mostly DoS via malformed PDFs).
+# Major-version jump, but doesn't affect us: we never call pypdf directly,
+# only via langchain_community.PyPDFLoader (verified with
+# scripts/generate_test_pdf.py + a real extraction after the bump).
 pypdf==6.14.2                 # PDF reading and parsing
 notion-client==2.2.1         # Notion API client
 
@@ -104,36 +104,36 @@ tenacity==9.0.0              # Retry logic for API calls
 structlog==24.4.0            # Structured logging (JSON format)
 prometheus-client==0.21.0    # Prometheus metrics endpoint
 
-# --- Authentication (users en Postgres/Neon, sesión JWT) ---
-asyncpg==0.30.0               # Driver async puro para Postgres, sin ORM (una tabla no justifica SQLAlchemy+Alembic)
-PyJWT==2.13.0                 # Emisión/validación de JWT de sesión — 2.9.0 tenía varios CVEs de verificación (algorithm allow-list bypass entre otros)
-bcrypt==4.2.0                 # Hashing de contraseñas (directo, no via passlib: rotura conocida con bcrypt>=4.1)
+# --- Authentication (users in Postgres/Neon, JWT session) ---
+asyncpg==0.30.0               # Pure async Postgres driver, no ORM (a single table doesn't justify SQLAlchemy+Alembic)
+PyJWT==2.13.0                 # Session JWT issuance/validation — 2.9.0 had several verification CVEs (algorithm allow-list bypass among others)
+bcrypt==4.2.0                 # Password hashing (direct, not via passlib: known breakage with bcrypt>=4.1)
 
 # --- Testing ---
-# PYSEC-2026-1845 (fix en 9.0.3): race condition local en /tmp/pytest-of-{user}
-# en UNIX — requiere acceso local con otro usuario en la misma máquina para
-# explotarla, no aplica a un runner de CI/dev de un solo usuario. No
-# actualizamos porque pytest-asyncio==0.24.0 declara `pytest<9,>=8.2`
-# (probado: con pytest 9 instalado, pip avisa del conflicto aunque los
-# tests igual pasan — no es una combinación soportada). Solo dependencia de
-# test, no llega a producción.
+# PYSEC-2026-1845 (fixed in 9.0.3): local race condition in
+# /tmp/pytest-of-{user} on UNIX — needs local access from another user on
+# the same machine to exploit, doesn't apply to a single-user CI/dev runner.
+# Not upgraded because pytest-asyncio==0.24.0 declares `pytest<9,>=8.2`
+# (verified: with pytest 9 installed, pip warns about the conflict even
+# though the tests still pass — not a supported combination). Test-only
+# dependency, never reaches production.
 pytest==8.3.4                # Testing framework
 pytest-asyncio==0.24.0       # Async support for pytest
-pytest-cov==7.1.0             # Coverage reports (--cov=app, documentado en CLAUDE.md/docs/ pero no instalado hasta ahora)
+pytest-cov==7.1.0             # Coverage reports (--cov=app, documented in CLAUDE.md/docs/ but not installed until now)
 
-# --- Evaluación (RAGAS) ---
-# Mide calidad de las respuestas del RAG (faithfulness, answer relevancy,
-# context precision) contra un pequeño dataset de referencia — ver
-# tests/test_rag_eval.py, marcado @pytest.mark.eval (no corre en el CI
-# normal, necesita Ollama + ChromaDB reales).
+# --- Evaluation (RAGAS) ---
+# Measures the RAG pipeline's answer quality (faithfulness, answer
+# relevancy, context precision) against a small reference dataset — see
+# tests/test_rag_eval.py, marked @pytest.mark.eval (doesn't run in regular
+# CI, needs real Ollama + ChromaDB).
 #
-# Sin pin de langchain en su metadata (Requires-Dist: langchain, sin
-# versión) — probado explícitamente contra nuestro langchain==0.3.30 /
-# langchain-core==0.3.85 pinneados arriba, sin conflictos (pip check
-# limpio). OJO al subir de versión mayor en el futuro: ragas se mueve
-# rápido y ya deprecó en 0.4.x la API clásica de ragas.metrics (la que
-# usamos aquí) en favor de ragas.metrics.collections (basada en
-# `instructor`, no en LangchainLLMWrapper) — si esa API clásica
-# desaparece en una v1.0, test_rag_eval.py necesitará reescribirse.
+# No langchain pin in its metadata (Requires-Dist: langchain, no version) —
+# explicitly tested against our pinned langchain==0.3.30 /
+# langchain-core==0.3.85 above, no conflicts (clean pip check). Watch out
+# when bumping to a future major version: ragas moves fast and already
+# deprecated the classic ragas.metrics API (the one used here) in 0.4.x in
+# favor of ragas.metrics.collections (based on `instructor`, not
+# LangchainLLMWrapper) — if that classic API disappears in a v1.0,
+# test_rag_eval.py will need rewriting.
 ragas==0.4.3
-datasets==5.0.1               # Dependencia de ragas (EvaluationDataset)
+datasets==5.0.1               # ragas dependency (EvaluationDataset)

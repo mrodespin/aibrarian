@@ -1,71 +1,66 @@
 # 📁 Data Directory
 
-Esta carpeta está destinada a almacenar los **documentos PDF** que serán procesados e ingestados en la base de datos vectorial del sistema Bibliotecario-IA.
+This folder is where **PDF documents** go to be processed and ingested into AIbrarian's vector database.
 
-## 📝 Uso
+## 📝 Usage
 
-1. **Coloca tus archivos PDF aquí**: Copia los documentos PDF que deseas indexar en esta carpeta.
+1. **Put your PDF files here**: copy the PDF documents you want indexed into this folder.
 
-2. **Ejecuta el script de ingesta**:
+2. **Run the ingestion script**:
    ```bash
-   # Procesa todos los PDFs en /data
+   # Process every PDF in /data
    python scripts/ingest_pdfs.py
 
-   # O especifica un directorio diferente
-   python scripts/ingest_pdfs.py /ruta/a/otros/pdfs
+   # Or specify a different directory
+   python scripts/ingest_pdfs.py /path/to/other/pdfs
 
-   # O procesa un archivo específico
-   python scripts/ingest_pdfs.py --file documento.pdf
+   # Or process a specific file
+   python scripts/ingest_pdfs.py --file document.pdf
    ```
 
-3. **O usa la API**:
+3. **Or use the API**:
    ```bash
    curl -X POST "http://localhost:8000/sync" \
      -H "Content-Type: application/json" \
-     -d '{"file_path": "./data/documento.pdf"}'
+     -d '{"file_path": "./data/document.pdf"}'
 
-   # O sincroniza todo el directorio
+   # Or sync the whole directory
    curl -X POST "http://localhost:8000/sync/directory"
    ```
 
-## ⚙️ Proceso de Ingesta
+## ⚙️ Ingestion Process
 
-Cuando ejecutas el script de ingesta o usas la API, el sistema:
+When you run the ingestion script or use the API, the system:
 
-1. **Carga** el PDF y extrae su contenido de texto
-2. **Divide** el texto en chunks (fragmentos) de ~1000 caracteres
-3. **Genera** embeddings (vectores) para cada chunk usando Ollama
-4. **Almacena** los chunks con sus embeddings en ChromaDB
+1. **Loads** the PDF and extracts its text content
+2. **Splits** the text into ~1000-character chunks
+3. **Generates** embeddings (vectors) for each chunk using Ollama
+4. **Stores** the chunks with their embeddings in ChromaDB
 
-Después de la ingesta, los documentos estarán disponibles para consultas a través del endpoint `/ask`.
+After ingestion, the documents become available for queries through the `/ask` endpoint.
 
-## 📊 Ejemplo
+## 📊 Example
 
 ```
 /data
-├── README.md              (este archivo)
-├── manual_usuario.pdf
-├── documentacion_api.pdf
-└── guia_instalacion.pdf
+├── README.md              (this file)
+├── user_manual.pdf
+├── api_documentation.pdf
+└── installation_guide.pdf
 ```
 
-## ⚠️ Notas Importantes
+## ⚠️ Important Notes
 
-- Solo se procesan archivos con extensión `.pdf`
-- Los archivos grandes pueden tardar varios minutos en procesarse
-- Asegúrate de que Ollama y ChromaDB estén corriendo antes de ingestar documentos
-- Los nombres de archivo se incluyen en los metadatos para referencia
+- Only files with a `.pdf` extension are processed
+- Large files can take several minutes to process
+- Make sure Ollama and ChromaDB are running before ingesting documents
+- File names are included in the metadata for reference
 
-## 🔍 Verificar Ingesta
+## 🔍 Verify Ingestion
 
-Para verificar que los documentos se ingirieron correctamente:
+To verify documents were ingested correctly:
 
 ```bash
-# Consulta las estadísticas de la colección
+# Check the collection's statistics
 curl http://localhost:8000/stats
 ```
-
----
-
-**Parte del proyecto**: TFM Bibliotecario-IA
-**Fase**: MVP (Ingesta de documentos)

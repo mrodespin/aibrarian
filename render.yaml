@@ -1,28 +1,29 @@
 # /render.yaml
-# Blueprint de despliegue para Render (https://render.com/docs/blueprint-spec)
+# Deployment blueprint for Render (https://render.com/docs/blueprint-spec)
 #
-# Despliega la API (Groq + Chroma Cloud, ver ADR-007) y el frontend (React +
-# Vite, servido como Static Site). ChromaDB local no forma parte de este
-# blueprint: solo se usa en desarrollo (docker-compose).
+# Deploys the API (Groq + Chroma Cloud, see ADR-007) and the frontend (React +
+# Vite, served as a Static Site). The local ChromaDB isn't part of this
+# blueprint: it's only used in development (docker-compose).
 #
-# Uso:
-#   1. Conecta este repo en Render → "New Blueprint Instance"
-#   2. Render detecta este fichero y crea los servicios "bibliotecario-ia-api"
-#      y "bibliotecario-ia-frontend"
-#   3. Variables marcadas con "sync: false" NO se versionan aquí: Render
-#      pide rellenarlas en el dashboard (Environment) tras el primer deploy
-#   4. Primer arranque: usa POST /sync/upload o /sync/notion para indexar
-#      documentos en la colección de Chroma Cloud (empieza vacía)
+# Usage:
+#   1. Connect this repo in Render → "New Blueprint Instance"
+#   2. Render detects this file and creates the "bibliotecario-ia-api"
+#      and "bibliotecario-ia-frontend" services
+#   3. Variables marked "sync: false" aren't checked into version control:
+#      Render asks you to fill them in the dashboard (Environment) after the
+#      first deploy
+#   4. First startup: use POST /sync/upload or /sync/notion to index
+#      documents into the Chroma Cloud collection (starts out empty)
 #
-# Nota sobre VITE_API_URL (abajo, servicio del frontend): Render no permite
-# referenciar la URL PÚBLICA de un servicio desde otro vía `fromService`
-# (esa propiedad solo expone el hostname de la red PRIVADA interna, inútil
-# aquí porque quien llama a la API es el navegador del usuario, no otro
-# servicio de Render). Por eso va como "sync: false", igual que las API
-# keys: la rellenas tú a mano en el dashboard (bibliotecario-ia-frontend →
-# Environment) con la URL pública que Render le asignó a la API — así no
-# queda hardcodeada en el repo ni hay que tocar este fichero si la API
-# cambia de nombre o le pones dominio propio.
+# Note on VITE_API_URL (below, frontend service): Render doesn't allow
+# referencing a service's PUBLIC URL from another one via `fromService`
+# (that property only exposes the internal PRIVATE network hostname, useless
+# here since it's the user's browser that calls the API, not another Render
+# service). That's why it's "sync: false", just like the API keys: you fill
+# it in by hand in the dashboard (bibliotecario-ia-frontend →
+# Environment) with the public URL Render assigned to the API — that way it
+# never ends up hardcoded in the repo, and this file doesn't need touching if
+# the API is renamed or gets its own domain.
 
 services:
   - type: web
@@ -33,28 +34,28 @@ services:
     dockerContext: ./api
     healthCheckPath: /
     envVars:
-      # --- Selección de proveedores (ver ADR-007) ---
+      # --- Provider selection (see ADR-007) ---
       - key: LLM_PROVIDER
         value: groq
       - key: VECTOR_DB_PROVIDER
         value: chroma_cloud
 
-      # --- Groq (gratuito, sin tarjeta): console.groq.com/keys ---
+      # --- Groq (free, no card): console.groq.com/keys ---
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL
         value: openai/gpt-oss-120b
 
-      # --- Embeddings locales (CPU, sin API key) ---
-      # onnx = chromadb+onnxruntime (ligero, ver groq_adapter.py). NO cambiar
-      # a sentence_transformers aquí: añade ~650MB (torch) y provoca OOM en
-      # el free tier de Render (512MB RAM).
+      # --- Local embeddings (CPU, no API key) ---
+      # onnx = chromadb+onnxruntime (lightweight, see groq_adapter.py). Do NOT
+      # switch this to sentence_transformers: it adds ~650MB (torch) and
+      # causes an OOM on Render's free tier (512MB RAM).
       - key: EMBEDDING_BACKEND
         value: onnx
       - key: EMBEDDING_MODEL_NAME
         value: all-MiniLM-L6-v2
 
-      # --- Chroma Cloud (gratuito, sin tarjeta): trychroma.com ---
+      # --- Chroma Cloud (free, no card): trychroma.com ---
       - key: CHROMA_CLOUD_API_KEY
         sync: false
       - key: CHROMA_CLOUD_TENANT
@@ -62,55 +63,55 @@ services:
       - key: CHROMA_CLOUD_DATABASE
         sync: false
 
-      # --- Notion (opcional) ---
+      # --- Notion (optional) ---
       - key: NOTION_API_KEY
         sync: false
       - key: NOTION_DATABASE_ID
         sync: false
 
-      # --- Autenticación (Neon Postgres + JWT) ---
-      # DATABASE_URL: connection string de Neon (trychroma... no, neon.tech —
-      # crea un proyecto gratis y copia el connection string desde su
-      # dashboard). Antes de rellenarla, crea el primer usuario contra esa
-      # misma URL con scripts/create_user.py — así el login funciona desde
-      # el instante en que este servicio arranca.
+      # --- Authentication (Neon Postgres + JWT) ---
+      # DATABASE_URL: Neon's connection string (neon.tech — create a free
+      # project and copy the connection string from its dashboard). Before
+      # filling this in, create the first user against that same URL with
+      # scripts/create_user.py — that way login works from the moment this
+      # service starts up.
       - key: DATABASE_URL
         sync: false
-      # Genera uno con: python -c "import secrets; print(secrets.token_hex(32))"
+      # Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
       - key: JWT_SECRET_KEY
         sync: false
       - key: JWT_EXPIRATION_MINUTES
         value: "1440"
-      # URL pública de bibliotecario-ia-frontend (mismo motivo que
-      # VITE_API_URL abajo: Render no permite referenciar la URL pública de
-      # otro servicio, se rellena a mano en el dashboard). Usada para CORS
-      # (allow_origins) y para el atributo SameSite de la cookie de sesión.
+      # bibliotecario-ia-frontend's public URL (same reason as VITE_API_URL
+      # below: Render doesn't allow referencing another service's public
+      # URL, so it's filled in by hand in the dashboard). Used for CORS
+      # (allow_origins).
       - key: FRONTEND_URL
         sync: false
 
-      # --- Resto de configuración (valores por defecto de settings.py) ---
+      # --- Everything else (settings.py's defaults) ---
       - key: DATA_DIRECTORY
         value: /app/data
 
-  # --- Frontend (React + Vite, servido como Static Site: gratis, sin
-  # "sleep" ni límite de RAM porque no ejecuta ningún proceso, solo sirve
-  # los ficheros estáticos de `npm run build` vía CDN) ---
+  # --- Frontend (React + Vite, served as a Static Site: free, no "sleep"
+  # or RAM limit since it runs no process at all, just serves the
+  # `npm run build` static files via CDN) ---
   - type: web
     name: bibliotecario-ia-frontend
     runtime: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
     envVars:
-      # Rellena en el dashboard (Environment) con la URL pública de
-      # bibliotecario-ia-api, ver nota arriba. VITE_API_URL se hornea en
-      # el build (Vite la sustituye en tiempo de build, no de arranque),
-      # así que cambiar este valor requiere un redeploy manual del
-      # frontend para que surta efecto, no basta con reiniciar el servicio.
+      # Fill in the dashboard (Environment) with bibliotecario-ia-api's
+      # public URL, see the note above. VITE_API_URL gets baked into the
+      # build (Vite substitutes it at build time, not at startup), so
+      # changing this value needs a manual frontend redeploy to take
+      # effect — restarting the service alone isn't enough.
       - key: VITE_API_URL
         sync: false
     routes:
-      # SPA sin backend propio: cualquier ruta debe servir index.html para
-      # que el enrutado (si lo hay) lo resuelva React en el cliente.
+      # An SPA with no backend of its own: every route must serve index.html
+      # so client-side React routing (if any) can resolve it.
       - type: rewrite
         source: /*
         destination: /index.html
