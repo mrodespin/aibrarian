@@ -1,24 +1,24 @@
 # /api/tests/conftest.py
 """
-Fixtures compartidas para todos los tests.
+Shared fixtures for all tests.
 
-pytest busca automáticamente fixtures en conftest.py y las hace
-disponibles para todos los archivos de test sin necesidad de importarlas.
+pytest automatically looks for fixtures in conftest.py and makes them
+available to every test file with no need to import them.
 
-Fixtures principales:
-- mock_ollama: Mock del adaptador de Ollama (evita llamadas reales al LLM)
-- mock_chromadb: Mock de ChromaDB (evita llamadas reales a la BD vectorial)
-- test_client: Cliente de FastAPI para tests de API
-- sample_document: Documento de ejemplo para tests
+Main fixtures:
+- mock_ollama: Mock of the Ollama adapter (avoids real LLM calls)
+- mock_chromadb: Mock of ChromaDB (avoids real vector DB calls)
+- test_client: FastAPI client for API tests
+- sample_document: Sample document for tests
 """
 
 import os
 
-# JWT_SECRET_KEY debe existir ANTES de "from app.main import app": Settings()
-# se instancia al importar app.main (vía app.config.settings), y aunque
-# jwt_secret_key es Optional, los tests de auth necesitan un valor real
-# para firmar/verificar tokens. Fijamos uno de test aquí, antes de que
-# ningún otro import dispare la carga de settings.
+# JWT_SECRET_KEY must exist BEFORE "from app.main import app": Settings()
+# is instantiated when app.main is imported (via app.config.settings),
+# and even though jwt_secret_key is Optional, the auth tests need a real
+# value to sign/verify tokens. Set a test one here, before any other
+# import triggers loading settings.
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-not-for-prod")
 
 import bcrypt
@@ -33,21 +33,21 @@ from app.main import app
 
 
 # ============================================================================
-# FIXTURES DE DATOS DE PRUEBA
+# TEST DATA FIXTURES
 # ============================================================================
 
 @pytest.fixture
 def sample_document() -> Document:
     """
-    Documento de ejemplo para tests.
+    Sample document for tests.
 
     Returns:
-        Document con contenido de prueba sobre RAG
+        Document with sample content about RAG
     """
     return Document(
-        content="RAG es Retrieval-Augmented Generation. Es una técnica que combina "
-                "búsqueda de información con generación de texto usando LLMs. "
-                "Primero busca contexto relevante y luego genera una respuesta basada en ese contexto.",
+        content="RAG is Retrieval-Augmented Generation. It's a technique that combines "
+                "information retrieval with text generation using LLMs. "
+                "It first searches for relevant context and then generates an answer based on that context.",
         metadata={
             "source": "test_document.txt",
             "chunk_index": 0,
@@ -59,24 +59,24 @@ def sample_document() -> Document:
 @pytest.fixture
 def sample_chunks() -> List[Chunk]:
     """
-    Lista de chunks de ejemplo para tests de RAG.
+    List of sample chunks for RAG tests.
 
     Returns:
-        Lista de 3 chunks con contenido relacionado con RAG
+        A list of 3 chunks with RAG-related content
     """
     return [
         Chunk(
-            content="RAG es Retrieval-Augmented Generation. Es una técnica que combina búsqueda con LLMs.",
+            content="RAG is Retrieval-Augmented Generation. It's a technique that combines search with LLMs.",
             metadata={"source": "doc1.pdf", "page": 1},
-            embedding=[0.1, 0.2, 0.3]  # Embedding simplificado
+            embedding=[0.1, 0.2, 0.3]  # Simplified embedding
         ),
         Chunk(
-            content="Los embeddings son representaciones vectoriales de texto que capturan significado semántico.",
+            content="Embeddings are vector representations of text that capture semantic meaning.",
             metadata={"source": "doc2.pdf", "page": 2},
             embedding=[0.2, 0.3, 0.4]
         ),
         Chunk(
-            content="ChromaDB es una base de datos vectorial que permite búsqueda por similaridad.",
+            content="ChromaDB is a vector database that enables similarity search.",
             metadata={"source": "doc3.pdf", "page": 1},
             embedding=[0.3, 0.4, 0.5]
         )
@@ -85,27 +85,27 @@ def sample_chunks() -> List[Chunk]:
 
 @pytest.fixture
 def sample_query():
-    """Query de ejemplo para tests."""
+    """Sample query for tests."""
     from app.core.domain.models import Query
-    return Query(question="¿Qué es RAG?")
+    return Query(question="What is RAG?")
 
 
 @pytest.fixture
 def sample_query_response() -> QueryResult:
     """
-    Respuesta de ejemplo del RAG para tests.
+    Sample RAG response for tests.
 
     Returns:
-        QueryResult con respuesta simulada
+        QueryResult with a simulated answer
     """
     return QueryResult(
-        question="¿Qué es RAG?",
-        answer="RAG (Retrieval-Augmented Generation) es una técnica que combina "
-               "búsqueda de información relevante con generación de texto usando LLMs.",
+        question="What is RAG?",
+        answer="RAG (Retrieval-Augmented Generation) is a technique that combines "
+               "relevant information retrieval with text generation using LLMs.",
         source_documents=[
             SourceDocument(
                 document_id="doc1",
-                chunk_content="RAG es Retrieval-Augmented...",
+                chunk_content="RAG is Retrieval-Augmented...",
                 metadata={"source": "doc1.pdf", "page": 1},
                 relevance_score=0.95
             )
@@ -115,24 +115,24 @@ def sample_query_response() -> QueryResult:
 
 
 # ============================================================================
-# FIXTURES DE MOCKS DE SERVICIOS
+# SERVICE MOCK FIXTURES
 # ============================================================================
 
 @pytest.fixture
 def mock_ollama():
     """
-    Mock del adaptador de Ollama para evitar llamadas reales al LLM.
+    Mock of the Ollama adapter to avoid real LLM calls.
 
-    Simula:
-    - generate_response(): Genera respuestas de texto
-    - generate_embedding(): Genera embeddings
+    Simulates:
+    - generate_response(): Generates text responses
+    - generate_embedding(): Generates embeddings
 
     Returns:
-        Mock del OllamaAdapter configurado
+        A configured Mock of OllamaAdapter
     """
     mock = Mock()
 
-    # Mock de generate_response (respuestas del LLM)
+    # Mock of generate_response (LLM answers)
     async def mock_generate_response(
         prompt: str,
         context: Optional[str] = None,
@@ -142,11 +142,11 @@ def mock_ollama():
         **kwargs
     ) -> str:
         if context:
-            return f"Basándome en el contexto proporcionado, {prompt[:50]}"
-        return "Esta es una respuesta simulada del LLM para el prompt: " + prompt[:50]
+            return f"Based on the provided context, {prompt[:50]}"
+        return "This is a simulated LLM response for the prompt: " + prompt[:50]
 
-    # Mock de stream_response (misma respuesta que mock_generate_response,
-    # pero troceada palabra a palabra para simular streaming real)
+    # Mock of stream_response (same answer as mock_generate_response, but
+    # chunked word by word to simulate real streaming)
     async def mock_stream_response(
         prompt: str,
         context: Optional[str] = None,
@@ -159,39 +159,39 @@ def mock_ollama():
         for word in full_response.split(" "):
             yield word + " "
 
-    # Mock de generate_embedding (vectorización)
+    # Mock of generate_embedding (vectorization)
     async def mock_embedding(text: str) -> List[float]:
-        # Retorna un embedding simple basado en el hash del texto
-        # En producción, Ollama retorna vectores de 768-4096 dimensiones
+        # Returns a simple embedding based on the text's hash
+        # In production, Ollama returns 768-4096 dimension vectors
         return [float(hash(text) % 100) / 100.0 for _ in range(10)]
 
-    # Mock de generate_embeddings_batch (vectorización en batch)
+    # Mock of generate_embeddings_batch (batch vectorization)
     async def mock_embeddings_batch(texts: List[str]) -> List[List[float]]:
-        # Retorna un embedding por cada texto
+        # Returns one embedding per text
         return [await mock_embedding(text) for text in texts]
 
-    # Mock de extract_keywords (Query Expansion)
+    # Mock of extract_keywords (Query Expansion)
     async def mock_extract_keywords(question: str) -> List[str]:
-        # Extrae palabras simples de la pregunta como keywords
-        # En producción, el LLM extrae entidades y nombres propios
-        words = question.replace("¿", "").replace("?", "").split()
-        # Filtra palabras cortas y de pregunta
-        stopwords = {"qué", "es", "cómo", "cuál", "quién", "dónde", "por", "para", "el", "la", "los", "las", "un", "una"}
+        # Extracts simple words from the question as keywords
+        # In production, the LLM extracts entities and proper nouns
+        words = question.replace("?", "").split()
+        # Filter out short words and question words
+        stopwords = {"what", "is", "how", "which", "who", "where", "for", "the", "a", "an", "of", "are"}
         keywords = [w for w in words if len(w) > 2 and w.lower() not in stopwords]
-        return keywords[:3]  # Máximo 3 keywords
+        return keywords[:3]  # Max 3 keywords
 
     mock.generate_response = AsyncMock(side_effect=mock_generate_response)
     mock.stream_response = mock_stream_response  # async generator, no AsyncMock wrapper
     mock.generate_embedding = AsyncMock(side_effect=mock_embedding)
     mock.generate_embeddings_batch = AsyncMock(side_effect=mock_embeddings_batch)
     mock.extract_keywords = AsyncMock(side_effect=mock_extract_keywords)
-    # Default: ninguna pregunta es "de catálogo" — los tests que quieran
-    # ejercitar ese camino sobreescriben esto explícitamente
+    # Default: no question is "a catalog question" — tests that want to
+    # exercise that path override this explicitly
     # (mock_ollama.is_catalog_question = AsyncMock(return_value=True)),
-    # ver RAGService.ask_question / test_rag_service.py.
+    # see RAGService.ask_question / test_rag_service.py.
     mock.is_catalog_question = AsyncMock(return_value=False)
-    # Default: no hay nada que condensar — devuelve la pregunta tal cual.
-    # Los tests que quieran comprobar el condensado real sobreescriben esto
+    # Default: nothing to condense — returns the question as-is.
+    # Tests that want to check real condensing override this
     # (mock_ollama.condense_question = AsyncMock(return_value="..."))
     mock.condense_question = AsyncMock(side_effect=lambda question, history: question)
 
@@ -201,23 +201,23 @@ def mock_ollama():
 @pytest.fixture
 def mock_chromadb():
     """
-    Mock del adaptador de ChromaDB para evitar llamadas reales a la BD vectorial.
+    Mock of the ChromaDB adapter to avoid real vector DB calls.
 
-    Simula:
-    - store_chunks(): Añade documentos (no hace nada en tests)
-    - similarity_search(): Retorna SourceDocuments de ejemplo
-    - get_collection_stats(): Retorna estadísticas simuladas
+    Simulates:
+    - store_chunks(): Adds documents (does nothing in tests)
+    - similarity_search(): Returns sample SourceDocuments
+    - get_collection_stats(): Returns simulated statistics
 
     Returns:
-        Mock del ChromaDBAdapter configurado
+        A configured Mock of ChromaDBAdapter
     """
     mock = Mock()
 
-    # Mock de store_chunks
+    # Mock of store_chunks
     async def mock_store(chunks: List[Chunk], collection_name: str = "documents") -> bool:
-        return True  # Simula que almacenó correctamente
+        return True  # Simulates a successful store
 
-    # Mock de similarity_search (búsqueda por similaridad con Query Expansion)
+    # Mock of similarity_search (similarity search with Query Expansion)
     async def mock_similarity_search(
         query_embedding: List[float],
         collection_name: str = "documents",
@@ -225,24 +225,24 @@ def mock_chromadb():
         filter_metadata: Optional[Dict] = None,
         keyword_filter: Optional[str] = None
     ) -> List[SourceDocument]:
-        # Retorna SourceDocuments de ejemplo independientemente de la query
-        # Si hay keyword_filter, simula que filtra (en tests siempre devuelve resultados)
+        # Returns sample SourceDocuments regardless of the query
+        # If there's a keyword_filter, simulates filtering (in tests it always returns results)
         return [
             SourceDocument(
                 document_id="doc_001",
-                chunk_content="RAG combina búsqueda con generación de texto.",
+                chunk_content="RAG combines search with text generation.",
                 metadata={"source": "test.pdf", "page": 1},
                 relevance_score=0.95
             ),
             SourceDocument(
                 document_id="doc_001",
-                chunk_content="Los LLMs son modelos de lenguaje grandes.",
+                chunk_content="LLMs are large language models.",
                 metadata={"source": "test.pdf", "page": 2},
                 relevance_score=0.87
             )
-        ][:top_k]  # Respetar el límite top_k
+        ][:top_k]  # Respect the top_k limit
 
-    # Mock de get_collection_stats
+    # Mock of get_collection_stats
     async def mock_stats(collection_name: str = "documents") -> dict:
         return {
             "count": 50,
@@ -250,7 +250,7 @@ def mock_chromadb():
             "collection_name": collection_name
         }
 
-    # Mock de list_documents (catálogo completo, no pasa por similarity_search)
+    # Mock of list_documents (full catalog, doesn't go through similarity_search)
     async def mock_list_documents(collection_name: str = "documents") -> List[DocumentSummary]:
         return [
             DocumentSummary(document_id="doc_001", title="1984", source="notion", chunk_count=3),
@@ -268,12 +268,12 @@ def mock_chromadb():
 @pytest.fixture
 def mock_pdf_processor():
     """
-    Mock del procesador de PDFs.
+    Mock of the PDF processor.
 
-    Simula la extracción de texto de un PDF sin necesidad de archivos reales.
+    Simulates extracting text from a PDF without needing real files.
 
     Returns:
-        Mock del PDFProcessorAdapter configurado
+        A configured Mock of PDFProcessorAdapter
     """
     mock = Mock()
 
@@ -283,25 +283,25 @@ def mock_pdf_processor():
         chunk_overlap: int = 200
     ) -> tuple:
         from app.core.domain.models import DocumentSource
-        # Crear documento mockeado
+        # Create the mocked document
         document = Document(
             id="test_doc_001",
             source=DocumentSource.PDF,
-            content=f"Contenido extraído del PDF: {source}",
+            content=f"Content extracted from the PDF: {source}",
             metadata={"source": source, "pages": 1}
         )
-        # Crear chunks mockeados
+        # Create mocked chunks
         chunks = [
             Chunk(
                 id="chunk_001",
                 document_id="test_doc_001",
-                content="Primer chunk del documento",
+                content="First chunk of the document",
                 metadata={"page": 1, "position": 0}
             ),
             Chunk(
                 id="chunk_002",
                 document_id="test_doc_001",
-                content="Segundo chunk del documento",
+                content="Second chunk of the document",
                 metadata={"page": 1, "position": 1}
             )
         ]
@@ -313,20 +313,20 @@ def mock_pdf_processor():
 
 
 # ============================================================================
-# FIXTURES DE SERVICIOS CON MOCKS
+# MOCKED-SERVICE FIXTURES
 # ============================================================================
 
 @pytest.fixture
 def rag_service_with_mocks(mock_ollama, mock_chromadb):
     """
-    RAGService configurado con mocks para tests unitarios.
+    RAGService configured with mocks for unit tests.
 
     Args:
-        mock_ollama: Mock del adaptador Ollama
-        mock_chromadb: Mock del adaptador ChromaDB
+        mock_ollama: Mock of the Ollama adapter
+        mock_chromadb: Mock of the ChromaDB adapter
 
     Returns:
-        RAGService configurado con dependencias mockeadas
+        RAGService configured with mocked dependencies
     """
     from app.core.services.rag_service import RAGService
 
@@ -339,15 +339,15 @@ def rag_service_with_mocks(mock_ollama, mock_chromadb):
 @pytest.fixture
 def sync_service_with_mocks(mock_ollama, mock_chromadb, mock_pdf_processor):
     """
-    SyncService configurado con mocks para tests unitarios.
+    SyncService configured with mocks for unit tests.
 
     Args:
-        mock_ollama: Mock del adaptador Ollama
-        mock_chromadb: Mock del adaptador ChromaDB
-        mock_pdf_processor: Mock del procesador PDF
+        mock_ollama: Mock of the Ollama adapter
+        mock_chromadb: Mock of the ChromaDB adapter
+        mock_pdf_processor: Mock of the PDF processor
 
     Returns:
-        SyncService configurado con dependencias mockeadas
+        SyncService configured with mocked dependencies
     """
     from app.core.services.sync_service import SyncService
 
@@ -359,12 +359,12 @@ def sync_service_with_mocks(mock_ollama, mock_chromadb, mock_pdf_processor):
 
 
 # ============================================================================
-# FIXTURES DE AUTENTICACIÓN
+# AUTHENTICATION FIXTURES
 # ============================================================================
 
-# Hash bcrypt precalculado de "testpass123", usado por mock_user_repository.
-# Se calcula una sola vez a nivel de módulo (bcrypt.hashpw es relativamente
-# lento) y se reutiliza en todos los tests que necesiten un login válido.
+# Precomputed bcrypt hash of "testpass123", used by mock_user_repository.
+# Computed once at module scope (bcrypt.hashpw is relatively slow) and
+# reused by every test that needs a valid login.
 TEST_USER_PASSWORD = "testpass123"
 TEST_USER_PASSWORD_HASH = bcrypt.hashpw(TEST_USER_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
@@ -372,10 +372,10 @@ TEST_USER_PASSWORD_HASH = bcrypt.hashpw(TEST_USER_PASSWORD.encode("utf-8"), bcry
 @pytest.fixture
 def mock_user_repository():
     """
-    Mock de UserRepositoryPort para tests unitarios de AuthService.
+    Mock of UserRepositoryPort for AuthService unit tests.
 
-    Simula un único usuario existente: test@example.com / testpass123
-    (TEST_USER_PASSWORD / TEST_USER_PASSWORD_HASH de arriba).
+    Simulates a single existing user: test@example.com / testpass123
+    (TEST_USER_PASSWORD / TEST_USER_PASSWORD_HASH above).
     """
     mock = Mock()
 
@@ -400,23 +400,23 @@ def mock_user_repository():
 
 @pytest.fixture
 def auth_service_with_mocks(mock_user_repository):
-    """AuthService configurado con un UserRepositoryPort mockeado."""
+    """AuthService configured with a mocked UserRepositoryPort."""
     from app.core.services.auth_service import AuthService
 
     return AuthService(user_repository=mock_user_repository)
 
 
 # ============================================================================
-# FIXTURES DE HISTORIAL DE CONVERSACIÓN
+# CONVERSATION HISTORY FIXTURES
 # ============================================================================
 
 @pytest.fixture
 def mock_conversation_repository():
     """
-    Mock de ConversationRepositoryPort para tests unitarios de ConversationService.
+    Mock of ConversationRepositoryPort for ConversationService unit tests.
 
-    Simula un almacén en memoria simple: append_message() guarda en un
-    dict interno (keyed por session_id), get_recent_messages() lo lee.
+    Simulates a simple in-memory store: append_message() saves into an
+    internal dict (keyed by session_id), get_recent_messages() reads from it.
     """
     from app.core.domain.models import ConversationMessage
 
@@ -433,42 +433,42 @@ def mock_conversation_repository():
 
     mock.append_message = AsyncMock(side_effect=mock_append_message)
     mock.get_recent_messages = AsyncMock(side_effect=mock_get_recent_messages)
-    mock._storage = storage  # expuesto para inspección directa en tests
+    mock._storage = storage  # exposed for direct inspection in tests
 
     return mock
 
 
 @pytest.fixture
 def conversation_service_with_mocks(mock_conversation_repository):
-    """ConversationService configurado con un ConversationRepositoryPort mockeado."""
+    """ConversationService configured with a mocked ConversationRepositoryPort."""
     from app.core.services.conversation_service import ConversationService
 
     return ConversationService(conversation_repository=mock_conversation_repository)
 
 
 # ============================================================================
-# FIXTURES DE FASTAPI TEST CLIENT
+# FASTAPI TEST CLIENT FIXTURES
 # ============================================================================
 
 @pytest.fixture
 def test_client():
     """
-    Cliente de test de FastAPI, YA AUTENTICADO.
+    FastAPI test client, ALREADY AUTHENTICATED.
 
-    Permite hacer requests HTTP a la API sin necesidad de levantar un servidor.
-    Todos los tests que usan este fixture (test_api.py, test_notion_service.py,
-    etc.) fueron escritos antes de que existiera autenticación y verifican
-    lógica de negocio (validación, códigos de error específicos), no el
-    login en sí — así que se sobreescribe get_current_user con un usuario
-    de prueba para que sigan probando lo que probaban antes.
+    Lets you make HTTP requests to the API without spinning up a real
+    server. Every test using this fixture (test_api.py,
+    test_notion_service.py, etc.) was written before authentication
+    existed and checks business logic (validation, specific error
+    codes), not login itself — so get_current_user is overridden with a
+    test user so they keep testing what they tested before.
 
-    Los tests que SÍ quieren probar la autenticación (test_auth_endpoints.py)
-    usan su propio fixture `client`, sin este override.
+    Tests that DO want to exercise authentication (test_auth_endpoints.py)
+    use their own `client` fixture, without this override.
 
     Returns:
-        TestClient configurado con la app de FastAPI
+        TestClient configured with the FastAPI app
 
-    Uso:
+    Usage:
         def test_endpoint(test_client):
             response = test_client.get("/health")
             assert response.status_code == 200
@@ -482,17 +482,17 @@ def test_client():
 
 
 # ============================================================================
-# HOOKS DE PYTEST (setup/teardown)
+# PYTEST HOOKS (setup/teardown)
 # ============================================================================
 
 @pytest.fixture(autouse=True)
 def reset_mocks():
     """
-    Fixture que se ejecuta automáticamente antes de cada test.
+    Fixture that runs automatically before every test.
 
-    Resetea el estado de los mocks para evitar contaminación entre tests.
-    autouse=True significa que se aplica automáticamente a todos los tests.
+    Resets mock state to avoid contamination between tests.
+    autouse=True means it's applied automatically to every test.
     """
-    yield  # El test se ejecuta aquí
-    # Después del test, cualquier cleanup si fuera necesario
+    yield  # The test runs here
+    # After the test, any cleanup if needed
     pass
