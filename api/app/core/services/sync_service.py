@@ -1,22 +1,22 @@
 # /api/app/core/services/sync_service.py
 """
-Servicio de Sincronización de Documentos - TFM Bibliotecario-IA
+Document Sync Service - Bibliotecario-IA
 
-Este servicio ORQUESTA el pipeline de ingesta de documentos.
-Es el "director de orquesta" que coordina los tres puertos:
-1. DocumentProcessorPort → Carga y divide documentos
-2. LLMPort → Genera embeddings (vectores)
-3. VectorDBPort → Almacena en ChromaDB
+This service ORCHESTRATES the document ingestion pipeline. It's the
+"conductor" that coordinates the three ports:
+1. DocumentProcessorPort → Loads and splits documents
+2. LLMPort → Generates embeddings (vectors)
+3. VectorDBPort → Stores them in ChromaDB
 
-Pipeline de ingesta:
+Ingestion pipeline:
     PDF/Notion → load → chunks → embeddings → ChromaDB
 
-¿Por qué un servicio separado?
-- Separa la lógica de negocio de los adaptadores
-- Facilita testing (puedes mockear los puertos)
-- Cumple con el principio de responsabilidad única (SRP)
+Why a separate service?
+- Separates business logic from the adapters
+- Makes testing easier (you can mock the ports)
+- Follows the Single Responsibility Principle (SRP)
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     class SyncService {
         constructor(
             private documentProcessor: DocumentProcessorPort,
@@ -29,7 +29,7 @@ Equivalente en TypeScript:
         async deleteDocument(docId: string): Promise<boolean> { ... }
     }
 
-Endpoints que usan este servicio:
+Endpoints that use this service:
 - POST /sync → sync_document_from_file()
 - POST /sync/directory → sync_directory()
 - DELETE /documents/{id} → delete_document()
@@ -38,41 +38,41 @@ Endpoints que usan este servicio:
 # ============================================================================
 # IMPORTS
 # ============================================================================
-import logging  # Sistema de logs de Python (como winston/pino en Node.js)
-import time     # Para medir tiempos de procesamiento
-from pathlib import Path  # Manejo de rutas de archivos (como path en Node.js)
+import logging  # Python's logging system (like winston/pino in Node.js)
+import time     # For measuring processing time
+from pathlib import Path  # File path handling (like path in Node.js)
 from typing import Optional
 
-# Importamos los PUERTOS (interfaces), no las implementaciones
-# Esto es clave para la arquitectura hexagonal
+# We import the PORTS (interfaces), not the implementations
+# This is key to hexagonal architecture
 from app.core.ports.document_processor_port import DocumentProcessorPort
 from app.core.ports.llm_port import LLMPort
 from app.core.ports.vector_db_port import VectorDBPort
 from app.core.domain.models import SyncResult, Chunk
-from app.config.settings import settings  # Configuración centralizada
+from app.config.settings import settings  # Centralized configuration
 
 
-# Configuración del logger para este módulo
-# __name__ = "app.core.services.sync_service" (útil para filtrar logs)
+# Logger configuration for this module
+# __name__ = "app.core.services.sync_service" (useful for filtering logs)
 logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# SERVICIO DE SINCRONIZACIÓN
+# SYNC SERVICE
 # ============================================================================
 class SyncService:
     """
-    Servicio para sincronizar documentos en la base de datos vectorial.
+    Service for syncing documents into the vector database.
 
-    Este servicio implementa el patrón de INYECCIÓN DE DEPENDENCIAS:
-    - Recibe interfaces (puertos) en el constructor
-    - NO crea las implementaciones directamente
-    - Permite cambiar ChromaDB por Pinecone sin modificar este código
+    This service implements the DEPENDENCY INJECTION pattern:
+    - Receives interfaces (ports) in the constructor
+    - Does NOT create the implementations directly
+    - Lets you swap ChromaDB for Pinecone without modifying this code
 
-    Responsabilidades:
-    1. Orquestar el pipeline de ingesta
-    2. Manejar errores y devolver resultados estructurados
-    3. Logging de operaciones para debugging
+    Responsibilities:
+    1. Orchestrate the ingestion pipeline
+    2. Handle errors and return structured results
+    3. Log operations for debugging
     """
 
     def __init__(
@@ -82,28 +82,28 @@ class SyncService:
         vector_db: VectorDBPort
     ):
         """
-        Inicializa el servicio con las dependencias requeridas.
+        Initializes the service with its required dependencies.
 
-        PATRÓN: Inyección de Dependencias (Dependency Injection)
+        PATTERN: Dependency Injection
 
-        En lugar de crear las dependencias dentro de la clase:
-            self.vector_db = ChromaDBAdapter()  # ❌ Acoplado
+        Instead of creating the dependencies inside the class:
+            self.vector_db = ChromaDBAdapter()  # ❌ Coupled
 
-        Las recibimos como parámetros:
-            self.vector_db = vector_db  # ✅ Desacoplado
+        We receive them as parameters:
+            self.vector_db = vector_db  # ✅ Decoupled
 
-        Esto permite:
-        - Cambiar implementaciones sin modificar el servicio
-        - Testing con mocks/stubs
-        - Configuración flexible por entorno
+        This enables:
+        - Swapping implementations without modifying the service
+        - Testing with mocks/stubs
+        - Flexible per-environment configuration
 
         Args:
-            document_processor: Adaptador para procesar documentos (PDF, Notion)
-                              Implementa DocumentProcessorPort
-            llm: Adaptador del modelo de lenguaje (Ollama)
-                Implementa LLMPort
-            vector_db: Adaptador de base de datos vectorial (ChromaDB)
-                      Implementa VectorDBPort
+            document_processor: Adapter for processing documents (PDF, Notion)
+                              Implements DocumentProcessorPort
+            llm: Language model adapter (Ollama)
+                Implements LLMPort
+            vector_db: Vector database adapter (ChromaDB)
+                      Implements VectorDBPort
         """
         self.document_processor = document_processor
         self.llm = llm
@@ -115,64 +115,64 @@ class SyncService:
         collection_name: Optional[str] = None
     ) -> SyncResult:
         """
-        Sincroniza un documento desde un archivo a la base de datos vectorial.
+        Syncs a document from a file into the vector database.
 
-        ESTE ES EL MÉTODO PRINCIPAL DEL MVP.
-        Ejecuta el pipeline completo de ingesta:
+        THIS IS THE MVP'S MAIN METHOD.
+        Runs the full ingestion pipeline:
 
         Pipeline:
             ① process_document() → Document + [Chunk, Chunk, ...]
             ② generate_embeddings_batch() → [embedding, embedding, ...]
-            ③ store_chunks() → Almacenado en ChromaDB
+            ③ store_chunks() → Stored in ChromaDB
 
         Args:
-            file_path: Ruta al archivo (PDF, etc.)
-                      Ejemplo: "/data/manual.pdf" o Path("/data/manual.pdf")
-            collection_name: Nombre de la colección en ChromaDB (opcional)
-                           Si no se especifica, usa el valor de settings
+            file_path: Path to the file (PDF, etc.)
+                      Example: "/data/manual.pdf" or Path("/data/manual.pdf")
+            collection_name: ChromaDB collection name (optional)
+                           If not given, uses the value from settings
 
         Returns:
-            SyncResult: Resultado estructurado con:
-                - document_id: ID del documento procesado
-                - chunks_created: Número de chunks generados
+            SyncResult: Structured result with:
+                - document_id: ID of the processed document
+                - chunks_created: Number of chunks generated
                 - success: True/False
-                - message: Mensaje informativo o de error
-                - processing_time: Tiempo total en segundos
+                - message: Informational or error message
+                - processing_time: Total time in seconds
 
-        Ejemplo de uso:
+        Usage example:
             result = await sync_service.sync_document_from_file("/data/manual.pdf")
             if result.success:
-                print(f"Creados {result.chunks_created} chunks")
+                print(f"Created {result.chunks_created} chunks")
             else:
                 print(f"Error: {result.message}")
         """
-        # time.time() devuelve timestamp Unix (segundos desde 1970)
-        # Lo usamos para medir cuánto tarda el proceso
+        # time.time() returns a Unix timestamp (seconds since 1970)
+        # We use it to measure how long the process takes
         start_time = time.time()
 
-        # Operador "or" para valores por defecto
-        # Si collection_name es None, usa el valor de settings
-        # Equivalente JS: const collection = collectionName || settings.chromadbCollectionName
+        # "or" operator for default values
+        # If collection_name is None, use the value from settings
+        # JS equivalent: const collection = collectionName || settings.chromadbCollectionName
         collection = collection_name or settings.chromadb_collection_name
 
         try:
-            # Logging informativo para debugging
-            # f-string: f"texto {variable}" es como `texto ${variable}` en JS
+            # Informational logging for debugging
+            # f-string: f"text {variable}" is like `text ${variable}` in JS
             logger.info(f"Starting sync for file: {file_path}")
 
             # ================================================================
-            # PASO 1 y 2: Cargar documento y dividir en chunks
+            # STEPS 1 and 2: Load the document and split it into chunks
             # ================================================================
-            # process_document() combina load_document() + split_into_chunks()
-            # Devuelve una tupla que "desempaquetamos" en dos variables
-            # En JS sería: const [document, chunks] = await ...
+            # process_document() combines load_document() + split_into_chunks()
+            # Returns a tuple that we "unpack" into two variables
+            # In JS this would be: const [document, chunks] = await ...
             document, chunks = await self.document_processor.process_document(
                 source=file_path,
-                chunk_size=settings.chunk_size,      # ~1000 caracteres
-                chunk_overlap=settings.chunk_overlap  # ~200 caracteres
+                chunk_size=settings.chunk_size,      # ~1000 characters
+                chunk_overlap=settings.chunk_overlap  # ~200 characters
             )
 
-            # Validación: si no hay chunks, el documento estaba vacío
+            # Validation: if there are no chunks, the document was empty
             if not chunks:
                 return SyncResult(
                     document_id=document.id,
@@ -185,25 +185,25 @@ class SyncService:
             logger.info(f"Created {len(chunks)} chunks from document {document.id}")
 
             # ================================================================
-            # PASO 3: Generar embeddings para todos los chunks
+            # STEP 3: Generate embeddings for all chunks
             # ================================================================
-            # List comprehension: extrae el contenido de cada chunk
-            # Equivalente JS: chunks.map(chunk => chunk.content)
+            # List comprehension: extracts the content of each chunk
+            # JS equivalent: chunks.map(chunk => chunk.content)
             chunk_texts = [chunk.content for chunk in chunks]
 
-            # Genera embeddings en batch (más eficiente que uno por uno)
+            # Generates embeddings in a batch (more efficient than one by one)
             embeddings = await self.llm.generate_embeddings_batch(chunk_texts)
 
-            # zip() combina dos listas elemento a elemento
+            # zip() combines two lists element by element
             # zip([A, B, C], [1, 2, 3]) → [(A,1), (B,2), (C,3)]
-            # Equivalente JS: chunks.forEach((chunk, i) => chunk.embedding = embeddings[i])
+            # JS equivalent: chunks.forEach((chunk, i) => chunk.embedding = embeddings[i])
             for chunk, embedding in zip(chunks, embeddings):
                 chunk.embedding = embedding
 
             logger.info(f"Generated embeddings for {len(chunks)} chunks")
 
             # ================================================================
-            # PASO 4: Almacenar chunks en la base de datos vectorial
+            # STEP 4: Store the chunks in the vector database
             # ================================================================
             success = await self.vector_db.store_chunks(
                 chunks=chunks,
@@ -219,11 +219,11 @@ class SyncService:
                     processing_time=time.time() - start_time
                 )
 
-            # Calcular tiempo total de procesamiento
+            # Compute total processing time
             processing_time = time.time() - start_time
 
-            # :.2f formatea el float con 2 decimales
-            # Ejemplo: 1.23456 → "1.23"
+            # :.2f formats the float with 2 decimal places
+            # Example: 1.23456 → "1.23"
             logger.info(
                 f"Successfully synced document {document.id} "
                 f"({len(chunks)} chunks) in {processing_time:.2f}s"
@@ -238,12 +238,12 @@ class SyncService:
             )
 
         except Exception as e:
-            # Capturamos cualquier error y lo devolvemos como SyncResult
-            # En lugar de lanzar la excepción, la "envolvemos" en un resultado
-            # Esto facilita el manejo en la API
+            # Catch any error and return it as a SyncResult
+            # Instead of raising the exception, we "wrap" it in a result
+            # This makes it easier to handle in the API
             error_msg = f"Failed to sync document: {str(e)}"
 
-            # exc_info=True incluye el stack trace completo en el log
+            # exc_info=True includes the full stack trace in the log
             logger.error(error_msg, exc_info=True)
 
             return SyncResult(
@@ -260,21 +260,21 @@ class SyncService:
         collection_name: Optional[str] = None
     ) -> list[SyncResult]:
         """
-        Sincroniza todos los documentos soportados de un directorio.
+        Syncs all supported documents in a directory.
 
-        Útil para ingestar múltiples PDFs de una vez.
-        Usado principalmente por el script CLI ingest_pdfs.py.
+        Useful for ingesting multiple PDFs at once.
+        Used mainly by the ingest_pdfs.py CLI script.
 
         Args:
-            directory_path: Ruta al directorio con documentos
-                          Ejemplo: "/data" o Path("/data")
-            collection_name: Colección destino (opcional)
+            directory_path: Path to the directory containing documents
+                          Example: "/data" or Path("/data")
+            collection_name: Target collection (optional)
 
         Returns:
-            list[SyncResult]: Lista de resultados, uno por cada documento
-                             Permite ver cuáles tuvieron éxito y cuáles fallaron
+            list[SyncResult]: List of results, one per document
+                             Lets you see which succeeded and which failed
 
-        Ejemplo:
+        Example:
             results = await sync_service.sync_directory("/data")
             for result in results:
                 if result.success:
@@ -282,27 +282,27 @@ class SyncService:
                 else:
                     print(f"✗ {result.message}")
         """
-        # Path() convierte string a objeto Path (más funcionalidades)
-        # Similar a path.resolve() en Node.js
+        # Path() converts a string into a Path object (more functionality)
+        # Similar to path.resolve() in Node.js
         directory = Path(directory_path)
 
-        # Validación: verificar que el directorio existe
-        # exists() y is_dir() son métodos de Path
+        # Validation: check that the directory exists
+        # exists() and is_dir() are Path methods
         if not directory.exists() or not directory.is_dir():
             logger.error(f"Directory not found: {directory}")
             return []
 
         results = []
 
-        # glob("*.pdf") busca todos los archivos que coincidan con el patrón
-        # Similar a glob.sync("*.pdf") en Node.js
-        # list() convierte el generador a lista
+        # glob("*.pdf") finds all files matching the pattern
+        # Similar to glob.sync("*.pdf") in Node.js
+        # list() converts the generator into a list
         pdf_files = list(directory.glob("*.pdf"))
 
         logger.info(f"Found {len(pdf_files)} PDF files in {directory}")
 
-        # Procesa cada PDF secuencialmente
-        # Nota: podría optimizarse con asyncio.gather() para procesamiento paralelo
+        # Processes each PDF sequentially
+        # Note: could be optimized with asyncio.gather() for parallel processing
         for pdf_file in pdf_files:
             result = await self.sync_document_from_file(
                 file_path=pdf_file,
@@ -310,9 +310,9 @@ class SyncService:
             )
             results.append(result)
 
-        # Contar éxitos usando generator expression
-        # sum(1 for r in results if r.success) cuenta cuántos tienen success=True
-        # Equivalente JS: results.filter(r => r.success).length
+        # Count successes using a generator expression
+        # sum(1 for r in results if r.success) counts how many have success=True
+        # JS equivalent: results.filter(r => r.success).length
         successful = sum(1 for r in results if r.success)
         logger.info(f"Synced {successful}/{len(results)} documents successfully")
 
@@ -324,45 +324,45 @@ class SyncService:
         collection_name: Optional[str] = None
     ) -> bool:
         """
-        Elimina un documento de la base de datos vectorial.
+        Deletes a document from the vector database.
 
-        Elimina TODOS los chunks asociados a ese document_id.
-        Útil para:
-        - Re-procesar un documento actualizado
-        - Eliminar documentos obsoletos
-        - Limpieza de datos
+        Deletes ALL chunks associated with that document_id.
+        Useful for:
+        - Reprocessing an updated document
+        - Removing stale documents
+        - Data cleanup
 
         Args:
-            document_id: ID del documento a eliminar
-                        Ejemplo: "doc_abc123"
-            collection_name: Colección donde está el documento (opcional)
+            document_id: ID of the document to delete
+                        Example: "doc_abc123"
+            collection_name: Collection the document is in (optional)
 
         Returns:
-            bool: True si se eliminó correctamente, False si hubo error
+            bool: True if deleted successfully, False on error
 
-        Ejemplo:
-            # Eliminar un documento
+        Example:
+            # Delete a document
             success = await sync_service.delete_document("doc_abc123")
 
-            # Re-ingestar después de actualizar el PDF
+            # Re-ingest after updating the PDF
             if success:
                 await sync_service.sync_document_from_file("/data/updated.pdf")
         """
         collection = collection_name or settings.chromadb_collection_name
 
         try:
-            # Delega la eliminación al adaptador de vector DB
+            # Delegate deletion to the vector DB adapter
             success = await self.vector_db.delete_document(
                 document_id=document_id,
                 collection_name=collection
             )
 
-            # Logging según resultado
+            # Logging based on the result
             if success:
                 logger.info(f"Deleted document {document_id} from collection '{collection}'")
             else:
-                # warning en lugar de error porque no es necesariamente un fallo
-                # (podría ser que el documento no existía)
+                # warning instead of error because it's not necessarily a failure
+                # (the document might simply not have existed)
                 logger.warning(f"Failed to delete document {document_id}")
 
             return success

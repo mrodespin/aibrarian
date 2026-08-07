@@ -1,21 +1,21 @@
 # /api/app/core/services/auth_service.py
 """
-Servicio de Autenticación - TFM Bibliotecario-IA
+Authentication Service - Bibliotecario-IA
 
-Verifica credenciales y emite/valida los JWT de sesión que protegen la
-API. Es el único servicio del proyecto sin UI de registro: los usuarios
-se dan de alta con scripts/create_user.py.
+Verifies credentials and issues/validates the session JWTs that protect
+the API. It's the only service in the project without a signup UI:
+users are created with scripts/create_user.py.
 
-Diferencia deliberada con RAGService/SyncService:
-Esos dos servicios NO lanzan excepciones — atrapan errores y devuelven
-un resultado de dominio con el error embebido (QueryResult.answer con un
-mensaje, SyncResult.success=False). Este servicio SÍ lanza excepciones
-(InvalidCredentialsError, InvalidTokenError). Es intencional: login es
-una decisión binaria de control de flujo (401 vs 200), no un pipeline
-degradable que pueda "responder con lo que haya" — main.py atrapa estas
-excepciones y las traduce a HTTPException.
+Deliberate difference from RAGService/SyncService:
+Those two services do NOT raise exceptions — they catch errors and
+return a domain result with the error embedded (QueryResult.answer with
+a message, SyncResult.success=False). This service DOES raise
+exceptions (InvalidCredentialsError, InvalidTokenError). That's
+intentional: login is a binary control-flow decision (401 vs 200), not
+a degradable pipeline that can "answer with whatever it has" — main.py
+catches these exceptions and translates them into an HTTPException.
 
-Equivalente en TypeScript:
+TypeScript equivalent:
     class AuthService {
         constructor(private userRepository: UserRepositoryPort) {}
         async authenticate(email: string, password: string): Promise<User> { ... }
@@ -39,22 +39,22 @@ logger = logging.getLogger(__name__)
 
 
 class InvalidCredentialsError(Exception):
-    """Email inexistente, contraseña incorrecta o usuario inactivo."""
+    """Nonexistent email, wrong password, or inactive user."""
     pass
 
 
 class InvalidTokenError(Exception):
-    """El JWT no es válido: firma incorrecta, formato inválido o expirado."""
+    """The JWT isn't valid: wrong signature, invalid format, or expired."""
     pass
 
 
 class TokenPayload(BaseModel):
     """
-    Datos que viajan dentro del JWT, ya decodificados.
+    Data carried inside the JWT, already decoded.
 
-    Es lo que get_current_user() (en main.py) recibe e inyecta en los
-    endpoints protegidos — deliberadamente NO es el User completo, así
-    password_hash nunca cruza a la capa de manejo de requests.
+    This is what get_current_user() (in main.py) receives and injects
+    into protected endpoints — deliberately NOT the full User, so
+    password_hash never crosses into the request-handling layer.
     """
     user_id: int
     email: str
@@ -62,11 +62,11 @@ class TokenPayload(BaseModel):
 
 class AuthService:
     """
-    Servicio de autenticación: verifica credenciales y gestiona JWT.
+    Authentication service: verifies credentials and manages JWTs.
 
-    Solo necesita un puerto (UserRepositoryPort) para consultar
-    usuarios. La emisión/validación de JWT no depende de ningún puerto
-    externo: es criptografía pura sobre settings.jwt_secret_key.
+    Only needs one port (UserRepositoryPort) to query users. Issuing/
+    validating JWTs doesn't depend on any external port: it's pure
+    cryptography over settings.jwt_secret_key.
     """
 
     def __init__(self, user_repository: UserRepositoryPort):
@@ -74,26 +74,26 @@ class AuthService:
 
     async def authenticate(self, email: str, password: str) -> User:
         """
-        Verifica email + contraseña.
+        Verifies email + password.
 
         Args:
-            email: Email introducido en el login
-            password: Contraseña en texto plano introducida en el login
+            email: Email entered at login
+            password: Plaintext password entered at login
 
         Returns:
-            User: el usuario autenticado
+            User: the authenticated user
 
         Raises:
-            InvalidCredentialsError: si el email no existe, la
-                contraseña no coincide o el usuario está inactivo.
-                Deliberadamente NO se distingue el motivo en la
-                excepción/mensaje de error hacia el cliente (evita dar
-                pistas de qué emails existen).
+            InvalidCredentialsError: if the email doesn't exist, the
+                password doesn't match, or the user is inactive.
+                Deliberately does NOT distinguish the reason in the
+                exception/error message sent to the client (avoids
+                leaking which emails exist).
 
-        Nota: los errores de conexión/DB de user_repository.get_by_email
-        NO se atrapan aquí — se propagan tal cual (ver AuthService y
-        UserRepositoryPort docstrings), para que main.py los traduzca a
-        500 y no a "credenciales inválidas".
+        Note: connection/DB errors from user_repository.get_by_email are
+        NOT caught here — they propagate as-is (see the AuthService and
+        UserRepositoryPort docstrings), so main.py translates them into
+        a 500 rather than "invalid credentials".
         """
         user = await self.user_repository.get_by_email(email)
         if user is None or not user.is_active:
@@ -106,19 +106,19 @@ class AuthService:
 
     def create_access_token(self, user: User) -> str:
         """
-        Genera un JWT firmado (HS256) para una sesión de usuario.
+        Generates a signed JWT (HS256) for a user session.
 
-        Claims incluidos:
-        - sub: id del usuario (como string, convención estándar de JWT)
-        - email: email del usuario (evita una consulta extra en cada
-          request para mostrar quién ha iniciado sesión)
-        - iat/exp: emisión y expiración (settings.jwt_expiration_minutes)
+        Included claims:
+        - sub: the user's id (as a string, standard JWT convention)
+        - email: the user's email (avoids an extra query on every
+          request to show who's logged in)
+        - iat/exp: issued-at and expiration (settings.jwt_expiration_minutes)
 
         Returns:
-            str: el JWT codificado, listo para meter en la cookie
+            str: the encoded JWT, ready to send in the Authorization header
         """
         if not settings.jwt_secret_key:
-            raise RuntimeError("JWT_SECRET_KEY no configurada. Necesaria para emitir sesiones.")
+            raise RuntimeError("JWT_SECRET_KEY not configured. Required to issue sessions.")
 
         now = datetime.now(timezone.utc)
         payload = {
@@ -131,14 +131,14 @@ class AuthService:
 
     def decode_access_token(self, token: str) -> TokenPayload:
         """
-        Valida y decodifica un JWT (firma + expiración).
+        Validates and decodes a JWT (signature + expiration).
 
         Raises:
-            InvalidTokenError: si la firma no coincide, el token ha
-                expirado o el formato es inválido.
+            InvalidTokenError: if the signature doesn't match, the token
+                has expired, or the format is invalid.
         """
         if not settings.jwt_secret_key:
-            raise RuntimeError("JWT_SECRET_KEY no configurada. Necesaria para validar sesiones.")
+            raise RuntimeError("JWT_SECRET_KEY not configured. Required to validate sessions.")
 
         try:
             payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])

@@ -40,7 +40,7 @@ async def test_get_history_prompt_block_empty_when_no_messages(conversation_serv
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_get_history_prompt_block_formats_turns(conversation_service_with_mocks):
-    """El bloque de historial formatea los turnos como 'Usuario:'/'Asistente:'."""
+    """The history block formats turns as 'User:'/'Assistant:'."""
     await conversation_service_with_mocks.append_turn(
         session_id="session-2",
         user_id=1,
@@ -50,8 +50,8 @@ async def test_get_history_prompt_block_formats_turns(conversation_service_with_
 
     block = await conversation_service_with_mocks.get_history_prompt_block("session-2", 1)
 
-    assert "Usuario: ¿Qué es RAG?" in block
-    assert "Asistente: RAG combina búsqueda con generación de texto." in block
+    assert "User: ¿Qué es RAG?" in block
+    assert "Assistant: RAG combina búsqueda con generación de texto." in block
 
 
 @pytest.mark.unit
