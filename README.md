@@ -1,184 +1,183 @@
 # 🤖 tfm-bibliotecario-ia
 
-![TFM](https://img.shields.io/badge/Proyecto-TFM_MDEV_IA-blue.svg)
-![Licencia](https://img.shields.io/badge/Licencia-MIT-green.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Tests](https://img.shields.io/badge/Tests-142_passed-brightgreen.svg)
 ![Coverage](https://img.shields.io/badge/Coverage-68%25-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)
 
-TFM que implementa un asistente RAG multiusuario ('Bibliotecario IA') para consultar documentos privados (PDFs y Notion), con LLM local (Ollama) o cloud (Groq), autenticación JWT y arquitectura hexagonal.
+A multi-user RAG assistant ("Bibliotecario IA") for querying private documents (PDFs and Notion), with a local (Ollama) or cloud (Groq) LLM, JWT authentication, and hexagonal architecture.
 
 ---
 
-## 📖 Descripción del Proyecto
+## 📖 Project Description
 
-**`bibliotecario-ia`** es un Trabajo Final de Máster que demuestra la implementación de un sistema RAG (Retrieval-Augmented Generation) de principio a fin, enfocado en la privacidad y la arquitectura de software desacoplada.
+**`bibliotecario-ia`** is a full end-to-end RAG (Retrieval-Augmented Generation) system, built with a focus on privacy and a decoupled software architecture.
 
-El objetivo es crear un *chatbot* capaz de responder preguntas sobre una base de conocimiento privada (PDFs locales y páginas de **Notion**). Gracias a la **Arquitectura Hexagonal**, el LLM y la base vectorial son intercambiables sin tocar la lógica de negocio: un modo 100% local (**Ollama** + ChromaDB) donde los datos sensibles nunca abandonan la máquina, y un modo cloud opcional (**Groq** + Chroma Cloud) para desplegar en Render sin depender de hardware local.
+The goal is a *chatbot* able to answer questions over a private knowledge base (local PDFs and **Notion** pages). Thanks to the **Hexagonal Architecture**, the LLM and the vector store are swappable without touching business logic: a 100% local mode (**Ollama** + ChromaDB) where sensitive data never leaves the machine, and an optional cloud mode (**Groq** + Chroma Cloud) for deploying on Render without depending on local hardware.
 
-El acceso está protegido con **autenticación JWT multiusuario** (token enviado en el header `Authorization`, sin registro público — los usuarios se dan de alta por CLI), necesaria para poder exponer el sistema fuera de `localhost` sin dejarlo abierto a cualquiera.
+Access is protected by **multi-user JWT authentication** (token sent in the `Authorization` header, no public signup — users are created via CLI), needed to expose the system outside `localhost` without leaving it open to anyone.
 
 ---
 
-## ✨ Funcionalidades Principales
+## ✨ Main Features
 
-### 🔄 Ingesta Multi-fuente
-- **PDFs Locales**: Upload desde navegador con drag & drop o sincronización masiva vía CLI
-- **Notion API**: Sincronización de páginas individuales y bases de datos completas
-- **Extracción Automática**: Propiedades de bases de datos Notion (title, rich_text, number, select, etc.)
-- **Detección de Título Robusta**: identifica la propiedad título de una página de Notion por su `type`, no por el nombre de la columna — funciona con cualquier esquema de base de datos, no solo con el nombre de columna usado durante el desarrollo original
-- **Sincronización Resiliente**: al sincronizar una base de datos completa de Notion, el fallo de una página aislada (timeout, error del backend de embeddings, etc.) no aborta el resto — se registra como fallo puntual y la sincronización continúa con las páginas siguientes
+### 🔄 Multi-source Ingestion
+- **Local PDFs**: browser upload with drag & drop, or bulk sync via CLI
+- **Notion API**: sync of individual pages and full databases
+- **Automatic Extraction**: Notion database properties (title, rich_text, number, select, etc.)
+- **Robust Title Detection**: identifies a Notion page's title property by its `type`, not by column name — works with any database schema, not just the column name used during original development
+- **Resilient Sync**: when syncing a full Notion database, a single page failing (timeout, embedding-backend error, etc.) doesn't abort the rest — it's logged as an isolated failure and the sync continues with the remaining pages
 
-### 🧠 Sistema RAG Avanzado
-- **Búsqueda Híbrida**: Combinación de búsqueda semántica + keywords extraídos (Query Expansion, implementación propia)
-- **Filtro de Relevancia**: Umbral mínimo de similitud (`min_relevance_score`) — descarta chunks poco relevantes antes de generar, en vez de forzar al LLM a responder con contexto irrelevante
-- **LLM Intercambiable**: Ollama local (`llama3.2`, privacidad total) o Groq cloud (`openai/gpt-oss-120b`, para despliegues sin GPU local) — mismo código, se elige por variable de entorno
-- **Respuestas en Streaming**: Server-Sent Events (`POST /ask/stream`) — la respuesta se muestra token a token en vez de esperar a tenerla completa
-- **Historial de Conversación**: Contexto entre preguntas (Postgres), permite preguntas de seguimiento ("¿puedes ampliar eso?")
-- **Query Rewriting**: una pregunta de seguimiento corta y sin nombres propios ("¿cuántas páginas tiene?", justo después de hablar de un libro) se reescribe primero como pregunta autocontenida usando el historial ("¿cuántas páginas tiene *ese libro*?") antes de buscar — mismo patrón que `create_history_aware_retriever` de LangChain. Sin esto, ese tipo de pregunta o no encontraba nada relevante, o (peor) encontraba un chunk de otro documento con score suficiente para colar una respuesta segura pero incorrecta
-- **Respuestas Contextualizadas**: Citas con referencias a documentos fuente
-- **Prompt Engineering**: Instrucciones estrictas para evitar alucinaciones
-- **Preguntas sobre el Catálogo, sin Alucinar**: preguntas tipo "¿cuántos documentos conoces?" no se resuelven con búsqueda semántica top-k (que nunca puede garantizar cubrir el catálogo completo) — un LLM clasifica la intención de la pregunta (independiente del idioma) y, si es agregada, se responde listando el catálogo real vía metadatos, no generando texto
-- **Evaluación de Calidad**: Harness de RAGAS (faithfulness, answer relevancy, context precision) contra un dataset de referencia — `pytest -m eval`
+### 🧠 Advanced RAG System
+- **Hybrid Search**: semantic search combined with extracted keywords (Query Expansion, a custom implementation)
+- **Relevance Filtering**: a minimum similarity threshold (`min_relevance_score`) — discards low-relevance chunks before generation, instead of forcing the LLM to answer with irrelevant context
+- **Swappable LLM**: local Ollama (`llama3.2`, total privacy) or cloud Groq (`openai/gpt-oss-120b`, for deployments with no local GPU) — same code, chosen via an environment variable
+- **Streaming Responses**: Server-Sent Events (`POST /ask/stream`) — the answer is shown token by token instead of waiting for the full response
+- **Conversation History**: context across questions (Postgres), enabling follow-up questions ("can you expand on that?")
+- **Query Rewriting**: a short follow-up question with no proper nouns ("how many pages does it have?", right after discussing a book) is first rewritten as a self-contained question using the history ("how many pages does *that book* have?") before searching — same pattern as LangChain's `create_history_aware_retriever`. Without this, that kind of question either found nothing relevant or (worse) found a chunk from a different document with a high enough score to slip in a confident but wrong answer
+- **Contextualized Answers**: citations referencing source documents
+- **Prompt Engineering**: strict instructions to prevent hallucinations
+- **Catalog Questions, Without Hallucinating**: questions like "how many documents do you know about?" aren't resolved with top-k semantic search (which can never guarantee covering the whole catalog) — an LLM classifies the question's intent (language-independent) and, if it's an aggregate question, the answer is built by listing the actual catalog via metadata, not by generating text
+- **Quality Evaluation**: a RAGAS harness (faithfulness, answer relevancy, context precision) against a reference dataset — `pytest -m eval`
 
-### 🎨 Interfaz de Usuario
-- **Chat Conversacional**: Interfaz intuitiva con historial de conversación
-- **Panel de Sincronización**: Gestión visual de documentos con estadísticas en tiempo real
-- **Explorador de Documentos**: listado con buscador de todo lo indexado (título, fuente, nº de chunks) y borrado directo, sin depender de que el chat sepa responder bien preguntas de tipo "qué tienes indexado"
-- **Dark Mode**: Diseño moderno con Tailwind CSS v4
-- **Responsive**: Adaptable a móvil y desktop
+### 🎨 User Interface
+- **Conversational Chat**: an intuitive interface with conversation history
+- **Sync Panel**: visual document management with real-time statistics
+- **Document Browser**: a searchable list of everything indexed (title, source, chunk count) with direct deletion, without depending on the chat correctly answering "what do you have indexed"-style questions
+- **Dark Mode**: modern design with Tailwind CSS v4
+- **Responsive**: works on mobile and desktop
 
-### 🔐 Autenticación y Seguridad
-- **Multiusuario vía JWT**: sesión de 24h, token en localStorage enviado como header `Authorization: Bearer` (no cookie — evita el bloqueo de cookies cross-site del ITP de Safari cuando frontend y API viven en dominios distintos)
-- **Alta de usuarios por CLI**: sin registro público — `scripts/create_user.py`, contraseña vía `getpass`
-- **Endpoints protegidos**: todos salvo los healthchecks públicos requeridos por el despliegue
-- **Persistencia en Postgres**: Neon en producción, contenedor local en desarrollo (`docker-compose`)
+### 🔐 Authentication and Security
+- **Multi-user via JWT**: 24h session, token in localStorage sent as an `Authorization: Bearer` header (not a cookie — avoids Safari ITP blocking cross-site cookies when the frontend and API live on different domains)
+- **CLI User Creation**: no public signup — `scripts/create_user.py`, password via `getpass`
+- **Protected Endpoints**: everything except the public healthchecks the deployment needs
+- **Postgres Persistence**: Neon in production, a local container in development (`docker-compose`)
 
-### 📊 Observabilidad Integral
-- **Logging Estructurado**: Structlog con formato JSON para parsing automático
-- **Métricas Prometheus**: 8+ métricas clave (latencias, requests, operaciones LLM)
-- **Health Checks**: Monitoreo de estado de API, Ollama y ChromaDB
-- **Endpoint /metrics**: Exposición de métricas para scraping
+### 📊 Full Observability
+- **Structured Logging**: Structlog with JSON output for automatic parsing
+- **Prometheus Metrics**: 8+ key metrics (latencies, requests, LLM operations)
+- **Health Checks**: monitors the status of the API, Ollama, and ChromaDB
+- **/metrics Endpoint**: exposes metrics for scraping
 
 ### 🧪 Testing
-- **142 Tests Unitarios**: Pytest con 68% de cobertura (medido, ver nota en Trabajo Futuro sobre dónde falta cobertura)
-- **Tests de Integración**: End-to-end con servicios reales
-- **Mocks Configurados**: Para Ollama, ChromaDB, Postgres y procesadores
-- **CI**: GitHub Actions ejecuta la suite `unit` en cada push/PR (backend; ver Trabajo Futuro sobre frontend)
+- **142 Unit Tests**: Pytest with 68% coverage (measured, see the Future Work note on where coverage is thin)
+- **Integration Tests**: end-to-end against real services
+- **Configured Mocks**: for Ollama, ChromaDB, Postgres, and the processors
+- **CI**: GitHub Actions runs the `unit` suite on every push/PR (backend; see Future Work regarding the frontend)
 
-### 🏗️ Arquitectura de Calidad
-- **Patrón Hexagonal**: Separación clara entre dominio, puertos y adaptadores
-- **Código Documentado**: Docstrings en español con explicaciones detalladas
-- **Conventional Commits**: Historial de git limpio y semántico
-- **Configuración Flexible**: Variables de entorno para diferentes modos de deployment
+### 🏗️ Quality Architecture
+- **Hexagonal Pattern**: a clean separation between domain, ports, and adapters
+- **Documented Code**: docstrings with detailed explanations
+- **Conventional Commits**: a clean, semantic git history
+- **Flexible Configuration**: environment variables for different deployment modes
 
-## 🛠️ Stack Tecnológico
+## 🛠️ Tech Stack
 
-* **Framework Backend:** **Python** con **FastAPI**
-* **Carga y Chunking de Documentos:** **LangChain** (`PyPDFLoader`, `NotionDBLoader`, `RecursiveCharacterTextSplitter`) — la orquestación del pipeline RAG (Query Expansion, búsqueda híbrida, prompting) es implementación propia, no de LangChain
-* **Modelo de Lenguaje (LLM):** **Ollama** (`llama3.2`, local) o **Groq** (`openai/gpt-oss-120b`, cloud) — intercambiables por configuración, ver [ADR-007](docs/adr/007-cloud-deployment-groq-chroma.md)
-* **Base de Datos Vectorial:** **ChromaDB** (local vía Docker) o **Chroma Cloud** (gestionado)
-* **Fuentes de Datos:** **PDFs locales** y **Notion API**
+* **Backend Framework:** **Python** with **FastAPI**
+* **Document Loading & Chunking:** **LangChain** (`PyPDFLoader`, `NotionDBLoader`, `RecursiveCharacterTextSplitter`) — the RAG pipeline's orchestration (Query Expansion, hybrid search, prompting) is a custom implementation, not LangChain's
+* **Language Model (LLM):** **Ollama** (`llama3.2`, local) or **Groq** (`openai/gpt-oss-120b`, cloud) — swappable via configuration, see [ADR-007](docs/adr/007-cloud-deployment-groq-chroma.md)
+* **Vector Database:** **ChromaDB** (local via Docker) or **Chroma Cloud** (managed)
+* **Data Sources:** **local PDFs** and the **Notion API**
 * **Frontend:** **React 19** + **Vite 7** + **Tailwind CSS v4** (Dark Mode)
-* **Autenticación:** **JWT** + **Postgres** (Neon en producción)
-* **Observabilidad:** **Structlog** + **Prometheus**
-* **Contenerización:** **Docker Compose** (ChromaDB + Postgres + API)
-* **Despliegue cloud (opcional):** **Render** + **Groq** + **Chroma Cloud** — ver [ADR-007](docs/adr/007-cloud-deployment-groq-chroma.md) y [guía de despliegue](docs/DEPLOYMENT.md). El desarrollo local (Ollama + ChromaDB) sigue siendo el flujo por defecto de `docker-compose up`.
+* **Authentication:** **JWT** + **Postgres** (Neon in production)
+* **Observability:** **Structlog** + **Prometheus**
+* **Containerization:** **Docker Compose** (ChromaDB + Postgres + API)
+* **Cloud deployment (optional):** **Render** + **Groq** + **Chroma Cloud** — see [ADR-007](docs/adr/007-cloud-deployment-groq-chroma.md) and the [deployment guide](docs/DEPLOYMENT.md). Local development (Ollama + ChromaDB) remains the default `docker-compose up` flow.
 
 ---
 
-## 🎥 Demo en Video
+## 🎥 Video Demo
 
-### Demostración del sistema
+### System Demonstration
 
-**[▶️ Ver Video Demo en Google Drive](https://drive.google.com/file/d/1nTfRfqYPkvdErhMkXMwcC0Q9M0WI8ksv/view?usp=sharing)**
+**[▶️ Watch the Demo Video on Google Drive](https://drive.google.com/file/d/1nTfRfqYPkvdErhMkXMwcC0Q9M0WI8ksv/view?usp=sharing)**
 
-**Funcionalidades mostradas:**
-El video muestra el sistema funcionando con una base de conocimiento real:
-- ✅ **Base de datos:** ~1900 documentos del curso ya indexados
-- ✅ **Consultas en tiempo real:** Búsqueda semántica sobre miles de chunks
-- ✅ **Respuestas contextualizadas:** Citas precisas a documentos fuente
-- ✅ **Panel de estadísticas:** Monitoreo del estado del sistema
-- ✅ **Sincronización de Notion:** Ingesta de páginas desde Notion API
+**Features shown:**
+The video shows the system running against a real knowledge base:
+- ✅ **Database:** ~1900 documents already indexed
+- ✅ **Real-time queries:** semantic search over thousands of chunks
+- ✅ **Contextualized answers:** precise citations to source documents
+- ✅ **Stats panel:** monitoring the system's status
+- ✅ **Notion sync:** ingesting pages from the Notion API
 
 ---
 
-## 🏛️ Arquitectura del Sistema
+## 🏛️ System Architecture
 
-El proyecto sigue un patrón de **Arquitectura Hexagonal (Puertos y Adaptadores)** y se desarrolla en fases incrementales:
+The project follows a **Hexagonal Architecture (Ports and Adapters)** pattern and was built in incremental phases:
 
-* **MVP (Verde):** Pipeline de ingesta de PDFs locales - Garantiza funcionalidad básica del TFM
-* **Fase 1 (Azul):** Sistema RAG completo para consultas - El chatbot IA con frontend React
-* **Extensión (Naranja):** Integración con Notion API - Valor añadido y diferenciación
+* **MVP (green):** local PDF ingestion pipeline - guarantees the system's core functionality
+* **Phase 1 (blue):** full RAG system for queries - the AI chatbot with a React frontend
+* **Extension (orange):** Notion API integration - added value and differentiation
 
 ```mermaid
 graph TD
-    %% --- Definiciones de Estilo ---
+    %% --- Style Definitions ---
     classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
     classDef phase1 fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
     classDef extension fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
     classDef observability fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
 
-    %% --- Fuentes de Datos ---
-    subgraph "Fuentes de Documentos"
-        PDFs["PDFs Locales<br>/data/*.pdf"]
-        NotionAPI["Notion API<br>Páginas y Bases de Datos"]
+    %% --- Data Sources ---
+    subgraph "Document Sources"
+        PDFs["Local PDFs<br>/data/*.pdf"]
+        NotionAPI["Notion API<br>Pages and Databases"]
     end
 
-    %% --- Adaptadores de Entrada ---
-    subgraph "Capa de Presentación"
-        UI["Frontend React<br>Chat + Sync UI<br>Dark Mode"]
-        CLI["Scripts CLI<br>ingest_pdfs.py<br>ingest_notion.py"]
+    %% --- Input Adapters ---
+    subgraph "Presentation Layer"
+        UI["React Frontend<br>Chat + Sync UI<br>Dark Mode"]
+        CLI["CLI Scripts<br>ingest_pdfs.py<br>ingest_notion.py"]
         API["FastAPI REST<br>/sync, /ask, /health"]
     end
 
-    %% --- Observabilidad ---
-    subgraph "Observabilidad"
-        Logging["Structlog<br>Logging Estructurado"]
-        Metrics["Prometheus<br>Métricas"]
+    %% --- Observability ---
+    subgraph "Observability"
+        Logging["Structlog<br>Structured Logging"]
+        Metrics["Prometheus<br>Metrics"]
     end
 
-    %% --- Núcleo Hexagonal ---
-    subgraph "Núcleo de Negocio (Hexágono)"
-        SyncService["SyncService<br>Pipeline de Ingesta"]
+    %% --- Hexagonal Core ---
+    subgraph "Business Core (Hexagon)"
+        SyncService["SyncService<br>Ingestion Pipeline"]
         RAGService["RAGService<br>Query Expansion + RAG"]
-        Ports["Puertos<br>DocumentProcessor<br>LLM<br>VectorDB"]
+        Ports["Ports<br>DocumentProcessor<br>LLM<br>VectorDB"]
     end
 
-    %% --- Adaptadores de Salida ---
-    subgraph "Adaptadores Externos"
+    %% --- Output Adapters ---
+    subgraph "External Adapters"
         PDFAdapter["PDFProcessor<br>PyPDFLoader"]
         NotionAdapter["NotionProcessor<br>Notion Client"]
         OllamaAdapter["Ollama<br>LLM + Embeddings"]
         ChromaAdapter["ChromaDB<br>Vector Store"]
     end
 
-    %% --- Conexiones Presentación ---
+    %% --- Presentation Connections ---
     UI --> API
     CLI --> API
     PDFs --> CLI
     NotionAPI --> UI
 
-    %% --- Conexiones API a Servicios ---
+    %% --- API to Services Connections ---
     API --> SyncService
     API --> RAGService
 
-    %% --- Conexiones Servicios a Puertos ---
+    %% --- Services to Ports Connections ---
     SyncService --> Ports
     RAGService --> Ports
 
-    %% --- Conexiones Puertos a Adaptadores ---
+    %% --- Ports to Adapters Connections ---
     Ports --> PDFAdapter
     Ports --> NotionAdapter
     Ports --> OllamaAdapter
     Ports --> ChromaAdapter
 
-    %% --- Observabilidad ---
+    %% --- Observability ---
     API -.-> Logging
     SyncService -.-> Metrics
     RAGService -.-> Metrics
 
-    %% --- Asignación de Clases ---
+    %% --- Class Assignment ---
     class PDFs,CLI,SyncService,PDFAdapter,ChromaAdapter mvp
     class UI,RAGService,OllamaAdapter,API phase1
     class NotionAPI,NotionAdapter extension
@@ -186,112 +185,112 @@ graph TD
     class Ports mvp
 ```
 
-> Este diagrama refleja las fases originales del TFM (MVP → Fase 1 → Extensión Notion). La autenticación (JWT + Postgres) y el modo cloud (Groq + Chroma Cloud) se añadieron después como una capa transversal — ver la sección de Autenticación y Seguridad y [ADR-007](docs/adr/007-cloud-deployment-groq-chroma.md).
+> This diagram reflects the project's original build-out phases (MVP → Phase 1 → Notion extension). Authentication (JWT + Postgres) and the cloud mode (Groq + Chroma Cloud) were added afterward as a cross-cutting layer — see the Authentication and Security section and [ADR-007](docs/adr/007-cloud-deployment-groq-chroma.md).
 
 ---
 
-## 🔄 Flujos de Trabajo por Fases
+## 🔄 Workflows by Phase
 
-El sistema implementa flujos de ingesta y consulta que demuestran la arquitectura hexagonal en acción.
+The system implements ingestion and query flows that show the hexagonal architecture in action.
 
-### **MVP: Ingesta de PDFs Locales**
-Pipeline de ingesta simple y robusto. Garantiza funcionalidad core del sistema sin dependencias externas. (Verde).
+### **MVP: Local PDF Ingestion**
+A simple, robust ingestion pipeline. Guarantees the system's core functionality with no external dependencies. (Green.)
 
 ```mermaid
 flowchart TD
-    %% --- Definiciones de Estilo ---
+    %% --- Style Definitions ---
     classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
 
-    %% --- Nodos ---
-    A["PDFs en /data"]
-    B["Script CLI / API<br>ingest_pdfs.py<br>POST /sync"]
-    C["SyncService<br>Orquestación"]
-    D["PyPDFLoader<br>Carga y extracción"]
-    E["RecursiveTextSplitter<br>División en chunks"]
-    F["Ollama<br>Generación de embeddings"]
-    G["ChromaDB<br>Almacenamiento vectorial"]
+    %% --- Nodes ---
+    A["PDFs in /data"]
+    B["CLI Script / API<br>ingest_pdfs.py<br>POST /sync"]
+    C["SyncService<br>Orchestration"]
+    D["PyPDFLoader<br>Load and extract"]
+    E["RecursiveTextSplitter<br>Split into chunks"]
+    F["Ollama<br>Generate embeddings"]
+    G["ChromaDB<br>Vector storage"]
 
-    %% --- Asignación de Clases ---
+    %% --- Class Assignment ---
     class A,B,C,D,E,F,G mvp
 
-    %% --- Flujo MVP ---
-    A -->|"1. Lee archivos"| B
-    B -->|"2. Inicia pipeline"| C
-    C -->|"3. Procesa PDF"| D
-    D -->|"4. Divide texto"| E
-    E -->|"5. Vectoriza chunks"| F
-    F -->|"6. Almacena vectores"| G
+    %% --- MVP Flow ---
+    A -->|"1. Reads files"| B
+    B -->|"2. Starts pipeline"| C
+    C -->|"3. Processes PDF"| D
+    D -->|"4. Splits text"| E
+    E -->|"5. Embeds chunks"| F
+    F -->|"6. Stores vectors"| G
 ```
 
-### **Extensión: Integración con Notion**
-Mismo pipeline, diferente adaptador. Demuestra la flexibilidad de la arquitectura hexagonal. (Naranja).
+### **Extension: Notion Integration**
+Same pipeline, different adapter. Shows the hexagonal architecture's flexibility. (Orange.)
 
 ```mermaid
 flowchart TD
-    %% --- Definiciones de Estilo ---
+    %% --- Style Definitions ---
     classDef extension fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
     classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
 
-    %% --- Nodos ---
+    %% --- Nodes ---
     A["Notion Pages"]
-    B["Script CLI / API<br>ingest_notion.py<br>POST /sync/notion"]
-    C["SyncService<br>(Misma lógica)"]
-    D["NotionProcessor<br>Extrae contenido"]
-    E["RecursiveTextSplitter<br>(Mismo proceso)"]
-    F["Ollama<br>(Mismos embeddings)"]
-    G["ChromaDB<br>(Mismo storage)"]
+    B["CLI Script / API<br>ingest_notion.py<br>POST /sync/notion"]
+    C["SyncService<br>(Same logic)"]
+    D["NotionProcessor<br>Extracts content"]
+    E["RecursiveTextSplitter<br>(Same process)"]
+    F["Ollama<br>(Same embeddings)"]
+    G["ChromaDB<br>(Same storage)"]
 
-    %% --- Asignación de Clases ---
+    %% --- Class Assignment ---
     class A,B,D extension
     class C,E,F,G mvp
 
-    %% --- Flujo Notion ---
+    %% --- Notion Flow ---
     A -->|"1. API call"| B
-    B -->|"2. Inicia pipeline"| C
-    C -->|"3. Procesa página"| D
-    D -->|"4. Divide texto"| E
-    E -->|"5. Vectoriza chunks"| F
-    F -->|"6. Almacena vectores"| G
+    B -->|"2. Starts pipeline"| C
+    C -->|"3. Processes page"| D
+    D -->|"4. Splits text"| E
+    E -->|"5. Embeds chunks"| F
+    F -->|"6. Stores vectors"| G
 ```
 
-### **Fase 1: Sistema RAG (Chatbot)**
-El chatbot inteligente con Query Expansion que responde preguntas usando la base de conocimientos indexada. (Azul).
+### **Phase 1: RAG System (Chatbot)**
+The intelligent chatbot with Query Expansion that answers questions using the indexed knowledge base. (Blue.)
 
 ```mermaid
 flowchart TD
-    %% --- Definiciones de Estilo ---
+    %% --- Style Definitions ---
     classDef mvp fill:#f0fff0,stroke:#2e6b2e,stroke-width:2px;
     classDef phase1 fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
 
-    %% --- Nodos ---
-    A["Usuario<br>Hace pregunta"]
-    B["Frontend React<br>Chat Interface"]
-    C["API FastAPI<br>POST /ask"]
-    D["RAGService<br>Orquestador"]
-    QE["Query Expansion<br>LLM genera keywords"]
-    E["Ollama Embeddings<br>Vectoriza pregunta"]
-    F["ChromaDB<br>Búsqueda similaridad<br>+ keyword filter"]
-    G["RAGService<br>Construye prompt"]
-    H["Ollama LLM<br>Genera respuesta"]
-    I["Respuesta + Fuentes<br>al usuario"]
+    %% --- Nodes ---
+    A["User<br>Asks a question"]
+    B["React Frontend<br>Chat Interface"]
+    C["FastAPI<br>POST /ask"]
+    D["RAGService<br>Orchestrator"]
+    QE["Query Expansion<br>LLM generates keywords"]
+    E["Ollama Embeddings<br>Embeds the question"]
+    F["ChromaDB<br>Similarity search<br>+ keyword filter"]
+    G["RAGService<br>Builds the prompt"]
+    H["Ollama LLM<br>Generates the answer"]
+    I["Answer + Sources<br>to the user"]
 
-    %% --- Asignación de Clases ---
+    %% --- Class Assignment ---
     class A,B,C,D,QE,E,G,H,I phase1
     class F mvp
 
-    %% --- Flujo Fase 1 ---
+    %% --- Phase 1 Flow ---
     A --> B
     B --> C
     C --> D
     D -->|"1. Query Expansion"| QE
-    QE -->|"2. Keywords extraídos"| D
-    D -->|"3. Embedding query"| E
-    E -->|"4. Vector pregunta"| D
-    D -->|"5. Búsqueda híbrida"| F
+    QE -->|"2. Extracted keywords"| D
+    D -->|"3. Embed the query"| E
+    E -->|"4. Question vector"| D
+    D -->|"5. Hybrid search"| F
     F -->|"6. Top-K chunks<br>(PDFs/Notion)"| D
-    D -->|"7. Prompt con contexto"| G
-    G -->|"8. Genera respuesta"| H
-    H -->|"9. Respuesta + fuentes"| D
+    D -->|"7. Prompt with context"| G
+    G -->|"8. Generates the answer"| H
+    H -->|"9. Answer + sources"| D
     D --> C
     C --> B
     B --> I
@@ -299,52 +298,52 @@ flowchart TD
 
 ---
 
-## 🔍 Observabilidad
+## 🔍 Observability
 
-El sistema incluye una **capa completa de observabilidad** para monitoreo en producción:
+The system includes a **full observability layer** for production monitoring:
 
-### **Logging Estructurado** (Structlog)
-- Logs en formato JSON para fácil parsing
-- Contexto enriquecido (request_id, user_id, timestamps)
-- Niveles configurables por módulo
+### **Structured Logging** (Structlog)
+- JSON-formatted logs for easy parsing
+- Enriched context (request_id, user_id, timestamps)
+- Configurable log levels per module
 
-### **Métricas** (Prometheus)
-- `vector_search_latency_seconds`: Latencia de búsquedas vectoriales
-- `llm_generation_time_seconds`: Tiempo de generación del LLM
-- `documents_synced_total`: Contador de documentos procesados
-- Endpoint `/metrics` para scraping
+### **Metrics** (Prometheus)
+- `vector_search_latency_seconds`: vector search latency
+- `llm_generation_time_seconds`: LLM generation time
+- `documents_synced_total`: counter of processed documents
+- `/metrics` endpoint for scraping
 
-> No hay tracing distribuido (OpenTelemetry/Jaeger) implementado — solo logging estructurado y métricas. Queda como posible ampliación (ver Trabajo Futuro).
+> No distributed tracing (OpenTelemetry/Jaeger) is implemented — only structured logging and metrics. Left as a possible future addition (see Future Work).
 
-**Arquitectura de Observabilidad:**
+**Observability Architecture:**
 
 ```mermaid
 graph LR
-    %% --- Definiciones de Estilo ---
+    %% --- Style Definitions ---
     classDef app fill:#e6f7ff,stroke:#0056b3,stroke-width:2px;
     classDef obs fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
     classDef external fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
 
-    %% --- Aplicación ---
-    subgraph "Aplicación"
+    %% --- Application ---
+    subgraph "Application"
         API["FastAPI<br>Endpoints"]
         Services["Services<br>RAGService<br>SyncService"]
         Adapters["Adapters<br>Ollama<br>ChromaDB"]
     end
 
-    %% --- Capa de Observabilidad ---
+    %% --- Observability Layer ---
     subgraph "Observability Layer"
         Logger["Structlog<br>Structured Logging"]
         Metrics["Prometheus<br>Metrics Registry"]
     end
 
-    %% --- Sistemas Externos ---
-    subgraph "External Systems (Opcional)"
+    %% --- External Systems ---
+    subgraph "External Systems (Optional)"
         LogAgg["Log Aggregator<br>ELK/Loki"]
         MetricsDB["Prometheus Server<br>Time Series DB"]
     end
 
-    %% --- Flujo de Observabilidad ---
+    %% --- Observability Flow ---
     API --> Logger
     API --> Metrics
 
@@ -354,119 +353,119 @@ graph LR
     Adapters --> Logger
     Adapters --> Metrics
 
-    %% --- Exportación ---
+    %% --- Export ---
     Logger -.->|JSON Logs| LogAgg
     Metrics -.->|/metrics endpoint| MetricsDB
 
-    %% --- Asignación de Clases ---
+    %% --- Class Assignment ---
     class API,Services,Adapters app
     class Logger,Metrics obs
     class LogAgg,MetricsDB external
 ```
 
-**Ejemplo de uso:**
+**Usage example:**
 ```python
-# Los logs estructurados se generan automáticamente
+# Structured logs are generated automatically
 logger.info("Query processed",
            query=query,
            results_count=len(sources),
            latency=duration)
 
-# Las métricas se registran automáticamente
+# Metrics are recorded automatically
 VECTOR_SEARCH_LATENCY.observe(duration)
 ```
 
 ---
 
-## 📚 Documentación
+## 📚 Documentation
 
-| Documento | Descripción |
+| Document | Description |
 |-----------|-------------|
-| **[docs/STRUCTURE.md](docs/STRUCTURE.md)** | Arquitectura y estructura del proyecto |
-| **[docs/USAGE.md](docs/USAGE.md)** | API endpoints y scripts CLI |
-| **[docs/USAGE_TESTING.md](docs/USAGE_TESTING.md)** | Suite de tests y guía de testing |
-| **[docs/adr/INDEX.md](docs/adr/INDEX.md)** | Decisiones arquitectónicas (ADRs) |
-| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Despliegue opcional en Render (Groq + Chroma Cloud) |
+| **[docs/STRUCTURE.md](docs/STRUCTURE.md)** | Project architecture and structure |
+| **[docs/USAGE.md](docs/USAGE.md)** | API endpoints and CLI scripts |
+| **[docs/USAGE_TESTING.md](docs/USAGE_TESTING.md)** | Test suite and testing guide |
+| **[docs/adr/INDEX.md](docs/adr/INDEX.md)** | Architecture decisions (ADRs) |
+| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | Optional deployment on Render (Groq + Chroma Cloud) |
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisitos
+### Prerequisites
 
-1. **macOS** (con Apple Silicon para GPU Metal)
+1. **macOS** (with Apple Silicon for the Metal GPU)
 2. **Python 3.11+**
-3. **Docker Desktop** (para ChromaDB y Postgres, usado para la autenticación)
-4. **Node.js 18+** (para el frontend)
+3. **Docker Desktop** (for ChromaDB and Postgres, the latter used for authentication)
+4. **Node.js 18+** (for the frontend)
 
-### Instalación
+### Installation
 
-**Opción 1: Instalación Automática (Recomendada)**
+**Option 1: Automated Installation (Recommended)**
 
 ```bash
-# 1. Clonar repositorio
-git clone <URL_DEL_REPO>
+# 1. Clone the repository
+git clone <REPO_URL>
 cd tfm-bibliotecario-ia
 
-# 2. Ejecutar script de instalación
+# 2. Run the setup script
 python3 scripts/setup.py
 ```
 
-El script `setup.py` configura automáticamente:
-- Ollama nativo (aprovecha GPU Metal, ~10x más rápido)
-- ChromaDB en Docker
-- Entorno Python con dependencias
-- Frontend con npm
+The `setup.py` script automatically configures:
+- Native Ollama (takes advantage of the Metal GPU, ~10x faster)
+- ChromaDB in Docker
+- A Python environment with dependencies
+- The frontend with npm
 
-> ⚠️ `setup.py` todavía no crea el primer usuario de login (la autenticación se añadió después). Tanto si usas la instalación automática como la manual, hace falta el paso "Crear tu usuario" de más abajo antes de poder entrar al chat.
+> ⚠️ `setup.py` doesn't create the first login user yet (authentication was added later). Whether you use the automated or the manual install, you still need the "Create your user" step below before you can log in to the chat.
 
-**Opción 2: Instalación Manual**
+**Option 2: Manual Installation**
 
 ```bash
-# 1. Clonar repositorio
-git clone <URL_DEL_REPO>
+# 1. Clone the repository
+git clone <REPO_URL>
 cd tfm-bibliotecario-ia
 
-# 2. Instalar Ollama y descargar modelos
+# 2. Install Ollama and pull the models
 brew install ollama
 ollama pull llama3.2
 ollama pull nomic-embed-text
 
-# 3. Setup Python
+# 3. Python setup
 cd api
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Genera un secreto real para JWT_SECRET_KEY (el de .env.example es un placeholder):
+# Generate a real secret for JWT_SECRET_KEY (the one in .env.example is a placeholder):
 python -c "import secrets; print(secrets.token_hex(32))"
-# ...y pégalo en JWT_SECRET_KEY dentro de api/.env
+# ...and paste it into JWT_SECRET_KEY inside api/.env
 
-# 4. Iniciar ChromaDB y Postgres
+# 4. Start ChromaDB and Postgres
 cd ..
 docker-compose up -d chromadb postgres
 
-# 5. Setup Frontend
+# 5. Frontend setup
 cd frontend
 npm install
 
-# 6. Verificar setup
+# 6. Verify the setup
 python scripts/verify_setup.py
 ```
 
-### Crear tu usuario
+### Create Your User
 
-No hay registro público — el login se crea por CLI (contraseña vía `getpass`, no se guarda en el historial de la shell):
+There's no public signup — the login is created via CLI (password via `getpass`, never saved in the shell history):
 
 ```bash
 source api/venv/bin/activate
-python scripts/create_user.py --email tu@email.com
+python scripts/create_user.py --email you@email.com
 ```
 
-### Uso
+### Usage
 
 ```bash
-# Terminal 1: Ollama (mantener abierto)
+# Terminal 1: Ollama (keep it open)
 ollama serve
 
 # Terminal 2: Docker (ChromaDB + Postgres + API)
@@ -475,10 +474,10 @@ docker-compose up -d
 # Terminal 3: Frontend
 cd frontend && npm run dev
 
-# Abrir navegador en http://localhost:5173 e iniciar sesión con el usuario creado arriba
+# Open your browser at http://localhost:5173 and log in with the user created above
 ```
 
-**Puertos:**
+**Ports:**
 - Frontend: http://localhost:5173
 - API: http://localhost:8000 (API Docs: http://localhost:8000/docs)
 - ChromaDB: http://localhost:8001
@@ -486,25 +485,25 @@ cd frontend && npm run dev
 
 ---
 
-## ⚠️ Limitaciones Conocidas
+## ⚠️ Known Limitations
 
-- **Solo macOS (desarrollo local)**: El entorno con Ollama nativo está optimizado para macOS con Apple Silicon (GPU Metal). El modo cloud (Groq + Chroma Cloud, ver despliegue) no tiene esta limitación
-- **Modelos locales**: La calidad de las respuestas de llama3.2 (3B parámetros) es inferior a modelos cloud como GPT-4, pero suficiente para el caso de uso y garantiza privacidad total
-- **Escalabilidad**: ChromaDB en modo standalone no escala horizontalmente. Adecuado para miles de documentos, no para millones
+- **macOS only (local development)**: the native-Ollama setup is optimized for macOS with Apple Silicon (Metal GPU). The cloud mode (Groq + Chroma Cloud, see deployment) doesn't have this limitation
+- **Local models**: llama3.2's (3B parameters) answer quality is lower than cloud models like GPT-4, but sufficient for the use case and guarantees full privacy
+- **Scalability**: ChromaDB in standalone mode doesn't scale horizontally. Fine for thousands of documents, not millions
 
-## 🔮 Trabajo Futuro
+## 🔮 Future Work
 
-- **Tests de frontend**: no hay ningún test automatizado en `frontend/` todavía (ni Vitest ni Testing Library configurados) — añadir cobertura al menos de los componentes de auth y chat
-- **CI de frontend**: el workflow actual (`.github/workflows/test.yml`) solo corre `pytest -m unit`; añadir `npm run build` y `npm run lint` para detectar roturas del frontend en cada PR
-- **Subir cobertura de tests del backend**: 67% global, pero concentrado en los *services* (mockeados); los adapters que hablan con servicios reales están poco cubiertos
-- **Tracing distribuido**: no hay OpenTelemetry/Jaeger implementado, solo logging estructurado y métricas (ver Observabilidad)
-- **Detectar API corriendo dos veces a la vez** (Docker `docker-compose up -d` y nativa `uvicorn --reload`): puede pasar fácilmente en desarrollo activo y hace que cambios en `api/.env` parezcan no aplicarse (responde el contenedor viejo, no el proceso reiniciado). `scripts/verify_setup.py` no lo detecta hoy.
-- **Refactor de `ingest_notion.py`**: el modo `--database` reimplementa a mano el pipeline de embeddings/almacenamiento en vez de reutilizar `SyncService.sync_document_from_file()` (que sí usa el modo `--page`) — evita volver a pedir cada página a la API de Notion, pero duplica lógica que solo vive correctamente en un sitio.
+- **Frontend tests**: there are no automated tests in `frontend/` yet (neither Vitest nor Testing Library are configured) — add coverage for at least the auth and chat components
+- **Frontend CI**: the current workflow (`.github/workflows/test.yml`) only runs `pytest -m unit`; add `npm run build` and `npm run lint` to catch frontend breakage on every PR
+- **Raise backend test coverage**: 68% overall, but concentrated in the *services* (mocked); the adapters that talk to real services are poorly covered
+- **Distributed tracing**: no OpenTelemetry/Jaeger implemented, only structured logging and metrics (see Observability)
+- **Detect the API running twice at once** (Docker's `docker-compose up -d` and a native `uvicorn --reload`): easy to hit during active development, and it makes changes to `api/.env` look like they aren't applying (the old container answers, not the restarted process). `scripts/verify_setup.py` doesn't catch this today.
+- **Refactor `ingest_notion.py`**: its `--database` mode hand-reimplements the embedding/storage pipeline instead of reusing `SyncService.sync_document_from_file()` (which the `--page` mode does use) — this avoids re-fetching every page from the Notion API, but duplicates logic that should only live in one place.
 
 ---
 
-## 📄 Licencia
+## 📄 License
 
-Este proyecto está bajo la licencia MIT. Ver [LICENSE](LICENSE) para más detalles.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ---
