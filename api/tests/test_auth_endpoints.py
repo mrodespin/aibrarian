@@ -1,19 +1,18 @@
 # /api/tests/test_auth_endpoints.py
 """
-Tests de los endpoints /auth/* y de la protección del resto de la API.
+Tests for the /auth/* endpoints and for the rest of the API's protection.
 
-Nota importante para quien añada tests aquí: hay DOS técnicas de mock
-distintas en este fichero, porque /auth/login no pasa por Depends().
+Important note for anyone adding tests here: there are TWO different
+mocking techniques in this file, because /auth/login doesn't go through Depends().
 
-- Endpoints protegidos por Depends(get_current_user) (/auth/me, /ask, etc.):
-  se usa app.dependency_overrides[get_current_user] — el mecanismo
-  estándar de FastAPI.
-- POST /auth/login llama a auth_service.authenticate(), y auth_service
-  es una variable global de módulo en main.py (mismo patrón manual de
-  DI que rag_service/sync_service), NO algo inyectado vía Depends().
-  dependency_overrides no tiene ningún efecto ahí — hay que hacer
-  monkeypatch sobre app.main.user_repository (o sobre app.main.auth_service
-  directamente) antes de la petición.
+- Endpoints protected by Depends(get_current_user) (/auth/me, /ask, etc.):
+  uses app.dependency_overrides[get_current_user] — FastAPI's standard mechanism.
+- POST /auth/login calls auth_service.authenticate(), and auth_service
+  is a global module-level variable in main.py (same manual DI pattern
+  as rag_service/sync_service), NOT something injected via Depends().
+  dependency_overrides has no effect there — you have to monkeypatch
+  app.main.user_repository (or app.main.auth_service directly) before
+  making the request.
 """
 
 import pytest
@@ -32,21 +31,21 @@ def client():
 
 @pytest.fixture(autouse=True)
 def _clear_dependency_overrides():
-    """Evita que overrides de un test se filtren al siguiente."""
+    """Prevents one test's overrides from leaking into the next."""
     yield
     app.dependency_overrides.clear()
 
 
 @pytest.fixture(autouse=True)
 def _clear_login_rate_limit():
-    """Evita que los intentos de login de un test cuenten para el rate limit del siguiente."""
+    """Prevents one test's login attempts from counting toward the next test's rate limit."""
     main_module._login_attempts.clear()
     yield
 
 
 # ============================================================================
-# POST /auth/login — usa monkeypatch sobre los globals de main.py, no
-# dependency_overrides (ver docstring del módulo).
+# POST /auth/login — uses monkeypatch on main.py's globals, not
+# dependency_overrides (see the module's docstring).
 # ============================================================================
 
 @pytest.mark.unit
@@ -80,7 +79,7 @@ def test_login_wrong_password(client, monkeypatch, mock_user_repository):
 
 @pytest.mark.unit
 def test_login_rate_limited_after_too_many_attempts(client, monkeypatch, mock_user_repository):
-    """Protección básica contra fuerza bruta: N intentos por IP y ventana."""
+    """Basic brute-force protection: N attempts per IP and window."""
     monkeypatch.setattr("app.main.auth_service", AuthService(user_repository=mock_user_repository))
 
     for _ in range(main_module._LOGIN_RATE_LIMIT):
@@ -106,7 +105,7 @@ def test_logout_returns_success(client):
 
 
 # ============================================================================
-# GET /auth/me y protección de endpoints — vía dependency_overrides
+# GET /auth/me and endpoint protection — via dependency_overrides
 # ============================================================================
 
 @pytest.mark.unit
@@ -127,7 +126,7 @@ def test_me_with_valid_session_returns_user(client):
 
 @pytest.mark.unit
 def test_protected_endpoint_without_auth_returns_401(client):
-    response = client.post("/ask", json={"question": "hola"})
+    response = client.post("/ask", json={"question": "hello"})
     assert response.status_code == 401
 
 
@@ -140,13 +139,13 @@ def test_list_documents_without_auth_returns_401(client):
 @pytest.mark.unit
 def test_protected_endpoint_with_auth_is_not_blocked_by_auth_layer(client):
     """
-    Con una sesión válida, /ask deja de devolver 401 por falta de auth.
-    No mockeamos rag_service aquí (fuera de alcance de este test) — solo
-    verificamos que la capa de autenticación ya no es la que bloquea.
+    With a valid session, /ask stops returning 401 for lack of auth. We
+    don't mock rag_service here (out of scope for this test) — we're
+    only verifying the auth layer is no longer what's blocking it.
     """
     app.dependency_overrides[get_current_user] = lambda: TokenPayload(user_id=1, email="test@example.com")
 
-    response = client.post("/ask", json={"question": "hola"})
+    response = client.post("/ask", json={"question": "hello"})
 
     assert response.status_code != 401
 
@@ -154,8 +153,8 @@ def test_protected_endpoint_with_auth_is_not_blocked_by_auth_layer(client):
 @pytest.mark.unit
 def test_health_check_does_not_require_auth():
     """
-    Regresión: render.yaml usa healthCheckPath: / — si este endpoint
-    empezara a exigir auth, Render marcaría el servicio unhealthy.
+    Regression test: render.yaml uses healthCheckPath: / — if this
+    endpoint started requiring auth, Render would mark the service unhealthy.
     """
     from fastapi.testclient import TestClient
     client = TestClient(app)

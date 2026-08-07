@@ -1,15 +1,15 @@
 # /api/tests/test_api.py
 """
-Tests de los endpoints de FastAPI.
+Tests for FastAPI's endpoints.
 
-Tests de los endpoints HTTP de la API:
+Tests for the API's HTTP endpoints:
 - GET /health: Health check
-- POST /ask: Queries al RAG
-- POST /sync: Ingesta de documentos individuales
-- POST /sync/directory: Ingesta de directorio
-- GET /stats: Estadísticas de la colección
+- POST /ask: RAG queries
+- POST /sync: Single-document ingestion
+- POST /sync/directory: Directory ingestion
+- GET /stats: Collection statistics
 
-Usa TestClient de FastAPI para simular requests HTTP sin levantar servidor.
+Uses FastAPI's TestClient to simulate HTTP requests without spinning up a server.
 """
 
 import pytest
@@ -17,15 +17,15 @@ from fastapi.testclient import TestClient
 
 
 # ============================================================================
-# TESTS DEL ENDPOINT /health
+# /health ENDPOINT TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_health_endpoint_returns_200(test_client):
     """
-    Test: /health debe retornar 200 OK.
+    Test: /health must return 200 OK.
 
-    El health check debe responder siempre que la API esté activa.
+    The health check must always respond while the API is up.
     """
     # Act
     response = test_client.get("/health")
@@ -37,7 +37,7 @@ def test_health_endpoint_returns_200(test_client):
 @pytest.mark.unit
 def test_health_endpoint_returns_json(test_client):
     """
-    Test: /health debe retornar JSON con status.
+    Test: /health must return JSON with status.
     """
     # Act
     response = test_client.get("/health")
@@ -50,35 +50,35 @@ def test_health_endpoint_returns_json(test_client):
 
 
 # ============================================================================
-# TESTS DEL ENDPOINT /ask
+# /ask ENDPOINT TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_ask_endpoint_accepts_post(test_client):
     """
-    Test: /ask debe aceptar POST requests.
+    Test: /ask must accept POST requests.
     """
     # Arrange
-    payload = {"question": "¿Qué es RAG?"}
+    payload = {"question": "What is RAG?"}
 
     # Act
     response = test_client.post("/ask", json=payload)
 
     # Assert
-    # Puede retornar 200 (con mock) o error si falta configuración
-    # Lo importante es que acepte el método POST
-    assert response.status_code in [200, 500, 503]  # 500/503 si faltan servicios reales
+    # May return 200 (with the mock) or an error if configuration is missing
+    # What matters is that it accepts the POST method
+    assert response.status_code in [200, 500, 503]  # 500/503 if real services are missing
 
 
 @pytest.mark.unit
 def test_ask_endpoint_requires_question_field(test_client):
     """
-    Test: /ask debe requerir el campo 'question'.
+    Test: /ask must require the 'question' field.
 
-    Request sin 'question' debe retornar 422 (Validation Error).
+    A request without 'question' must return 422 (Validation Error).
     """
     # Arrange
-    payload = {}  # Sin question
+    payload = {}  # No question
 
     # Act
     response = test_client.post("/ask", json=payload)
@@ -90,7 +90,7 @@ def test_ask_endpoint_requires_question_field(test_client):
 @pytest.mark.unit
 def test_ask_endpoint_rejects_empty_question(test_client):
     """
-    Test: /ask debe rechazar preguntas vacías.
+    Test: /ask must reject empty questions.
     """
     # Arrange
     payload = {"question": ""}
@@ -99,22 +99,22 @@ def test_ask_endpoint_rejects_empty_question(test_client):
     response = test_client.post("/ask", json=payload)
 
     # Assert
-    # Puede ser 422 (validation) o 400 (bad request)
+    # May be 422 (validation) or 400 (bad request)
     assert response.status_code in [400, 422]
 
 
 @pytest.mark.unit
 def test_ask_endpoint_returns_json_with_answer(test_client):
     """
-    Test: /ask debe retornar JSON con estructura esperada.
+    Test: /ask must return JSON with the expected structure.
 
-    Response debe incluir:
+    The response must include:
     - answer: string
     - sources: array
-    - model: string (opcional)
+    - model: string (optional)
     """
     # Arrange
-    payload = {"question": "¿Qué es RAG?"}
+    payload = {"question": "What is RAG?"}
 
     # Act
     response = test_client.post("/ask", json=payload)
@@ -129,13 +129,13 @@ def test_ask_endpoint_returns_json_with_answer(test_client):
 
 
 # ============================================================================
-# TESTS DEL ENDPOINT /sync
+# /sync ENDPOINT TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_sync_endpoint_accepts_post(test_client):
     """
-    Test: /sync debe aceptar POST requests.
+    Test: /sync must accept POST requests.
     """
     # Arrange
     payload = {"file_path": "/test/document.pdf"}
@@ -144,14 +144,14 @@ def test_sync_endpoint_accepts_post(test_client):
     response = test_client.post("/sync", json=payload)
 
     # Assert
-    # Aceptará POST aunque falle por falta de archivo real
+    # Will accept POST even if it fails due to the file not existing
     assert response.status_code in [200, 404, 500]
 
 
 @pytest.mark.unit
 def test_sync_endpoint_requires_file_path(test_client):
     """
-    Test: /sync debe requerir el campo 'file_path'.
+    Test: /sync must require the 'file_path' field.
     """
     # Arrange
     payload = {}
@@ -166,7 +166,7 @@ def test_sync_endpoint_requires_file_path(test_client):
 @pytest.mark.unit
 def test_sync_endpoint_rejects_empty_file_path(test_client):
     """
-    Test: /sync debe rechazar file_path vacío.
+    Test: /sync must reject an empty file_path.
     """
     # Arrange
     payload = {"file_path": ""}
@@ -179,13 +179,13 @@ def test_sync_endpoint_rejects_empty_file_path(test_client):
 
 
 # ============================================================================
-# TESTS DEL ENDPOINT /sync/directory
+# /sync/directory ENDPOINT TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_sync_directory_endpoint_accepts_post(test_client):
     """
-    Test: /sync/directory debe aceptar POST requests.
+    Test: /sync/directory must accept POST requests.
     """
     # Arrange
     payload = {"directory_path": "/test/pdfs"}
@@ -200,30 +200,30 @@ def test_sync_directory_endpoint_accepts_post(test_client):
 @pytest.mark.unit
 def test_sync_directory_uses_default_path_if_not_provided(test_client):
     """
-    Test: /sync/directory debe usar ./data por defecto.
+    Test: /sync/directory must use ./data by default.
 
-    Si no se proporciona directory_path, debe usar el configurado en settings.
+    If directory_path isn't provided, it must use the one configured in settings.
     """
     # Arrange
-    payload = {}  # Sin directory_path
+    payload = {}  # No directory_path
 
     # Act
     response = test_client.post("/sync/directory", json=payload)
 
     # Assert
-    # Debe aceptar el request (puede fallar si no hay PDFs pero no por validación)
+    # Must accept the request (it may fail if there are no PDFs, but not due to validation)
     assert response.status_code in [200, 404, 500]
-    assert response.status_code != 422  # No debe ser validation error
+    assert response.status_code != 422  # Must not be a validation error
 
 
 # ============================================================================
-# TESTS DEL ENDPOINT /sync/notion
+# /sync/notion ENDPOINT TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_sync_notion_page_requires_page_id(test_client):
     """
-    Test: /sync/notion debe requerir page_id.
+    Test: /sync/notion must require page_id.
     """
     # Arrange
     payload = {}
@@ -238,56 +238,56 @@ def test_sync_notion_page_requires_page_id(test_client):
 @pytest.mark.unit
 def test_sync_notion_database_requires_database_id(test_client):
     """
-    Test: /sync/notion/database debe requerir database_id.
+    Test: /sync/notion/database must require database_id.
 
-    El endpoint valida el database_id con lógica custom y retorna 400
-    si no está configurado (ni en request ni en settings).
+    The endpoint validates database_id with custom logic and returns
+    400 if it isn't configured (neither in the request nor in settings).
 
-    Nota: Usamos patch para simular que NOTION_DATABASE_ID no está
-    configurado en el entorno, ya que el .env de desarrollo puede tenerlo.
+    Note: We use patch to simulate NOTION_DATABASE_ID not being
+    configured in the environment, since the dev .env might have it set.
     """
     from unittest.mock import patch
 
     # Arrange
     payload = {}
 
-    # Act: Mockear settings para que notion_database_id sea None
+    # Act: mock settings so notion_database_id is None
     with patch("app.main.settings") as mock_settings:
-        # Configurar el mock con los valores necesarios
-        mock_settings.notion_api_key = "fake-api-key"  # Pasar primera validación
-        mock_settings.notion_database_id = None  # Simular que no está configurado
+        # Configure the mock with the necessary values
+        mock_settings.notion_api_key = "fake-api-key"  # Pass the first validation
+        mock_settings.notion_database_id = None  # Simulate it not being configured
 
         response = test_client.post("/sync/notion/database", json=payload)
 
-    # Assert: El endpoint retorna 400 cuando falta el database_id
+    # Assert: the endpoint returns 400 when database_id is missing
     assert response.status_code == 400
 
 
 # ============================================================================
-# TESTS DEL ENDPOINT /stats
+# /stats ENDPOINT TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_stats_endpoint_returns_200(test_client):
     """
-    Test: /stats debe retornar 200 OK.
+    Test: /stats must return 200 OK.
     """
     # Act
     response = test_client.get("/stats")
 
     # Assert
-    # Puede retornar 200 o 503 si ChromaDB no está disponible
+    # May return 200 or 503 if ChromaDB isn't available
     assert response.status_code in [200, 503]
 
 
 @pytest.mark.unit
 def test_stats_endpoint_returns_collection_info(test_client):
     """
-    Test: /stats debe retornar información de la colección.
+    Test: /stats must return the collection's info.
 
-    Response debe incluir al menos:
+    The response must include at least:
     - collection_name
-    - document_count (o similar)
+    - document_count (or similar)
     """
     # Act
     response = test_client.get("/stats")
@@ -295,25 +295,25 @@ def test_stats_endpoint_returns_collection_info(test_client):
     # Assert
     if response.status_code == 200:
         data = response.json()
-        # Verificar que retorna alguna información útil
+        # Verify it returns some useful information
         assert isinstance(data, dict)
         assert len(data) > 0
 
 
 # ============================================================================
-# TESTS DEL ENDPOINT GET /documents
+# GET /documents ENDPOINT TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_list_documents_endpoint_returns_200(test_client):
     """
-    Test: GET /documents debe retornar 200 OK.
+    Test: GET /documents must return 200 OK.
 
-    A diferencia de /stats, list_documents() en el adapter nunca lanza
-    (mismo contrato que similarity_search/get_collection_stats: en error
-    degrada a lista vacía), así que aquí no hace falta tolerar un código
-    alternativo — siempre 200, con "documents": [] si el vector_db real
-    no está disponible en el entorno de test.
+    Unlike /stats, the adapter's list_documents() never raises (same
+    contract as similarity_search/get_collection_stats: on error it
+    degrades to an empty list), so there's no need to tolerate an
+    alternate status code here — always 200, with "documents": [] if
+    the real vector_db isn't available in the test environment.
     """
     response = test_client.get("/documents")
 
@@ -326,28 +326,28 @@ def test_list_documents_endpoint_returns_200(test_client):
 
 
 # ============================================================================
-# TESTS DE CORS Y HEADERS
+# CORS AND HEADERS TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_api_allows_cors(test_client):
     """
-    Test: la API debe tener CORS configurado para el frontend.
+    Test: the API must have CORS configured for the frontend.
 
-    Necesario para que el frontend React pueda hacer requests.
+    Necessary for the React frontend to be able to make requests.
     """
     # Act
     response = test_client.options("/health")
 
     # Assert
-    # Verificar que permite CORS o que responde a OPTIONS
-    assert response.status_code in [200, 405]  # 405 si OPTIONS no implementado
+    # Verify it allows CORS or responds to OPTIONS
+    assert response.status_code in [200, 405]  # 405 if OPTIONS isn't implemented
 
 
 @pytest.mark.unit
 def test_api_returns_correct_content_type(test_client):
     """
-    Test: todos los endpoints deben retornar application/json.
+    Test: every endpoint must return application/json.
     """
     # Act
     responses = [
@@ -362,13 +362,13 @@ def test_api_returns_correct_content_type(test_client):
 
 
 # ============================================================================
-# TESTS DE MANEJO DE ERRORES
+# ERROR HANDLING TESTS
 # ============================================================================
 
 @pytest.mark.unit
 def test_invalid_endpoint_returns_404(test_client):
     """
-    Test: endpoint inexistente debe retornar 404.
+    Test: a nonexistent endpoint must return 404.
     """
     # Act
     response = test_client.get("/invalid/endpoint")
@@ -380,12 +380,12 @@ def test_invalid_endpoint_returns_404(test_client):
 @pytest.mark.unit
 def test_invalid_method_returns_405(test_client):
     """
-    Test: método HTTP incorrecto debe retornar 405.
+    Test: a wrong HTTP method must return 405.
 
-    Por ejemplo, GET en un endpoint que solo acepta POST.
+    For example, GET on an endpoint that only accepts POST.
     """
     # Act
-    response = test_client.get("/ask")  # /ask solo acepta POST
+    response = test_client.get("/ask")  # /ask only accepts POST
 
     # Assert
     assert response.status_code == 405  # Method Not Allowed
@@ -394,12 +394,12 @@ def test_invalid_method_returns_405(test_client):
 @pytest.mark.unit
 def test_malformed_json_returns_422(test_client):
     """
-    Test: JSON malformado debe retornar 422.
+    Test: malformed JSON must return 422.
     """
     # Act
     response = test_client.post(
         "/ask",
-        data="not valid json",  # No es JSON válido
+        data="not valid json",  # Not valid JSON
         headers={"Content-Type": "application/json"}
     )
 
@@ -408,20 +408,20 @@ def test_malformed_json_returns_422(test_client):
 
 
 # ============================================================================
-# TESTS DE PERFORMANCE/TIMEOUT
+# PERFORMANCE/TIMEOUT TESTS
 # ============================================================================
 
 @pytest.mark.slow
 def test_ask_endpoint_responds_within_reasonable_time(test_client):
     """
-    Test: /ask debe responder en tiempo razonable (<30s).
+    Test: /ask must respond within a reasonable time (<30s).
 
-    Marcado como @slow porque puede tardar con servicios reales.
+    Marked as @slow because it can take a while with real services.
     """
     import time
 
     # Arrange
-    payload = {"question": "¿Qué es RAG?"}
+    payload = {"question": "What is RAG?"}
 
     # Act
     start = time.time()
@@ -429,6 +429,6 @@ def test_ask_endpoint_responds_within_reasonable_time(test_client):
     elapsed = time.time() - start
 
     # Assert
-    # Con mocks debe ser instantáneo, con servicios reales <30s
+    # With mocks it should be instant, with real services <30s
     if response.status_code == 200:
         assert elapsed < 30.0
