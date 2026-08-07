@@ -2,7 +2,7 @@
  * Collection statistics panel
  */
 
-import { useApp } from '../../context/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { Card, Badge, Spinner, Button } from '../common';
 import { llmProviderLabel, vectorDbProviderLabel } from '../../utils/providerLabels';
 

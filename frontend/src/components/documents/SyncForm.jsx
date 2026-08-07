@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { syncApi } from '../../api';
-import { useApp } from '../../context/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { Card, Button, Input, Alert, Spinner } from '../common';
 
 const TABS = [

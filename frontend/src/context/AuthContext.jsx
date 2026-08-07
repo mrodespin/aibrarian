@@ -5,7 +5,7 @@
  * api/client.js y api/tokenStorage.js).
  */
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useState, useEffect, useCallback } from 'react';
 import { authApi } from '../api';
 
 const AuthContext = createContext(null);
@@ -55,14 +55,6 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
 }
 
 export default AuthContext;

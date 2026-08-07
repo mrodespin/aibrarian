@@ -3,7 +3,7 @@
  * Manages health status and stats with polling
  */
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useState, useEffect, useCallback } from 'react';
 import { healthApi } from '../api';
 
 const AppContext = createContext(null);
@@ -42,7 +42,7 @@ export function AppProvider({ children }) {
         vectorDbProvider: data.config?.vector_db_provider ?? null,
         lastChecked: new Date(),
       });
-    } catch (err) {
+    } catch {
       // La API no responde
       setHealth(prev => ({
         ...prev,
@@ -108,14 +108,6 @@ export function AppProvider({ children }) {
       {children}
     </AppContext.Provider>
   );
-}
-
-export function useApp() {
-  const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useApp must be used within AppProvider');
-  }
-  return context;
 }
 
 export default AppContext;

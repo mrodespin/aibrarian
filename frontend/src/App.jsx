@@ -2,12 +2,13 @@
  * Main application component
  */
 
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { Layout } from './components/layout';
 import { ChatContainer } from './components/chat';
 import { LoginPage } from './components/auth';
 import { Spinner } from './components/common';
+import { useAuth } from './hooks/useAuth';
 import { useViewportHeight } from './hooks/useViewportHeight';
 
 function AuthGate() {

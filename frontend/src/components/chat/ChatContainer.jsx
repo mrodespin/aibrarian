@@ -3,7 +3,7 @@
  */
 
 import { useChat } from '../../hooks/useChat';
-import { useApp } from '../../context/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { Button } from '../common';

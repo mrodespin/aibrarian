@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { documentsApi } from '../../api';
-import { useApp } from '../../context/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { Card, Badge, Button, Input, Alert, Spinner } from '../common';
 
 const SOURCE_BADGE = {

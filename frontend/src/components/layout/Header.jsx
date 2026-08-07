@@ -2,8 +2,8 @@
  * Application header with service status
  */
 
-import { useApp } from '../../context/AppContext';
-import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../hooks/useApp';
+import { useAuth } from '../../hooks/useAuth';
 import { Badge } from '../common';
 import { llmProviderLabel, vectorDbProviderLabel } from '../../utils/providerLabels';
 
