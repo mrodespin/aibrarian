@@ -474,6 +474,8 @@ cd frontend && npm run dev
 - **macOS only (local development)**: the native-Ollama setup is optimized for macOS with Apple Silicon (Metal GPU). The cloud mode (Groq + Chroma Cloud, see deployment) doesn't have this limitation
 - **Local models**: llama3.2's (3B parameters) answer quality is lower than cloud models like GPT-4, but sufficient for the use case and guarantees full privacy
 - **Scalability**: ChromaDB in standalone mode doesn't scale horizontally. Fine for thousands of documents, not millions
+- **RAGAS eval judge reliability**: `pytest -m eval` uses local `llama3.2` (3B) as the RAGAS judge — it frequently times out or fails to produce valid structured output for the `faithfulness`/`answer_relevancy` metrics (`context_precision`, which needs less structured output, scores reliably). The eval report is informational only, with no threshold assertions, precisely because of this
+- **Rate limiting is in-memory, single-instance only**: `/auth/login`'s rate limiter (`api/app/main.py`) isn't backed by Redis/shared storage — correct for the current single-instance Render deployment, but wouldn't actually limit anything if this ever ran behind more than one instance
 
 ## 🔮 Future Work
 
