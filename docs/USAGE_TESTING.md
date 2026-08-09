@@ -18,7 +18,7 @@ api/tests/
 └── test_integration.py             # E2E tests with real services (Ollama + ChromaDB)
 ```
 
-**Total:** 142 unit tests (`pytest -m unit`, what CI runs) + integration tests marked separately (need real Ollama/ChromaDB)
+**Total:** 148 unit tests (`pytest -m unit`, what CI runs) + integration tests marked separately (need real Ollama/ChromaDB)
 
 ## 🚀 Quick Start
 
@@ -163,7 +163,7 @@ pytest --cov=app --cov-report=html tests/
 | `test_chromadb_cloud_adapter.py` | Chroma Cloud adapter (cloud VectorDBPort): credential validation, client caching |
 | `test_integration.py` | E2E with real Ollama + ChromaDB: full pipeline, connectivity |
 
-Exact, up-to-date count: `pytest --collect-only -q` (142 unit tests as of this document, see the [README](../README.md) badge).
+Exact, up-to-date count: `pytest --collect-only -q` (148 unit tests as of this document, see the [README](../README.md) badge).
 
 ## 🔧 Configuration
 
@@ -267,7 +267,7 @@ pip install -r requirements.txt
 Example for GitHub Actions:
 
 ```yaml
-# .github/workflows/test.yml
+# .github/workflows/api_tests.yml
 name: Tests
 
 on: [push, pull_request]
@@ -323,5 +323,5 @@ jobs:
 
 ---
 
-**Current coverage:** 142 unit tests, 68% coverage (concentrated in the *services*, which are mocked — the adapters that talk to real services are less well covered, see [README](../README.md#-trabajo-futuro))
+**Current coverage:** 148 unit tests, 65% coverage (concentrated in the *services*, which are mocked — the adapters that talk to real services are less well covered, see [README](../README.md#-future-work))
 **Run time:** ~10-15s (unit, machine-dependent), variable for integration (depends on real Ollama/ChromaDB)
