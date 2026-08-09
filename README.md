@@ -1,8 +1,8 @@
 # 🤖 AIbrarian
 
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Tests](https://img.shields.io/badge/Tests-142_passed-brightgreen.svg)
-![Coverage](https://img.shields.io/badge/Coverage-68%25-yellow.svg)
+![Tests](https://img.shields.io/badge/Tests-148_passed-brightgreen.svg)
+![Coverage](https://img.shields.io/badge/Coverage-65%25-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)
 
 A multi-user RAG assistant ("AIbrarian") for querying private documents (PDFs and Notion), with a local (Ollama) or cloud (Groq) LLM, JWT authentication, and hexagonal architecture.
@@ -60,7 +60,7 @@ Access is protected by **multi-user JWT authentication** (token sent in the `Aut
 - **/metrics Endpoint**: exposes metrics for scraping
 
 ### 🧪 Testing
-- **142 Unit Tests**: Pytest with 68% coverage (measured, see the Future Work note on where coverage is thin)
+- **148 Unit Tests**: Pytest with 65% coverage (measured, see the Future Work note on where coverage is thin)
 - **Integration Tests**: end-to-end against real services
 - **Configured Mocks**: for Ollama, ChromaDB, Postgres, and the processors
 - **CI**: GitHub Actions runs the `unit` suite on every push/PR (backend; see Future Work regarding the frontend)
@@ -83,22 +83,6 @@ Access is protected by **multi-user JWT authentication** (token sent in the `Aut
 * **Observability:** **Structlog** + **Prometheus**
 * **Containerization:** **Docker Compose** (ChromaDB + Postgres + API)
 * **Cloud deployment (optional):** **Render** + **Groq** + **Chroma Cloud** — see [ADR-007](docs/adr/007-cloud-deployment-groq-chroma.md) and the [deployment guide](docs/DEPLOYMENT.md). Local development (Ollama + ChromaDB) remains the default `docker-compose up` flow.
-
----
-
-## 🎥 Video Demo
-
-### System Demonstration
-
-**[▶️ Watch the Demo Video on Google Drive](https://drive.google.com/file/d/1nTfRfqYPkvdErhMkXMwcC0Q9M0WI8ksv/view?usp=sharing)**
-
-**Features shown:**
-The video shows the system running against a real knowledge base:
-- ✅ **Database:** ~1900 documents already indexed
-- ✅ **Real-time queries:** semantic search over thousands of chunks
-- ✅ **Contextualized answers:** precise citations to source documents
-- ✅ **Stats panel:** monitoring the system's status
-- ✅ **Notion sync:** ingesting pages from the Notion API
 
 ---
 
@@ -494,8 +478,8 @@ cd frontend && npm run dev
 ## 🔮 Future Work
 
 - **Frontend tests**: there are no automated tests in `frontend/` yet (neither Vitest nor Testing Library are configured) — add coverage for at least the auth and chat components
-- **Frontend CI**: the current workflow (`.github/workflows/test.yml`) only runs `pytest -m unit`; add `npm run build` and `npm run lint` to catch frontend breakage on every PR
-- **Raise backend test coverage**: 68% overall, but concentrated in the *services* (mocked); the adapters that talk to real services are poorly covered
+- **Frontend CI**: the current workflow (`.github/workflows/api_tests.yml`) only runs `pytest -m unit`; add `npm run build` and `npm run lint` to catch frontend breakage on every PR
+- **Raise backend test coverage**: 65% overall, but concentrated in the *services* (mocked); the adapters that talk to real services are poorly covered
 - **Distributed tracing**: no OpenTelemetry/Jaeger implemented, only structured logging and metrics (see Observability)
 - **Detect the API running twice at once** (Docker's `docker-compose up -d` and a native `uvicorn --reload`): easy to hit during active development, and it makes changes to `api/.env` look like they aren't applying (the old container answers, not the restarted process). `scripts/verify_setup.py` doesn't catch this today.
 - **Refactor `ingest_notion.py`**: its `--database` mode hand-reimplements the embedding/storage pipeline instead of reusing `SyncService.sync_document_from_file()` (which the `--page` mode does use) — this avoids re-fetching every page from the Notion API, but duplicates logic that should only live in one place.
