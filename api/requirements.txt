@@ -93,7 +93,8 @@ groq>=1.1.0                  # Official Groq client (OpenAI-compatible chat API)
 # Major-version jump, but doesn't affect us: we never call pypdf directly,
 # only via langchain_community.PyPDFLoader (verified with
 # scripts/generate_test_pdf.py + a real extraction after the bump).
-pypdf==6.14.2                 # PDF reading and parsing
+# 6.14.2 -> 6.15.0: patch bump, fixes CVE-2026-71852/CVE-2026-71870.
+pypdf==6.15.0                 # PDF reading and parsing
 notion-client==2.2.1         # Notion API client
 
 # --- Utilities ---
@@ -135,5 +136,17 @@ pytest-cov==7.1.0             # Coverage reports (--cov=app, documented in CLAUD
 # favor of ragas.metrics.collections (based on `instructor`, not
 # LangchainLLMWrapper) — if that classic API disappears in a v1.0,
 # test_rag_eval.py will need rewriting.
+#
+# Known unpatched vulns pulled in transitively by this pin, left as-is:
+#   - ragas itself: PYSEC-2026-3046, no fixed version exists (0.4.3 is
+#     latest on PyPI as of 2026-08-10).
+#   - langchain-openai==0.3.35 (ragas dep, not a direct one — we never
+#     import it, see the ChatOpenAI/SSRF note above): PYSEC-2026-76. Fix
+#     needs a 1.x jump (1.4.2 latest) which ragas 0.4.3 doesn't pull; not
+#     worth forcing just for an unused package.
+#   - diskcache==5.6.3 (ragas dep): PYSEC-2026-2447, no fixed version
+#     exists (5.6.3 is latest).
+# All three are eval-only (pytest -m eval, not in CI, never imported by
+# api/app/), so exposure is limited to whoever runs the eval suite locally.
 ragas==0.4.3
 datasets==5.0.1               # ragas dependency (EvaluationDataset)
